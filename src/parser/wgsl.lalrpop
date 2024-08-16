@@ -1,0 +1,155 @@
+use crate::parser::ast::*;
+
+grammar(idents: &mut Vec<Span>);
+
+// this grammar follows quite closely the one proposed in wgsl spec.
+// https://www.w3.org/TR/WGSL/#recursive-descent-syntax-global_decl
+
+pub TranslationUnit: () = GlobalDirective* GlobalDeclaration*;
+
+// TODO: incomplete
+GlobalDirective: () = {
+    r"diagnostic[^;]*;",
+    r"enable[^;]*;",
+    r"requires[^;]*;",
+};
+
+GlobalDeclaration: () = {
+    Attribute* "fn" Ident "(" Comma<Param> ")" ("->" TypeSpecifier)? Attribute* "{" Statement* "}",
+    Attribute* "var" Template Ident (":" TypeSpecifier)? ("=" Expression)? ";",
+};
+
+Attribute: () = {
+    r"@\w+(?:\s*\([^\)]*\))?"
+};
+
+Ident: () = {
+    r"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])"
+};
+
+Param: () = {
+    Attribute* Ident ":" TypeSpecifier
+};
+
+TypeSpecifier: () = MaybeSymbol Template?;
+
+MaybeSymbol: () = {
+    <l: @L> r#""[^\"]""# <r: @R> => { idents.push(l..r); },
+    <l: @L> Ident <r: @R> => { idents.push(l..r); },
+    <l: @L> r"\w+\s*::\w+(\s*::\w+)*" <r: @R> => { idents.push(l..r); },
+};
+
+Template: () = r"<[^>]*>";
+
+
+Statement: () = {
+    ";",
+    ReturnStatement ";",
+    IfStatement,
+    SwitchStatement,
+    LoopStatement,
+    ForStatement,
+    WhileStatement,
+    FuncCallStatement ";",
+    VariableOrValueStatement ";",
+    "break" ";",
+    "continue" ";",
+    "discard" ";",
+    VariableUpdatingStatement ";",
+    CompoundStatement,
+    ConstAssertStatement ";",
+};
+
+ReturnStatement: () = "return" Expression;
+
+IfStatement: () = Attribute* "if" Expression CompoundStatement
+    ("else" "if" Expression CompoundStatement)*
+    ("else" CompoundStatement)?;
+
+SwitchStatement: () = Attribute* "switch" Expression Attribute* "{" SwitchClause+ "}";
+SwitchClause: () = { "case" Comma<CaseSelector> ":"? CompoundStatement, "default" ":"? CompoundStatement };
+CaseSelector: () = { "default", Expression };
+
+LoopStatement: () = Attribute* "loop" Attribute* "{" Statement* ContinuingStatement? "}";
+ContinuingStatement: () = "continuing" Attribute* "{" Statement* BreakIfStatement? "}";
+BreakIfStatement: () = "break" "if" Expression ";";
+
+ForStatement: () = Attribute* "for" "(" ForInit? ";" Expression? ";" ForUpdate? ")" CompoundStatement;
+ForInit: () = { VariableOrValueStatement, VariableUpdatingStatement, FuncCallStatement };
+ForUpdate: () = { VariableUpdatingStatement, FuncCallStatement };
+
+WhileStatement: () = Attribute* "while" Expression CompoundStatement;
+
+FuncCallStatement: () = CallPhrase;
+
+VariableOrValueStatement: () = {
+    "var" Template? Ident (":" TypeSpecifier)? ("=" Expression)?,
+    "let" Ident (":" TypeSpecifier)? "=" Expression,
+    "const" Ident (":" TypeSpecifier)? "=" Expression,
+};
+
+VariableUpdatingStatement: () = { AssignmentStatement, LhsExpression "++", LhsExpression "--" };
+AssignmentStatement: () = { LhsExpression AssignmentOperator Expression, "_" "=" Expression };
+CompoundAssignmentOperator: () = { "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", ">>=", "<<=" };
+AssignmentOperator: () = { "=", CompoundAssignmentOperator };
+LhsExpression: () = Expression; // TODO
+
+CompoundStatement: () = Attribute* "{" Statement* "}";
+
+ConstAssertStatement: () = "const_assert" Expression;
+
+// TODO: this is not standard compliant for now.
+Expression: () = {
+    #[precedence(level="0")]
+    UnaryOperator? PrimaryExpression ComponentOrSwizzleSpecifier?,
+    #[precedence(level="1")] #[assoc(side="left")]
+    Expression BinaryOperator Expression,
+};
+ComponentOrSwizzleSpecifier: () = {
+    "[" Expression "]" ComponentOrSwizzleSpecifier?,
+    "." Ident ComponentOrSwizzleSpecifier?,
+};
+
+PrimaryExpression: () = {
+    MaybeSymbol Template?,
+    CallPhrase,
+    Literal,
+    "(" Expression ")",
+};
+
+UnaryOperator: () = { "-", "!", "~", "*", "&" };
+BinaryOperator: () = { "*", "/", "%", "+", "-", "<<", ">>", "<", ">", "<=", ">=", "==", "!=", "&&", "||", "|", "&", "^" };
+// UnaryOperator: () = {  };
+// BinaryOperator: () = {  };
+
+Literal: () = { // TODO: test & simplify
+    "true",
+    "false",
+    r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[iufh]?",
+    r"0[xX]([\da-fA-F](\.[\da-fA-F]*)?|\.[\da-fA-F]+)([pP][+-]?\d+)?[iufh]?",
+    // r"0[iu]?",
+    // r"[1-9][0-9]*[iu]?",
+    // r"0[xX][0-9a-fA-F]+[iu]?",
+    // r"0[fh]",
+    // r"[1-9][0-9]*[fh]",
+    // r"[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?[fh]?",
+    // r"[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?[fh]?",
+    // r"[0-9]+[eE][+-]?[0-9]+[fh]?",
+    // r"0[xX][0-9a-fA-F]*\.[0-9a-fA-F]+([pP][+-]?[0-9]+[fh]?)?",
+    // r"0[xX][0-9a-fA-F]+\.[0-9a-fA-F]*([pP][+-]?[0-9]+[fh]?)?",
+    // r"0[xX][0-9a-fA-F]+[pP][+-]?[0-9]+[fh]?"
+};
+
+CallPhrase: () = MaybeSymbol Template? "(" Comma<Expression> ")";
+
+// ----------- below: macros -----------
+
+Comma<T>: () = (T ",")* (T)?;
+
+match {
+    r"\s*" => { }, // The default whitespace skipping is disabled if an `ignore pattern` is specified
+    r"//[^\n\r]*[\n\r]*" => { }, // Skip line comments
+    r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },  // Skip block comments
+} else {
+    _
+}
