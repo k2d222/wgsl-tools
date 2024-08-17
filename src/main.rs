@@ -92,16 +92,17 @@ fn main() {
     let cli = Cli::parse();
 
     let source = fs::read_to_string(&cli.input).expect("could not open input file");
-    let idents = match parser::parse(&source) {
+    let idents = match parser::parse_recognize(&source) {
         Ok(idents) => idents,
         Err(err) => panic_parse_error(err, &source),
     };
 
-    let idents = idents
-        .into_iter()
-        .map(|span| &source[span])
-        .collect::<Vec<_>>();
-    println!("{idents:?}");
+    let ast = match parser::parse_spanned(&source) {
+        Ok(ast) => ast,
+        Err(err) => panic_parse_error(err, &source),
+    };
+
+    println!("{ast:?}");
 
     // let source = fs::read_to_string(&cli.input).expect("could not open input file");
     // let tree = parser.parse(&source, None).expect("parse failure");

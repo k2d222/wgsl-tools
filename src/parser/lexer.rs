@@ -1,9 +1,9 @@
-use std::{cell::RefCell, fmt::Display, iter::Peekable, rc::Rc};
+use std::fmt::Display;
 
 use lalrpop_util::ParseError;
 use logos::{Logos, SpannedIter};
 
-use super::wgsl::TryTemplateListParser;
+use super::wgsl_recognize;
 
 pub type Span = std::ops::Range<usize>;
 
@@ -33,6 +33,7 @@ pub struct LexerState {
     parse_template: bool,
 }
 
+// follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
 #[derive(Logos, Clone, Debug, PartialEq)]
 #[logos(
     skip r"\s+",
@@ -318,16 +319,15 @@ impl<'s> Lexer<'s> {
 
     pub fn parse_template_list(
         source: &str,
-    ) -> Result<(Vec<Span>, Span), ParseError<usize, Token, (usize, Error, usize)>> {
-        let mut idents = Vec::new();
+    ) -> Result<Span, ParseError<usize, Token, (usize, Error, usize)>> {
         let mut lexer = Lexer::new(&source);
         match lexer.next_token {
             Some((Ok(ref mut t), _)) if *t == Token::SymLessThan => *t = Token::TemplateArgsStart,
             _ => (),
         };
         lexer.token_stream.extras.parse_template = true;
-        let parser = TryTemplateListParser::new();
-        parser.parse(&mut idents, lexer).map(|span| (idents, span))
+        let parser = wgsl_recognize::TryTemplateListParser::new();
+        parser.parse(lexer)
     }
 }
 
@@ -341,8 +341,7 @@ impl<'s> Iterator for Lexer<'s> {
                 Some((Ok(Token::Ident), ref prev_span)) => {
                     let source = &self.source[prev_span.end..];
                     match Lexer::parse_template_list(source) {
-                        Ok((idents, span)) => {
-                            println!("template {idents:?}");
+                        Ok(span) => {
                             *t = Token::TemplateList;
                             self.token_stream.bump(span.end - span.start);
                         }
