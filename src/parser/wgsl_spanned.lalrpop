@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use crate::parser::lexer::{self, Token, Span};
 use crate::parser::ast::*;
+use crate::parser::parser_support::*;
 
 // this grammar follows closely the wgsl spec.
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
@@ -90,9 +90,13 @@ extern {
         "while" => Token::KwWhile,
 
         IdentPatternToken => Token::Ident,
-        TokNumLit => Token::NumLit,
+        TokAbstractInt => Token::AbstractInt(<i32>),
+        TokAbstractFloat => Token::AbstractFloat(<f32>),
+        TokI32 => Token::I32(<i32>),
+        TokU32 => Token::U32(<u32>),
+        TokF32 => Token::F32(<f32>),
+        TokF16 => Token::F16(<f32>),
         TokAttribute => Token::Attribute,
-        TokTemplateList => Token::TemplateList,
         TokTemplateArgsStart => Token::TemplateArgsStart,
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
     }
@@ -103,7 +107,7 @@ extern {
 
 // custom entrypoint called by the lexer when it sees [Token::Ident, Token::SymLessThan].
 // if this parse succeeds, the next token emitted by the lexer will be TokTemplateList.
-pub TryTemplateList: Span = <l:@L> TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd <r:@R> => { (l..r) };
+// pub TryTemplateList: Span = <l:@L> TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd <r:@R> => { (l..r) };
 
 // =====================
 // === Begin grammar ===
@@ -115,19 +119,18 @@ pub TryTemplateList: Span = <l:@L> TokTemplateArgsStart TemplateArgCommaList Tok
 pub TranslationUnit: TranslationUnit = <global_directives: S<GlobalDirective>*> <global_declarations: S<GlobalDecl>*> => TranslationUnit {<>};
 
 GlobalDecl: GlobalDeclaration = {
-    ";"                      => GlobalDeclaration::Void,
-    GlobalVariableDecl ";"   => GlobalDeclaration::Variable,
-    GlobalValueDecl ";"      => GlobalDeclaration::Value,
-    TypeAliasDecl ";"        => GlobalDeclaration::TypeAlias,
-    StructDecl               => GlobalDeclaration::Struct,
-    FunctionDecl             => GlobalDeclaration::Function,
-    ConstAssertStatement ";" => GlobalDeclaration::ConstAssert,
+    ";"                           => GlobalDeclaration::Void,
+    <S<GlobalVariableDecl>> ";"   => GlobalDeclaration::Variable(<>),
+    <S<GlobalValueDecl>> ";"      => GlobalDeclaration::Value(<>),
+    <S<TypeAliasDecl>> ";"        => GlobalDeclaration::TypeAlias(<>),
+    <S<StructDecl>>               => GlobalDeclaration::Struct(<>),
+    <S<FunctionDecl>>             => GlobalDeclaration::Function(<>),
+    <ConstAssertStatement> ";"    => GlobalDeclaration::ConstAssert(<>),
 };
 
-
-DiagnosticRuleName: () = {
+DiagnosticRuleName: Span = {
     DiagnosticNameToken,
-    DiagnosticNameToken "." DiagnosticNameToken,
+    <first: DiagnosticNameToken> "." <last: DiagnosticNameToken> => first.start..last.end,
 };
 
 // 3. TEXTUAL STRUCTURE
@@ -135,63 +138,72 @@ DiagnosticRuleName: () = {
 
 // XXX: non-conformant
 // https://www.w3.org/TR/WGSL/#syntax-literal
-Literal: () = {
-    TokNumLit,
+Literal: Literal = {
+    TokAbstractInt => Literal::AbstractInt(<>),
+    TokAbstractFloat => Literal::AbstractFloat(<>),
+    TokI32 => Literal::I32(<>),
+    TokU32 => Literal::U32(<>),
+    TokF32 => Literal::F32(<>),
+    TokF16 => Literal::F16(<>),
     BoolLiteral,
 };
 
-BoolLiteral: () = {
-    "true",
-    "false"
+BoolLiteral: Literal = {
+    "true"  => Literal::True,
+    "false" => Literal::False,
 };
 
-Ident: () = IdentPatternToken /* _DisambiguateTemplate */;
+Ident: Span = <l: @L> IdentPatternToken <r: @R> /* _DisambiguateTemplate */ => l..r;
 
-MemberIdent: () = IdentPatternToken;
+MemberIdent: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
 // TODO: check context-dependent names below.
 
-BuiltinValueName: () = IdentPatternToken;
+BuiltinValueName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
-DiagnosticNameToken: () = IdentPatternToken;
+DiagnosticNameToken: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
-SeverityControlName: () = IdentPatternToken;
+SeverityControlName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
-EnableExtensionName: () = IdentPatternToken;
+EnableExtensionName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
-SoftwareExtensionName: () = IdentPatternToken;
+SoftwareExtensionName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
-InterpolateSamplingName: () = IdentPatternToken;
+InterpolateSamplingName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
-SwizzleName: () = IdentPatternToken;
+SwizzleName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
 
-//template lists are tokens, because they are parsed with an additional parser.
-// see TryTemplateList entrypoint at the top.
-// TemplateList: () = TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd;
-TemplateList: () = TokTemplateList;
+TemplateList: Vec<S<TemplateArg>> = TokTemplateArgsStart <TemplateArgCommaList> TokTemplateArgsEnd;
 
-TemplateArgCommaList: () = TemplateArgExpression ( "," TemplateArgExpression ) * "," ?;
+TemplateArgCommaList: Vec<S<TemplateArg>> = Comma1<S<TemplateArgExpression>>;
 
-TemplateArgExpression: () = Expression;
+TemplateArgExpression: Expression = Expression;
 
 // 4. DIRECTIVES
 // https://www.w3.org/TR/WGSL/#directives
 
 GlobalDirective: GlobalDirective = {
-    DiagnosticDirective => GlobalDirective::Diagnostic,
-    EnableDirective     => GlobalDirective::Enable,
-    RequiresDirective   => GlobalDirective::Requires,
+    DiagnosticDirective => GlobalDirective::Diagnostic(<>),
+    EnableDirective     => GlobalDirective::Enable(<>),
+    RequiresDirective   => GlobalDirective::Requires(<>),
 };
 
-EnableDirective: () = "enable" EnableExtensionList ";";
+EnableDirective: EnableDirective = "enable" <extensions: EnableExtensionList> ";" => EnableDirective {
+    extensions
+};
 
-EnableExtensionList: () = EnableExtensionName ( "," EnableExtensionName ) * "," ?;
+EnableExtensionList: Vec<Span> = Comma1<EnableExtensionName>;
 
-RequiresDirective: () = "requires" SoftwareExtensionList ";";
+RequiresDirective: RequiresDirective = "requires" <extensions: SoftwareExtensionList> ";" => RequiresDirective {
+    extensions
+};
 
-SoftwareExtensionList: () = SoftwareExtensionName ( "," SoftwareExtensionName ) * "," ?;
+SoftwareExtensionList: Vec<Span> = Comma1<SoftwareExtensionName>;
 
-DiagnosticDirective: () = "diagnostic" DiagnosticControl ";";
+DiagnosticDirective: DiagnosticDirective = "diagnostic" <DiagnosticControl> ";" => {
+    let (severity, rule_name) = <>;
+    DiagnosticDirective { severity, rule_name }
+};
 
 // 5. DECLARATION AND SCOPE
 // https://www.w3.org/TR/WGSL/#declaration-and-scope
@@ -199,159 +211,303 @@ DiagnosticDirective: () = "diagnostic" DiagnosticControl ";";
 // 6. TYPES
 // https://www.w3.org/TR/WGSL/#types
 
-StructDecl: () = "struct" Ident StructBodyDecl;
+StructDecl: Struct = "struct" <name: Ident> <members: StructBodyDecl> => Struct {
+    name, members
+};
 
-StructBodyDecl: () = "{" StructMember ( "," StructMember ) * "," ? "}";
+StructBodyDecl: Vec<S<StructMember>> = "{" <Comma1<S<StructMember>>> "}";
 
-StructMember: () = Attribute * MemberIdent ":" TypeSpecifier;
+StructMember: StructMember = <attributes: S<Attribute>*> <name: MemberIdent> ":" <typ: S<TypeSpecifier>> => StructMember {
+    attributes, name, typ
+};
 
-TypeAliasDecl: () = "alias" Ident "=" TypeSpecifier;
+TypeAliasDecl: TypeAlias = "alias" <name: Ident> "=" <typ: S<TypeSpecifier>> => TypeAlias {
+    name, typ
+};
 
-TypeSpecifier: () = TemplateElaboratedIdent;
+TypeSpecifier: TypeExpression = TemplateElaboratedIdent => {
+    let (name, template_args) = <>;
+    TypeExpression { name, template_args }
+};
 
-TemplateElaboratedIdent: () = Ident /* DisambiguateTemplate */ TemplateList ?;
+TemplateElaboratedIdent = Ident /* DisambiguateTemplate */ TemplateList?;
 
 // 7. VARIABLE AND VALUE DECLARATIONS
 // https://www.w3.org/TR/WGSL/#var-and-value
 
-VariableOrValueStatement: () = {
+VariableOrValueStatement: DeclarationStatement = {
     VariableDecl,
-    VariableDecl "=" Expression,
-    "let" OptionallyTypedIdent "=" Expression,
-    "const" OptionallyTypedIdent "=" Expression,
+    <mut decl: VariableDecl> "=" <initializer: S<Expression>> => {
+        decl.initializer = Some(initializer.into());
+        decl
+    },
+    "let" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
+        let (name, typ) = ident;
+        DeclarationStatement {
+            attributes: Vec::new(),
+            kind: DeclarationKind::Let,
+            template_args: None,
+            name,
+            typ,
+            initializer: Some(initializer.into()),
+        }
+    },
+    "const" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
+        let (name, typ) = ident;
+        DeclarationStatement {
+            attributes: Vec::new(),
+            kind: DeclarationKind::Let,
+            template_args: None,
+            name,
+            typ,
+            initializer: Some(initializer.into()),
+        }
+    },
 };
 
-VariableDecl: () = "var" /* DisambiguateTemplate */ TemplateList ? OptionallyTypedIdent;
+VariableDecl: DeclarationStatement = "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
+    let (name, typ) = ident;
+    DeclarationStatement {
+        attributes: Vec::new(),
+        kind: DeclarationKind::Var,
+        template_args,
+        name,
+        typ,
+        initializer: None,
+    }
+};
 
-OptionallyTypedIdent: () = Ident ( ":" TypeSpecifier ) ?;
+OptionallyTypedIdent: (Span, Option<TypeExpression>) = <Ident> <(":" <TypeSpecifier>)?>;
 
-GlobalVariableDecl: () = Attribute * VariableDecl ( "=" Expression ) ?;
+GlobalVariableDecl: DeclarationStatement = <attributes: S<Attribute>*> <mut decl: VariableDecl> <initializer: ("=" <S<Expression>>)?> => {
+    decl.attributes = attributes;
+    decl.initializer = initializer.map(Into::into);
+    decl
+};
 
-GlobalValueDecl: () = {
-    "const" OptionallyTypedIdent "=" Expression,
-    Attribute * "override" OptionallyTypedIdent ( "=" Expression ) ?,
+GlobalValueDecl: DeclarationStatement = {
+    "const" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
+        let (name, typ) = ident;
+        DeclarationStatement {
+            attributes: Vec::new(),
+            kind: DeclarationKind::Const,
+            template_args: None,
+            name,
+            typ,
+            initializer: Some(initializer.into()),
+        }
+    },
+    <attributes: S<Attribute>*> "override" <ident: OptionallyTypedIdent> <initializer: ("=" <S<Expression>>)?> => {
+        let (name, typ) = ident;
+        DeclarationStatement {
+            attributes,
+            kind: DeclarationKind::Override,
+            template_args: None,
+            name,
+            typ,
+            initializer: initializer.map(Into::into),
+        }
+    },
 };
 
 // 8. EXPRESSIONS
 // https://www.w3.org/TR/WGSL/#expressions
 
-PrimaryExpression: () = {
-    TemplateElaboratedIdent,
+PrimaryExpression: Expression = {
+    TemplateElaboratedIdent => {
+        let (name, template_args) = <>;
+        match template_args {
+            Some(_) => Expression::Type(TypeExpression { name, template_args }),
+            None => Expression::Identifier(name),
+        }
+    }, // XXX: not sure about this one, is it type?
     CallExpression,
-    Literal,
+    Literal => Expression::Literal(<>),
     ParenExpression,
 };
 
-CallExpression: () = CallPhrase;
+CallExpression: Expression = CallPhrase => Expression::FunctionCall(<>);
 
-CallPhrase: () = TemplateElaboratedIdent ArgumentExpressionList;
+CallPhrase: FunctionCallExpression = <callee: TemplateElaboratedIdent> <arguments: ArgumentExpressionList> => {
+    let (name, template_args) = callee;
+    FunctionCallExpression {
+        name, template_args, arguments
+    }
+};
 
-ParenExpression: () = "(" Expression ")";
+ParenExpression: Expression = "(" <Expression> ")" => Expression::Parenthesized(<>.into());
 
-ArgumentExpressionList: () = "(" ExpressionCommaList ? ")";
+ArgumentExpressionList: Vec<S<Expression>> = "(" <ExpressionCommaList?> ")" => <>.unwrap_or_default();
 
-ExpressionCommaList: () = Expression ( "," Expression ) * "," ?;
+ExpressionCommaList: Vec<S<Expression>> = Comma1<S<Expression>>;
 
-ComponentOrSwizzleSpecifier: () = {
-    "[" Expression "]" ComponentOrSwizzleSpecifier ?,
-    "." MemberIdent ComponentOrSwizzleSpecifier ?,
+// was modified from the spec, but should be equivalent
+ComponentOrSwizzleSpecifier: Vec<Component> = {
+    // "[" Expression "]" ComponentOrSwizzleSpecifier?,
+    // "." MemberIdent ComponentOrSwizzleSpecifier?,
     // "." SwizzleName ComponentOrSwizzleSpecifier ?,
+    SingleComponentOrSwizzleSpecifier+
 };
 
-UnaryExpression: () = {
+SingleComponentOrSwizzleSpecifier: Component = {
+    "[" <S<Expression>> "]" => Component::Index(<>.into()),
+    "." <MemberIdent>       => Component::Named(<>),
+}
+
+UnaryExpression: Expression = {
     SingularExpression,
-    "-" UnaryExpression,
-    "!" UnaryExpression,
-    "~" UnaryExpression,
-    "*" UnaryExpression,
-    "&" UnaryExpression,
+    "-" <operand: S<UnaryExpression>> => Expression::Unary(UnaryExpression {
+        operator: UnaryOperator::Negation, operand: operand.into()
+    }),
+    "!" <operand: S<UnaryExpression>> => Expression::Unary(UnaryExpression {
+        operator: UnaryOperator::LogicalNegation, operand: operand.into()
+    }),
+    "~" <operand: S<UnaryExpression>> => Expression::Unary(UnaryExpression {
+        operator: UnaryOperator::BitwiseComplement, operand: operand.into()
+    }),
+    "*" <operand: S<UnaryExpression>> => Expression::Unary(UnaryExpression {
+        operator: UnaryOperator::Indirection, operand: operand.into()
+    }),
+    "&" <operand: S<UnaryExpression>> => Expression::Unary(UnaryExpression {
+        operator: UnaryOperator::AddressOf, operand: operand.into()
+    }),
 };
 
-SingularExpression: () = PrimaryExpression ComponentOrSwizzleSpecifier ?;
+SingularExpression: Expression = <expr: S<PrimaryExpression>> <components: ComponentOrSwizzleSpecifier?> => match components {
+    Some(components) => apply_components(components, expr).0,
+    None => expr.0
+};
 
-LhsExpression: () = {
-    CoreLhsExpression ComponentOrSwizzleSpecifier ?,
-    "*" LhsExpression,
-    "&" LhsExpression,
+LhsExpression: Expression = {
+    <expr: S<CoreLhsExpression>> <components: ComponentOrSwizzleSpecifier?> => match components {
+        Some(components) => apply_components(components, expr).0,
+        None => expr.0
+    },
+    "*" <operand: S<LhsExpression>> => Expression::Unary(UnaryExpression {
+        operator: UnaryOperator::Indirection, operand: operand.into()
+    }),
+    "&" <operand: S<LhsExpression>> => Expression::Unary(UnaryExpression {
+        operator: UnaryOperator::AddressOf, operand: operand.into()
+    }),
  };
  
-CoreLhsExpression: () = {
-    Ident /* DisambiguateTemplate */,
-    "(" LhsExpression ")",
+CoreLhsExpression: Expression = {
+    Ident /* DisambiguateTemplate */ => Expression::Identifier(<>),
+    "(" <LhsExpression> ")" => Expression::Parenthesized(<>.into()),
 };
 
-MultiplicativeExpression: () = {
+MultiplicativeExpression: Expression = {
     UnaryExpression,
-    MultiplicativeExpression MultiplicativeOperator UnaryExpression,
+    <left: S<MultiplicativeExpression>> <operator: MultiplicativeOperator> <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator, left: left.into(), right: right.into()
+    }),
 };
 
-MultiplicativeOperator: () = {
-    "*",
-    "/",
-    "%",
+MultiplicativeOperator: BinaryOperator = {
+    "*" => BinaryOperator::Multiplication,
+    "/" => BinaryOperator::Division,
+    "%" => BinaryOperator::Remainder,
 };
  
-AdditiveExpression: () = {
+AdditiveExpression: Expression = {
     MultiplicativeExpression,
-    AdditiveExpression AdditiveOperator MultiplicativeExpression,
+    <left: S<AdditiveExpression>> <operator: AdditiveOperator> <right: S<MultiplicativeExpression>> => Expression::Binary(BinaryExpression {
+        operator, left: left.into(), right: right.into()
+    }),
 };
 
-AdditiveOperator: () = {
-    "+",
-    "-",
+AdditiveOperator: BinaryOperator = {
+    "+" => BinaryOperator::Addition,
+    "-" => BinaryOperator::Subtraction,
 };
 
-ShiftExpression: () = {
+ShiftExpression: Expression = {
     AdditiveExpression,
-    UnaryExpression "<<" UnaryExpression,
-    UnaryExpression ">>" UnaryExpression,
+    <left: S<UnaryExpression>> "<<" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::ShiftLeft, left: left.into(), right: right.into()
+    }),
+    <left: S<UnaryExpression>> ">>" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::ShiftRight, left: left.into(), right: right.into()
+    }),
 };
 
-RelationalExpression: () = {
+RelationalExpression: Expression = {
     ShiftExpression,
-    ShiftExpression "<" ShiftExpression,
-    ShiftExpression ">" ShiftExpression,
-    ShiftExpression "<=" ShiftExpression,
-    ShiftExpression ">=" ShiftExpression,
-    ShiftExpression "==" ShiftExpression,
-    ShiftExpression "!=" ShiftExpression,
+    <left: S<ShiftExpression>> "<" <right: S<ShiftExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::LessThan, left: left.into(), right: right.into()
+    }),
+    <left: S<ShiftExpression>> ">" <right: S<ShiftExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::GreaterThan, left: left.into(), right: right.into()
+    }),
+    <left: S<ShiftExpression>> "<=" <right: S<ShiftExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::LessThanEqual, left: left.into(), right: right.into()
+    }),
+    <left: S<ShiftExpression>> ">=" <right: S<ShiftExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::GreaterThanEqual, left: left.into(), right: right.into()
+    }),
+    <left: S<ShiftExpression>> "==" <right: S<ShiftExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::Equality, left: left.into(), right: right.into()
+    }),
+    <left: S<ShiftExpression>> "!=" <right: S<ShiftExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::Inequality, left: left.into(), right: right.into()
+    }),
 };
 
-ShortCircuitAndExpression: () = {
+ShortCircuitAndExpression: Expression = {
     RelationalExpression,
-    ShortCircuitAndExpression "&&" RelationalExpression,
+    <left: S<ShortCircuitAndExpression>> "&&" <right: S<RelationalExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::ShortCircuitAnd, left: left.into(), right: right.into()
+    }),
  };
  
-ShortCircuitOrExpression: () = {
+ShortCircuitOrExpression: Expression = {
     RelationalExpression,
-    ShortCircuitOrExpression "||" RelationalExpression,
+    <left: S<ShortCircuitOrExpression>> "||" <right: S<RelationalExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::ShortCircuitOr, left: left.into(), right: right.into()
+    }),
  };
  
-BinaryOrExpression: () = {
+BinaryOrExpression: Expression = {
     UnaryExpression,
-    BinaryOrExpression "|" UnaryExpression,
+    <left: S<BinaryOrExpression>> "|" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::BitwiseOr, left: left.into(), right: right.into()
+    }),
 };
 
-BinaryAndExpression: () = {
+BinaryAndExpression: Expression = {
     UnaryExpression,
-    BinaryAndExpression "&" UnaryExpression,
+    <left: S<BinaryAndExpression>> "&" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::BitwiseAnd, left: left.into(), right: right.into()
+    }),
 };
 
-BinaryXorExpression: () = {
+BinaryXorExpression: Expression = {
     UnaryExpression,
-    BinaryXorExpression "^" UnaryExpression,
+    <left: S<BinaryXorExpression>> "^" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::BitwiseXor, left: left.into(), right: right.into()
+    }),
 };
 
-BitwiseExpression: () = {
-    BinaryAndExpression "&" UnaryExpression,
-    BinaryOrExpression "|" UnaryExpression,
-    BinaryXorExpression "^" UnaryExpression,
+BitwiseExpression: Expression = {
+    <left: S<BinaryAndExpression>> "&" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::BitwiseAnd, left: left.into(), right: right.into()
+    }),
+    <left: S<BinaryOrExpression>> "|" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::BitwiseOr, left: left.into(), right: right.into()
+    }),
+    <left: S<BinaryXorExpression>> "^" <right: S<UnaryExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::BitwiseXor, left: left.into(), right: right.into()
+    }),
 };
 
-Expression: () = {
+Expression: Expression = {
     RelationalExpression,
-    ShortCircuitOrExpression "||" RelationalExpression,
-    ShortCircuitAndExpression "&&" RelationalExpression,
+    <left: S<ShortCircuitOrExpression>> "||" <right: S<RelationalExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::ShortCircuitOr, left: left.into(), right: right.into()
+    }),
+    <left: S<ShortCircuitAndExpression>> "&&" <right: S<RelationalExpression>> => Expression::Binary(BinaryExpression {
+        operator: BinaryOperator::ShortCircuitAnd, left: left.into(), right: right.into()
+    }),
     BitwiseExpression,
 };
 
@@ -359,128 +515,173 @@ Expression: () = {
 // https://www.w3.org/TR/WGSL/#statements
 
 
-CompoundStatement: () = Attribute * "{" Statement * "}";
-
-AssignmentStatement: () = {
-     LhsExpression "=" Expression,
-     LhsExpression CompoundAssignmentOperator Expression,
-    "_" "=" Expression,
+CompoundStatement: CompoundStatement = <attributes: S<Attribute>*> "{" <statements: S<Statement>*> "}" => CompoundStatement {
+    attributes, statements
 };
 
-CompoundAssignmentOperator: () = {
-    "+=",
-    "-=",
-    "*=",
-    "/=",
-    "%=",
-    "&=",
-    "|=",
-    "^=",
-    ">>=",
-    "<<=",
+AssignmentStatement: AssignmentStatement = {
+    <lhs: S<LhsExpression>> "=" <rhs: S<Expression>> => AssignmentStatement {
+        operator: AssignmentOperator::Equal, lhs: lhs.into(), rhs: rhs.into()
+    },
+    <lhs: S<LhsExpression>> <operator: CompoundAssignmentOperator> <rhs: S<Expression>> => AssignmentStatement {
+        operator, lhs: lhs.into(), rhs: rhs.into()
+    },
+    <l: @L> "_" <r: @R> "=" <rhs: S<Expression>> => {
+        let lhs = Spanned(Expression::Identifier(l..r), l..r);
+        AssignmentStatement { operator: AssignmentOperator::Equal, lhs: lhs.into(), rhs: rhs.into() }
+    },
 };
 
-IncrementStatement: () = LhsExpression "++";
+CompoundAssignmentOperator: AssignmentOperator = {
+    "+=" => AssignmentOperator::PlusEqual,
+    "-=" => AssignmentOperator::MinusEqual,
+    "*=" => AssignmentOperator::TimesEqual,
+    "/=" => AssignmentOperator::DivisionEqual,
+    "%=" => AssignmentOperator::ModuloEqual,
+    "&=" => AssignmentOperator::AndEqual,
+    "|=" => AssignmentOperator::OrEqual,
+    "^=" => AssignmentOperator::XorEqual,
+    ">>=" => AssignmentOperator::ShiftRightAssign,
+    "<<=" => AssignmentOperator::ShiftLeftAssign,
+};
 
-DecrementStatement: () = LhsExpression "--";
+IncrementStatement: S<Box<Expression>> = <S<LhsExpression>> "++" => <>.into();
 
-IfStatement: () = Attribute * IfClause ElseIfClause * ElseClause ?;
+DecrementStatement: S<Box<Expression>> = <S<LhsExpression>> "--" => <>.into();
 
-IfClause: () = "if" Expression CompoundStatement;
+IfStatement: IfStatement = <attributes: S<Attribute>*> <if_clause: IfClause> <else_if_clauses: ElseIfClause*> <else_clause: ElseClause?> => IfStatement {
+    attributes, if_clause, else_if_clauses, else_clause
+};
 
-ElseIfClause: () = "else" "if" Expression CompoundStatement;
+IfClause = "if" <S<Expression>> <S<CompoundStatement>>;
 
-ElseClause: () = "else" CompoundStatement;
+ElseIfClause = "else" "if" <S<Expression>> <S<CompoundStatement>>;
 
-SwitchStatement: () = Attribute * "switch" Expression SwitchBody;
+ElseClause = "else" <S<CompoundStatement>>;
 
-SwitchBody: () = Attribute * "{" SwitchClause + "}";
+SwitchStatement: SwitchStatement = <attributes: S<Attribute>*> "switch" <expression: S<Expression>> <body: SwitchBody> => {
+    let (body_attributes, clauses) = body;
+    SwitchStatement {
+        attributes, body_attributes, expression: expression.into(), clauses
+    }
+};
 
-SwitchClause: () = {
+SwitchBody: (Vec<S<Attribute>>, Vec<S<SwitchClause>>) = <S<Attribute>*> "{" <S<SwitchClause>+> "}";
+
+SwitchClause: SwitchClause = {
     CaseClause,
     DefaultAloneClause,
 };
 
-CaseClause: () = "case" CaseSelectors ":" ? CompoundStatement;
-
-DefaultAloneClause: () = "default" ":" ? CompoundStatement;
-
-CaseSelectors: () = CaseSelector ( "," CaseSelector ) * "," ?;
-
-CaseSelector: () = {
-    "default",
-    Expression,
+CaseClause: SwitchClause = "case" <case_selectors: CaseSelectors> ":"? <statement: S<CompoundStatement>> => SwitchClause {
+    case_selectors, statement
 };
 
-LoopStatement: () = Attribute * "loop" Attribute * "{" Statement * ContinuingStatement ? "}";
-
-ForStatement: () = Attribute * "for" "(" ForHeader ")" CompoundStatement;
-
-ForHeader: () = ForInit ? ";" Expression ? ";" ForUpdate ?;
-
-ForInit: () = {
-    VariableOrValueStatement,
-    VariableUpdatingStatement,
-    FuncCallStatement,
+DefaultAloneClause: SwitchClause = <l: @L> "default" <r: @R> ":"? <statement: S<CompoundStatement>> => SwitchClause {
+    case_selectors: vec![Spanned(CaseSelector::Default, l..r)], statement
 };
 
-ForUpdate: () = {
-    VariableUpdatingStatement,
-    FuncCallStatement,
+CaseSelectors: Vec<S<CaseSelector>> = Comma1<S<CaseSelector>>;
+
+CaseSelector: CaseSelector = {
+    "default" => CaseSelector::Default,
+    S<Expression> => CaseSelector::Expression(<>),
 };
 
-WhileStatement: () = Attribute * "while" Expression CompoundStatement;
+LoopStatement: LoopStatement = <attributes: S<Attribute>*> "loop" <body_attributes: S<Attribute>*> "{" <body: S<Statement>*> <continuing: S<ContinuingStatement>?> "}" => {
+    LoopStatement {
+        attributes, body_attributes, body, continuing
+    }
+};
+
+ForStatement: ForStatement = <attributes: S<Attribute>*> "for" "(" <header: ForHeader> ")" <body: CompoundStatement> => {
+    let (initializer, condition, update) = header;
+    ForStatement {
+        attributes, initializer: initializer.map(Into::into), condition, update: update.map(Into::into), body
+    }
+};
+
+ForHeader: (Option<S<Statement>>, Option<S<Expression>>, Option<S<Statement>>) = <S<ForInit>?> ";" <S<Expression>?> ";" <S<ForUpdate>?>;
+
+ForInit: Statement = {
+    VariableOrValueStatement  => Statement::Declaration(<>),
+    VariableUpdatingStatement => <>,
+    FuncCallStatement         => Statement::FunctionCall(<>),
+};
+
+ForUpdate: Statement = {
+    VariableUpdatingStatement => <>,
+    FuncCallStatement         => Statement::FunctionCall(<>),
+};
+
+WhileStatement: WhileStatement = <attributes: S<Attribute>*> "while" <condition: S<Expression>> <body: S<CompoundStatement>> => WhileStatement {
+    attributes, condition, body
+};
 
 BreakStatement: () = "break";
 
-BreakIfStatement: () = "break" "if" Expression ";";
+BreakIfStatement: S<Expression> = "break" "if" <S<Expression>> ";";
 
 ContinueStatement: () = "continue";
 
-ContinuingStatement: () = "continuing" ContinuingCompoundStatement;
+ContinuingStatement = "continuing" <ContinuingCompoundStatement>;
 
-ContinuingCompoundStatement: () = Attribute * "{" Statement * BreakIfStatement ? "}";
-
-ReturnStatement: () = "return" Expression ?;
-
-FuncCallStatement: () = CallPhrase;
-
-ConstAssertStatement: () = "const_assert" Expression;
-
-Statement: () = {
-    ";",
-    ReturnStatement ";",
-    IfStatement,
-    SwitchStatement,
-    LoopStatement,
-    ForStatement,
-    WhileStatement,
-    FuncCallStatement ";",
-    VariableOrValueStatement ";",
-    BreakStatement ";",
-    ContinueStatement ";",
-    "discard" ";",
-    VariableUpdatingStatement ";",
-    CompoundStatement,
-    ConstAssertStatement ";",
+ContinuingCompoundStatement: ContinuingStatement = <attributes: S<Attribute>*> "{" <statements: S<Statement>*> <break_if: BreakIfStatement?> "}" => ContinuingStatement {
+    attributes, statements, break_if
 };
 
-VariableUpdatingStatement: () = {
-    AssignmentStatement,
-    IncrementStatement,
-    DecrementStatement,
+ReturnStatement: Option<S<Expression>> = "return" <S<Expression>?>;
+
+FuncCallStatement = CallPhrase;
+
+ConstAssertStatement: S<Expression> = "const_assert" <S<Expression>>;
+
+Statement: Statement = {
+    ";" => Statement::Void,
+    <ReturnStatement> ";" => Statement::Return(<>),
+    <IfStatement> => Statement::If(<>),
+    <SwitchStatement> => Statement::Switch(<>),
+    <LoopStatement> => Statement::Loop(<>),
+    <ForStatement> => Statement::For(<>),
+    <WhileStatement> => Statement::While(<>),
+    <FuncCallStatement> ";" => Statement::FunctionCall(<>),
+    <VariableOrValueStatement> ";" => Statement::Declaration(<>),
+    BreakStatement ";" => Statement::Break,
+    ContinueStatement ";" => Statement::Continue,
+    "discard" ";" => Statement::Discard,
+    <VariableUpdatingStatement> ";" => <>,
+    <CompoundStatement> => Statement::Compound(<>),
+    <ConstAssertStatement> ";" => Statement::ConstAssert(<>),
+};
+
+VariableUpdatingStatement: Statement = {
+    AssignmentStatement => Statement::Assignment(<>),
+    IncrementStatement => Statement::Increment(<>),
+    DecrementStatement => Statement::Decrement(<>),
 };
 
 // 10. FUNCTIONS
 // https://www.w3.org/TR/WGSL/#functions
 
-FunctionDecl: () = Attribute * FunctionHeader CompoundStatement;
+FunctionDecl: Function = <attributes: S<Attribute>*> <header: FunctionHeader> <body: CompoundStatement> => {
+    let (name, parameters, return_attributes, return_type) = header;
+    Function { attributes, name, parameters, return_attributes, return_type, body }
+};
 
-FunctionHeader: () = "fn" Ident "(" ParamList ? ")" ( "->" Attribute * TemplateElaboratedIdent ) ?;
+FunctionHeader: (Span, Vec<FormalParameter>, Vec<S<Attribute>>, Option<TypeExpression>) = "fn" <name: Ident> "(" <parameters: ParamList?> ")" <ret: ("->" <S<Attribute>*> <TemplateElaboratedIdent>)?> => {
+    let (return_attributes, return_type) = ret.map(|(return_attributes, (name, template_args))| {
+        let return_type = TypeExpression {name, template_args };
+        (return_attributes, Some(return_type))
+    }).unwrap_or_default();
+    let parameters = parameters.unwrap_or_default();
+    (name, parameters, return_attributes, return_type)
+};
 
-ParamList: () = Param ( "," Param ) * "," ?;
+ParamList: Vec<FormalParameter> = Comma1<Param>;
 
-Param: () = Attribute * Ident ":" TypeSpecifier;
+Param: FormalParameter = <attributes: S<Attribute>*> <name: Ident> ":" <typ: S<TypeSpecifier>> => FormalParameter {
+    attributes, name, typ
+};
 
 // 11. ATTRIBUTES
 // https://www.w3.org/TR/WGSL/#attributes
@@ -489,7 +690,7 @@ Param: () = Attribute * Ident ":" TypeSpecifier;
 // Attribute: () =  r"@\w+(?:\s*\([^\)]*\))?";
 Attribute: () = TokAttribute;
 
-DiagnosticControl: () = "(" SeverityControlName "," DiagnosticRuleName "," ? ")";
+DiagnosticControl: (Span, Span) = "(" <SeverityControlName> "," <DiagnosticRuleName> ","? ")";
 
 // ===================
 // === End grammar ===
@@ -497,7 +698,22 @@ DiagnosticControl: () = "(" SeverityControlName "," DiagnosticRuleName "," ? ")"
 
 // ----------- below: macros -----------
 
-Comma<T>: () = (T ",")* (T)?;
+Comma<T>: Vec<T> = {
+    <mut v: (<T> ",")*> <e: T?> => match e {
+        Some(e) => {
+            v.push(e);
+            v
+        }
+        None => v,
+    }
+};
+
+Comma1<T>: Vec<T> = {
+    <mut v: (<T> ",")*> <e: T> ","? => {
+        v.push(e);
+        v
+    }
+};
 
 // spanned
-S<T>: (T, Span) = <l: @L> <t: T> <r: @R> => (t, l..r);
+S<T>: Spanned<T> = <l: @L> <t: T> <r: @R> => Spanned(t, l..r);

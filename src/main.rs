@@ -92,10 +92,12 @@ fn main() {
     let cli = Cli::parse();
 
     let source = fs::read_to_string(&cli.input).expect("could not open input file");
-    let idents = match parser::parse_recognize(&source) {
-        Ok(idents) => idents,
+    match parser::parse_recognize(&source) {
+        Ok(()) => (),
         Err(err) => panic_parse_error(err, &source),
     };
+
+    println!("recognizer success");
 
     let ast = match parser::parse_spanned(&source) {
         Ok(ast) => ast,

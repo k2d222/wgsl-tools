@@ -1,13 +1,11 @@
 use unicode_ident::{is_xid_continue, is_xid_start};
 use winnow::{
-    ascii::multispace0,
     combinator::{
-        alt, cut_err, delimited, not, opt, peek, preceded, repeat, repeat_till, rest, separated,
-        separated_pair, seq, terminated,
+        alt, cut_err, delimited, opt, preceded, repeat, repeat_till, separated, seq, terminated,
     },
-    error::{ContextError, ErrMode, ParseError, ParserError, StrContext, StrContextValue},
-    stream::{Accumulate, AsChar, FindSlice, Location, Offset, Range, Stream},
-    token::{any, take, take_till, take_until, take_while},
+    error::{ContextError, ErrMode, StrContext, StrContextValue},
+    stream::{AsChar, Location},
+    token::{any, take_till, take_until, take_while},
     Located, PResult, Parser,
 };
 

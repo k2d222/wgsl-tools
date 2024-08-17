@@ -2,6 +2,7 @@ use lalrpop_util::{lalrpop_mod, ParseError};
 
 pub mod ast;
 pub mod lexer;
+mod parser_support;
 
 use lexer::{Error, Lexer, Span, Token};
 

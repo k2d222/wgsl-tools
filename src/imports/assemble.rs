@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use ropey::Rope;
 
 use super::resolve::Module;

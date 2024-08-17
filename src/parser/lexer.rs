@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
-use lalrpop_util::ParseError;
-use logos::{Logos, SpannedIter};
+use lexical::{FromLexical, NumberFormatBuilder, ParseFloatOptions, ParseIntegerOptions};
+use logos::{Logos, Source, SpannedIter};
 
 use super::wgsl_recognize;
 
@@ -11,12 +11,15 @@ pub type Span = std::ops::Range<usize>;
 pub struct Error;
 
 fn maybe_template_end(lex: &mut logos::Lexer<Token>) -> Token {
-    if lex.extras.parse_template && lex.extras.depth == 0 {
-        // found a ">" on the same nesting level as the opening "<"
-        Token::TemplateArgsEnd
-    } else {
-        Token::SymGreaterThan
+    if let Some(depth) = lex.extras.template_depths.last() {
+        if lex.extras.depth == *depth {
+            // found a ">" on the same nesting level as the opening "<"
+            lex.extras.template_depths.pop();
+            return Token::TemplateArgsEnd;
+        }
     }
+
+    Token::SymGreaterThan
 }
 
 fn incr_depth(lex: &mut logos::Lexer<Token>) {
@@ -27,10 +30,16 @@ fn decr_depth(lex: &mut logos::Lexer<Token>) {
     lex.extras.depth -= 1;
 }
 
+// TODO: adjust the settings to match wgsl literal syntax.
+fn parse_lit<T: FromLexical>(lex: &mut logos::Lexer<Token>) -> Option<T> {
+    let str = lex.slice();
+    lexical::parse_partial(str).map(|(n, _)| n).ok()
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LexerState {
     depth: usize,
-    parse_template: bool,
+    template_depths: Vec<usize>,
 }
 
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
@@ -195,12 +204,40 @@ pub enum Token {
     // XXX: should we also register reserved words as tokens?
     #[regex(r#"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])"#)]
     Ident,
-    #[regex(r#"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[iufh]?|0[xX]([\da-fA-F](\.[\da-fA-F]*)?|\.[\da-fA-F]+)([pP][+-]?\d+)?[iufh]?"#)]
-    NumLit,
-    // #[regex(r#"@[\w_]+(\s*\([^\)]*\))?"#)] // BUG: is this a bug in logos' regex? I can't use \s*
+    #[regex(r#"0|[1-9][0-9]*"#, parse_lit)] // dec
+    #[regex(r#"0[xX][0-9a-fA-F]+"#, parse_lit)] // hex
+    AbstractInt(i32),
+    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?"#, parse_lit)] // dec
+    #[regex(
+        r#"0[xX]([\da-fA-F]+\.[\da-fA-F]*|\.[\da-fA-F]+)([pP][+-]?\d+)?"#,
+        parse_lit
+    )]
+    // hex
+    AbstractFloat(f32),
+    #[regex(r#"(0|[1-9][0-9]*)i"#, parse_lit)] // dec
+    #[regex(r#"0[xX][0-9a-fA-F]+i"#, parse_lit)]
+    // hex
+    I32(i32),
+    #[regex(r#"(0|[1-9][0-9]*)u"#, parse_lit)] // dec
+    #[regex(r#"0[xX][0-9a-fA-F]+u"#, parse_lit)]
+    // hex
+    U32(u32),
+    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?f"#, parse_lit)] // dec
+    #[regex(
+        r#"0[xX]([\da-fA-F]+\.[\da-fA-F]*|\.[\da-fA-F]+)([pP][+-]?\d+)?f"#,
+        parse_lit
+    )]
+    // hex
+    F32(f32),
+    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?h"#, parse_lit)] // dec
+    #[regex(
+        r#"0[xX]([\da-fA-F]+\.[\da-fA-F]*|\.[\da-fA-F]+)([pP][+-]?\d+)?h"#,
+        parse_lit
+    )]
+    // hex
+    F16(f32),
     #[regex(r#"@[\w_]+(\s?\([^\)]*\))?"#)]
     Attribute,
-    TemplateList,
     TemplateArgsStart,
     TemplateArgsEnd,
 }
@@ -281,9 +318,13 @@ impl Display for Token {
             Token::KwVar => f.write_str("var"),
             Token::KwWhile => f.write_str("while"),
             Token::Ident => f.write_str("an identifier"),
-            Token::NumLit => f.write_str("a numeric literal"),
+            Token::AbstractInt(n) => write!(f, "{n}"),
+            Token::AbstractFloat(n) => write!(f, "{n}"),
+            Token::I32(n) => write!(f, "{n}i"),
+            Token::U32(n) => write!(f, "{n}u"),
+            Token::F32(n) => write!(f, "{n}f"),
+            Token::F16(n) => write!(f, "{n}h"),
             Token::Attribute => f.write_str("an attribute"),
-            Token::TemplateList => f.write_str("a template list"),
             Token::TemplateArgsStart => f.write_str("<"),
             Token::TemplateArgsEnd => f.write_str(">"),
         }
@@ -297,6 +338,7 @@ pub struct Lexer<'s> {
     source: &'s str,
     token_stream: SpannedIter<'s, Token>,
     next_token: Option<(Result<Token, Error>, Span)>,
+    parse_template_list: bool,
 }
 
 impl<'s> Lexer<'s> {
@@ -305,7 +347,7 @@ impl<'s> Lexer<'s> {
             source,
             LexerState {
                 depth: 0,
-                parse_template: false,
+                template_depths: Vec::new(),
             },
         )
         .spanned();
@@ -314,20 +356,20 @@ impl<'s> Lexer<'s> {
             source,
             token_stream,
             next_token,
+            parse_template_list: false,
         }
     }
 
-    pub fn parse_template_list(
-        source: &str,
-    ) -> Result<Span, ParseError<usize, Token, (usize, Error, usize)>> {
+    pub fn recognize_template_list(source: &str) -> bool {
         let mut lexer = Lexer::new(&source);
         match lexer.next_token {
             Some((Ok(ref mut t), _)) if *t == Token::SymLessThan => *t = Token::TemplateArgsStart,
             _ => (),
         };
-        lexer.token_stream.extras.parse_template = true;
+        lexer.parse_template_list = true;
+        lexer.token_stream.extras.template_depths.push(0);
         let parser = wgsl_recognize::TryTemplateListParser::new();
-        parser.parse(lexer)
+        parser.parse(lexer).is_ok()
     }
 }
 
@@ -337,23 +379,23 @@ impl<'s> Iterator for Lexer<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut next_token = self.token_stream.next();
         match next_token {
-            Some((Ok(ref mut t), _)) if *t == Token::SymLessThan => match self.next_token {
-                Some((Ok(Token::Ident), ref prev_span)) => {
-                    let source = &self.source[prev_span.end..];
-                    match Lexer::parse_template_list(source) {
-                        Ok(span) => {
-                            *t = Token::TemplateList;
-                            self.token_stream.bump(span.end - span.start);
-                        }
-                        _ => (),
-                    };
+            Some((Ok(ref mut t), ref span)) if *t == Token::SymLessThan => match self.next_token {
+                Some((Ok(Token::Ident), _)) => {
+                    let source = &self.source[span.start..];
+                    if Lexer::recognize_template_list(source) {
+                        *t = Token::TemplateArgsStart;
+                        let cur_depth = self.token_stream.extras.depth;
+                        self.token_stream.extras.template_depths.push(cur_depth);
+                    }
                 }
                 _ => (),
             },
             _ => (),
         };
 
-        if matches!(self.next_token, Some((Ok(Token::TemplateArgsEnd), _))) {
+        if self.parse_template_list
+            && matches!(self.next_token, Some((Ok(Token::TemplateArgsEnd), _)))
+        {
             next_token = None; // push eof after end of template
         }
 

@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use ropey::Rope;
 use thiserror::Error;
 
 use std::{
@@ -8,7 +7,7 @@ use std::{
     fs,
     hash::Hash,
     ops::Range,
-    path::{Path, PathBuf},
+    path::PathBuf,
     rc::Rc,
 };
 

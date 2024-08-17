@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use crate::parser::lexer::{self, Token, Span};
 
 // this grammar follows closely the wgsl spec.
@@ -89,9 +88,13 @@ extern {
         "while" => Token::KwWhile,
 
         IdentPatternToken => Token::Ident,
-        TokNumLit => Token::NumLit,
+        TokAbstractInt => Token::AbstractInt(<i32>),
+        TokAbstractFloat => Token::AbstractFloat(<f32>),
+        TokI32 => Token::I32(<i32>),
+        TokU32 => Token::U32(<u32>),
+        TokF32 => Token::F32(<f32>),
+        TokF16 => Token::F16(<f32>),
         TokAttribute => Token::Attribute,
-        TokTemplateList => Token::TemplateList,
         TokTemplateArgsStart => Token::TemplateArgsStart,
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
     }
@@ -102,7 +105,8 @@ extern {
 
 // custom entrypoint called by the lexer when it sees [Token::Ident, Token::SymLessThan].
 // if this parse succeeds, the next token emitted by the lexer will be TokTemplateList.
-pub TryTemplateList: Span = <l:@L> TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd <r:@R> => { (l..r) };
+// pub TryTemplateList: Span = <l:@L> TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd <r:@R> => { (l..r) };
+pub TryTemplateList: () = TemplateList;
 
 // =====================
 // === Begin grammar ===
@@ -135,7 +139,12 @@ DiagnosticRuleName: () = {
 // XXX: non-conformant
 // https://www.w3.org/TR/WGSL/#syntax-literal
 Literal: () = {
-    TokNumLit,
+    TokAbstractInt,
+    TokAbstractFloat,
+    TokI32,
+    TokU32,
+    TokF32,
+    TokF16,
     BoolLiteral,
 };
 
@@ -164,10 +173,7 @@ InterpolateSamplingName: () = IdentPatternToken;
 
 SwizzleName: () = IdentPatternToken;
 
-//template lists are tokens, because they are parsed with an additional parser.
-// see TryTemplateList entrypoint at the top.
-// TemplateList: () = TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd;
-TemplateList: () = TokTemplateList;
+TemplateList: () = TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd;
 
 TemplateArgCommaList: () = TemplateArgExpression ( "," TemplateArgExpression ) * "," ?;
 
