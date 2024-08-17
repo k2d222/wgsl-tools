@@ -23,5 +23,3 @@ pub enum Severity {
 
 #[derive(Clone, Debug)]
 pub struct GlobalDeclaration;
-
-pub type Span = std::ops::Range<usize>;

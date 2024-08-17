@@ -1,18 +1,113 @@
-use crate::parser::ast::*;
+use std::cell::RefCell;
+use crate::parser::lexer::{self, Token, Span};
 
 grammar(idents: &mut Vec<Span>);
 
-// this grammar follows quite closely the one proposed in wgsl spec.
+extern {
+    type Location = usize;
+    type Error = (usize, lexer::Error, usize);
+    enum Token {
+        // syntactic tokens
+        // https://www.w3.org/TR/WGSL/#syntactic-tokens
+        "&" => Token::SymAnd,
+        "&&" => Token::SymAndAnd,
+        "->" => Token::SymArrow,
+        "@" => Token::SymAttr,
+        "/" => Token::SymForwardSlash,
+        "!" => Token::SymBang,
+        "[" => Token::SymBracketLeft,
+        "]" => Token::SymBracketRight,
+        "{" => Token::SymBraceLeft,
+        "}" => Token::SymBraceRight,
+        ":" => Token::SymColon,
+        "," => Token::SymComma,
+        "=" => Token::SymEqual,
+        "==" => Token::SymEqualEqual,
+        "!=" => Token::SymNotEqual,
+        ">" => Token::SymGreaterThan,
+        ">=" => Token::SymGreaterThanEqual,
+        ">>" => Token::SymShiftRight,
+        "<" => Token::SymLessThan,
+        "<=" => Token::SymLessThanEqual,
+        "<<" => Token::SymShiftLeft,
+        "%" => Token::SymModulo,
+        "-" => Token::SymMinus,
+        "--" => Token::SymMinusMinus,
+        "." => Token::SymPeriod,
+        "+" => Token::SymPlus,
+        "++" => Token::SymPlusPlus,
+        "|" => Token::SymOr,
+        "||" => Token::SymOrOr,
+        "(" => Token::SymParenLeft,
+        ")" => Token::SymParenRight,
+        ";" => Token::SymSemicolon,
+        "*" => Token::SymStar,
+        "~" => Token::SymTilde,
+        "_" => Token::SymUnderscore,
+        "^" => Token::SymXor,
+        "+=" => Token::SymPlusEqual,
+        "-=" => Token::SymMinusEqual,
+        "*=" => Token::SymTimesEqual,
+        "/=" => Token::SymDivisionEqual,
+        "%=" => Token::SymModuloEqual,
+        "&=" => Token::SymAndEqual,
+        "|=" => Token::SymOrEqual,
+        "^=" => Token::SymXorEqual,
+        ">>=" => Token::SymShiftRightAssign,
+        "<<=" => Token::SymShiftLeftAssign,
+
+        // keywords
+        // https://www.w3.org/TR/WGSL/#keyword-summary
+        "alias" => Token::KwAlias,
+        "break" => Token::KwBreak,
+        "case" => Token::KwCase,
+        "const" => Token::KwConst,
+        "const_assert" => Token::KwConstAssert,
+        "continue" => Token::KwContinue,
+        "continuing" => Token::KwContinuing,
+        "default" => Token::KwDefault,
+        "diagnostic" => Token::KwDiagnostic,
+        "discard" => Token::KwDiscard,
+        "else" => Token::KwElse,
+        "enable" => Token::KwEnable,
+        "false" => Token::KwFalse,
+        "fn" => Token::KwFn,
+        "for" => Token::KwFor,
+        "if" => Token::KwIf,
+        "let" => Token::KwLet,
+        "loop" => Token::KwLoop,
+        "override" => Token::KwOverride,
+        "requires" => Token::KwRequires,
+        "return" => Token::KwReturn,
+        "struct" => Token::KwStruct,
+        "switch" => Token::KwSwitch,
+        "true" => Token::KwTrue,
+        "var" => Token::KwVar,
+        "while" => Token::KwWhile,
+
+        IdentPatternToken => Token::Ident,
+        TokNumLit => Token::NumLit,
+        TokAttribute => Token::Attribute,
+        TokTemplateList => Token::TemplateList,
+        TokTemplateArgsStart => Token::TemplateArgsStart,
+        TokTemplateArgsEnd => Token::TemplateArgsEnd,
+    }
+}
+
+// this grammar follows closely the wgsl spec.
 // https://www.w3.org/TR/WGSL/#recursive-descent-syntax-global_decl
+
+
+// 2 wgsl module
+// https://www.w3.org/TR/WGSL/#wgsl-module
 
 pub TranslationUnit: () = GlobalDirective * GlobalDecl *;
 
-// TODO: incomplete
-GlobalDirective: () = {
-    r"diagnostic[^;]*;",
-    r"enable[^;]*;",
-    r"requires[^;]*;",
-};
+// custom entrypoint called by the lexer after DisambiguateTemplate is emmited.
+// if this one succeeds, the next emitted token by the lexer will be TokTemplateList.
+// pub BuildTemplateList: () = TokTemplateStart TemplateArgCommaList TokTemplateEnd => { lexer_ctrl.template_end(); };
+pub TryTemplateList: Span = <l:@L> TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd <r:@R> => { (l..r) };
+
 
 GlobalDecl: () = {
     ";",
@@ -24,6 +119,53 @@ GlobalDecl: () = {
     ConstAssertStatement ";",
 };
 
+// context-dependent names
+// 3.8 https://www.w3.org/TR/WGSL/#context-dependent-names
+// TODO: ensure context dependent names
+
+BuiltinValueName: () = IdentPatternToken;
+
+DiagnosticNameToken: () = IdentPatternToken;
+
+SeverityControlName: () = IdentPatternToken;
+
+EnableExtensionName: () = IdentPatternToken;
+
+SoftwareExtensionName: () = IdentPatternToken;
+
+// 4 directives
+// https://www.w3.org/TR/WGSL/#directives
+// 3.8.5 https://www.w3.org/TR/WGSL/#extension-names
+
+GlobalDirective: () = {
+    DiagnosticDirective,
+    EnableDirective,
+    RequiresDirective,
+};
+
+DiagnosticDirective: () = "diagnostic" DiagnosticControl ";";
+
+EnableDirective: () = "enable" EnableExtensionList ";";
+
+EnableExtensionList: () = EnableExtensionName ( "," EnableExtensionName ) * "," ?;
+
+RequiresDirective: () = "requires" SoftwareExtensionList ";";
+
+SoftwareExtensionList: () = SoftwareExtensionName ( "," SoftwareExtensionName ) * "," ?;
+
+// diagnostic
+// 11.6 https://www.w3.org/TR/WGSL/#diagnostic-attr
+// 2.3 https://www.w3.org/TR/WGSL/#diagnostics
+
+DiagnosticAttr: () = "@" "diagnostic" DiagnosticControl;
+
+DiagnosticControl: () = "(" SeverityControlName "," DiagnosticRuleName "," ? ")";
+
+DiagnosticRuleName: () = {
+    DiagnosticNameToken,
+    DiagnosticNameToken "." DiagnosticNameToken,
+};
+
 // type
 // https://www.w3.org/TR/WGSL/#type-aliases
 // https://www.w3.org/TR/WGSL/#type-specifiers
@@ -32,7 +174,7 @@ TypeAliasDecl: () = "alias" Ident "=" TypeSpecifier;
 
 TypeSpecifier: () = TemplateElaboratedIdent;
 
-TemplateElaboratedIdent: () = Ident Template ?;
+TemplateElaboratedIdent: () = Ident DisambiguateTemplate TemplateList ?;
 
 // struct
 // https://www.w3.org/TR/WGSL/#struct-types
@@ -47,11 +189,9 @@ StructMember: () = Attribute * MemberIdent ":" TypeSpecifier;
 // https://www.w3.org/TR/WGSL/#identifiers
 // https://www.w3.org/TR/WGSL/#syntax-ident_pattern_token
 
-Ident: () = IdentPatternToken;
+Ident: () = <l:@L> IdentPatternToken <r:@R> DisambiguateTemplate => idents.push(l..r);
 
 MemberIdent: () = IdentPatternToken;
-
-IdentPatternToken: () =  r"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])";
 
 // function
 // https://www.w3.org/TR/WGSL/#function-declaration-sec
@@ -173,7 +313,7 @@ VariableOrValueStatement: () = {
     "const" OptionallyTypedIdent "=" Expression,
 };
 
-VariableDecl: () = "var" Template ? OptionallyTypedIdent;
+VariableDecl: () = "var" DisambiguateTemplate TemplateList ? OptionallyTypedIdent;
 
 OptionallyTypedIdent: () = Ident ( ":" TypeSpecifier ) ?;
 
@@ -288,7 +428,7 @@ LhsExpression: () = {
  };
  
 CoreLhsExpression: () = {
-    Ident, // DisambiguateTemplate
+    Ident DisambiguateTemplate,
     "(" LhsExpression ")",
 };
 
@@ -367,21 +507,35 @@ Expression: () = {
     BitwiseExpression,
 };
 
+// templates
+// https://www.w3.org/TR/WGSL/#template-lists-sec
+
+// moved to the top as an entrypoint
+// TemplateList: () = TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd;
+TemplateList: () = TokTemplateList;
+
+TemplateArgCommaList: () = TemplateArgExpression ( "," TemplateArgExpression ) * "," ?;
+
+TemplateArgExpression: () = Expression;
+
+DisambiguateTemplate: () = => { };
 
 // other
 
-// TODO: incomplete
-Template: () = r"<[^>]*>";
+// attribute
+// 11 https://www.w3.org/TR/WGSL/#attributes
+// TODO incomplete
 
-// TODO: incomplete
-Attribute: () =  r"@\w+(?:\s*\([^\)]*\))?";
+// Attribute: () =  r"@\w+(?:\s*\([^\)]*\))?";
+Attribute: () = TokAttribute;
 
-// TODO: test & simplify
+// literal
+// 3.5 https://www.w3.org/TR/WGSL/#literals
+
 Literal: () = {
     "true",
     "false",
-    r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[iufh]?",
-    r"0[xX]([\da-fA-F](\.[\da-fA-F]*)?|\.[\da-fA-F]+)([pP][+-]?\d+)?[iufh]?",
+    TokNumLit,
     // r"0[iu]?",
     // r"[1-9][0-9]*[iu]?",
     // r"0[xX][0-9a-fA-F]+[iu]?",
@@ -395,26 +549,6 @@ Literal: () = {
     // r"0[xX][0-9a-fA-F]+[pP][+-]?[0-9]+[fh]?"
 };
 
-// https://www.w3.org/TR/WGSL/#swizzle-names
-// SwizzleName: () = {
-//     r"[rgba]",
-//     r"[rgba][rgba]",
-//     r"[rgba][rgba][rgba]",
-//     r"[rgba][rgba][rgba][rgba]",
-//     r"[xyzw]",
-//     r"[xyzw][xyzw]",
-//     r"[xyzw][xyzw][xyzw]",
-//     r"[xyzw][xyzw][xyzw][xyzw]",
-// }
-
 // ----------- below: macros -----------
 
 Comma<T>: () = (T ",")* (T)?;
-
-match {
-    r"\s*" => { }, // The default whitespace skipping is disabled if an `ignore pattern` is specified
-    r"//[^\n\r]*[\n\r]*" => { }, // Skip line comments
-    r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },  // Skip block comments
-} else {
-    _
-}

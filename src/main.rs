@@ -3,7 +3,8 @@ mod parser;
 
 use clap::Parser;
 use itertools::Itertools;
-use lalrpop_util::{lexer::Token, ParseError};
+use lalrpop_util::ParseError;
+use parser::lexer::{self, Lexer, Token};
 use std::{error::Error, fs, path::PathBuf};
 
 #[derive(Parser, Debug)]
@@ -16,7 +17,10 @@ fn print_type_of<T>(_: &T) {
     println!("{}", std::any::type_name::<T>())
 }
 
-fn panic_parse_error(err: ParseError<usize, Token, &str>, source: &str) {
+fn panic_parse_error(
+    err: ParseError<usize, Token, (usize, lexer::Error, usize)>,
+    source: &str,
+) -> ! {
     use annotate_snippets::*;
     let renderer = Renderer::styled();
     let rendered = match err {
@@ -67,7 +71,13 @@ fn panic_parse_error(err: ParseError<usize, Token, &str>, source: &str) {
             format!("{}", renderer.render(message))
         }
         ParseError::User { error } => {
-            let message = Level::Error.title(error);
+            let message = Level::Error.title("invalid token").snippet(
+                Snippet::source(source).fold(true).annotation(
+                    Level::Error
+                        .span(error.0..error.2)
+                        .label("this token is invalid"),
+                ),
+            );
             format!("{}", renderer.render(message))
         }
     };
@@ -81,16 +91,12 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let parser = parser::parser::TranslationUnitParser::new();
-
     let source = fs::read_to_string(&cli.input).expect("could not open input file");
-    let mut idents = Vec::new();
-    let ast = match parser.parse(&mut idents, &source) {
-        Ok(ast) => ast,
+    let idents = match parser::parse(&source) {
+        Ok(idents) => idents,
         Err(err) => panic_parse_error(err, &source),
     };
-    print_type_of(&ast);
-    // println!("{ast:?}");
+
     let idents = idents
         .into_iter()
         .map(|span| &source[span])
