@@ -1,7 +1,6 @@
 use std::str::FromStr;
 use lalrpop_util::ParseError;
-use crate::parser::Error;
-use crate::parser::lexer::{Token, Span};
+use crate::parser::{Span, Error, lexer::Token};
 use crate::parser::ast::*;
 use crate::parser::ast_impl::*;
 use crate::parser::parser_support::*;
@@ -127,13 +126,13 @@ pub TranslationUnit: TranslationUnit = {
 };
 
 GlobalDecl: GlobalDeclaration = {
-    ";"                           => GlobalDeclaration::Void,
-    <S<GlobalVariableDecl>> ";"   => GlobalDeclaration::Variable(<>),
-    <S<GlobalValueDecl>> ";"      => GlobalDeclaration::Value(<>),
-    <S<TypeAliasDecl>> ";"        => GlobalDeclaration::TypeAlias(<>),
-    <S<StructDecl>>               => GlobalDeclaration::Struct(<>),
-    <S<FunctionDecl>>             => GlobalDeclaration::Function(<>),
-    <ConstAssertStatement> ";"    => GlobalDeclaration::ConstAssert(<>),
+    ";"                        => GlobalDeclaration::Void,
+    <GlobalVariableDecl> ";"   => GlobalDeclaration::Declaration(<>),
+    <GlobalValueDecl> ";"      => GlobalDeclaration::Declaration(<>),
+    <TypeAliasDecl> ";"        => GlobalDeclaration::TypeAlias(<>),
+    <StructDecl>               => GlobalDeclaration::Struct(<>),
+    <FunctionDecl>             => GlobalDeclaration::Function(<>),
+    <ConstAssertStatement> ";" => GlobalDeclaration::ConstAssert(<>),
 };
 
 DiagnosticRuleName: Span = {
@@ -146,19 +145,19 @@ DiagnosticRuleName: Span = {
 
 // XXX: non-conformant
 // https://www.w3.org/TR/WGSL/#syntax-literal
-Literal: Literal = {
-    TokAbstractInt => Literal::AbstractInt(<>),
-    TokAbstractFloat => Literal::AbstractFloat(<>),
-    TokI32 => Literal::I32(<>),
-    TokU32 => Literal::U32(<>),
-    TokF32 => Literal::F32(<>),
-    TokF16 => Literal::F16(<>),
+Literal: LiteralExpression = {
+    TokAbstractInt   => LiteralExpression::AbstractInt(<>),
+    TokAbstractFloat => LiteralExpression::AbstractFloat(<>),
+    TokI32           => LiteralExpression::I32(<>),
+    TokU32           => LiteralExpression::U32(<>),
+    TokF32           => LiteralExpression::F32(<>),
+    TokF16           => LiteralExpression::F16(<>),
     BoolLiteral,
 };
 
-BoolLiteral: Literal = {
-    "true"  => Literal::True,
-    "false" => Literal::False,
+BoolLiteral: LiteralExpression = {
+    "true"  => LiteralExpression::True,
+    "false" => LiteralExpression::False,
 };
 
 Ident: Span = {
@@ -266,13 +265,13 @@ StructBodyDecl: Vec<S<StructMember>> = {
 };
 
 StructMember: StructMember = {
-    <attributes: S<Attribute>*> <name: MemberIdent> ":" <typ: S<TypeSpecifier>> => StructMember {
+    <attributes: S<Attribute>*> <name: MemberIdent> ":" <typ: TypeSpecifier> => StructMember {
         attributes, name, typ
     },
 };
 
 TypeAliasDecl: TypeAlias = {
-    "alias" <name: Ident> "=" <typ: S<TypeSpecifier>> => TypeAlias {
+    "alias" <name: Ident> "=" <typ: TypeSpecifier> => TypeAlias {
         name, typ
     },
 };
@@ -619,12 +618,12 @@ CompoundAssignmentOperator: AssignmentOperator = {
     "<<=" => AssignmentOperator::ShiftLeftAssign,
 };
 
-IncrementStatement: S<Box<Expression>> = {
-    <S<LhsExpression>> "++" => <>.into(),
+IncrementStatement: S<Expression> = {
+    <S<LhsExpression>> "++",
 };
 
-DecrementStatement: S<Box<Expression>> = {
-    <S<LhsExpression>> "--" => <>.into(),
+DecrementStatement: S<Expression> = {
+    <S<LhsExpression>> "--",
 };
 
 IfStatement: IfStatement = {
@@ -633,23 +632,23 @@ IfStatement: IfStatement = {
     },
 };
 
-IfClause = "if" <S<Expression>> <S<CompoundStatement>>;
+IfClause = "if" <S<Expression>> <CompoundStatement>;
 
-ElseIfClause = "else" "if" <S<Expression>> <S<CompoundStatement>>;
+ElseIfClause = "else" "if" <S<Expression>> <CompoundStatement>;
 
-ElseClause = "else" <S<CompoundStatement>>;
+ElseClause = "else" <CompoundStatement>;
 
 SwitchStatement: SwitchStatement = {
     <attributes: S<Attribute>*> "switch" <expression: S<Expression>> <body: SwitchBody> => {
         let (body_attributes, clauses) = body;
         SwitchStatement {
-            attributes, body_attributes, expression: expression.into(), clauses
+            attributes, expression: expression.into(), body_attributes, clauses
         }
     },
 };
 
-SwitchBody: (Vec<S<Attribute>>, Vec<S<SwitchClause>>) = {
-    <S<Attribute>*> "{" <S<SwitchClause>+> "}",
+SwitchBody: (Vec<S<Attribute>>, Vec<SwitchClause>) = {
+    <S<Attribute>*> "{" <SwitchClause+> "}",
 };
 
 SwitchClause: SwitchClause = {
@@ -658,19 +657,19 @@ SwitchClause: SwitchClause = {
 };
 
 CaseClause: SwitchClause = {
-    "case" <case_selectors: CaseSelectors> ":"? <statement: S<CompoundStatement>> => SwitchClause {
+    "case" <case_selectors: CaseSelectors> ":"? <statement: CompoundStatement> => SwitchClause {
         case_selectors, statement
     },
 };
 
 DefaultAloneClause: SwitchClause = {
-    <l: @L> "default" <r: @R> ":"? <statement: S<CompoundStatement>> => SwitchClause {
-        case_selectors: vec![Spanned(CaseSelector::Default, l..r)], statement
+    "default" ":"? <statement: CompoundStatement> => SwitchClause {
+        case_selectors: vec![CaseSelector::Default], statement
     },
 };
 
-CaseSelectors: Vec<S<CaseSelector>> = {
-    Comma1<S<CaseSelector>>,
+CaseSelectors: Vec<CaseSelector> = {
+    Comma1<CaseSelector>,
 };
 
 CaseSelector: CaseSelector = {
@@ -679,9 +678,10 @@ CaseSelector: CaseSelector = {
 };
 
 LoopStatement: LoopStatement = {
-    <attributes: S<Attribute>*> "loop" <body_attributes: S<Attribute>*> "{" <body: S<Statement>*> <continuing: S<ContinuingStatement>?> "}" => {
+    <attributes: S<Attribute>*> "loop" <body_attributes: S<Attribute>*> "{" <statements: S<Statement>*> <continuing: S<ContinuingStatement>?> "}" => {
+        let body = CompoundStatement { attributes: body_attributes, statements };
         LoopStatement {
-            attributes, body_attributes, body, continuing
+            attributes, body, continuing
         }
     },
 };
@@ -711,7 +711,7 @@ ForUpdate: Statement = {
 };
 
 WhileStatement: WhileStatement = {
-    <attributes: S<Attribute>*> "while" <condition: S<Expression>> <body: S<CompoundStatement>> => WhileStatement {
+    <attributes: S<Attribute>*> "while" <condition: S<Expression>> <body: CompoundStatement> => WhileStatement {
         attributes, condition, body
     },
 };
@@ -731,8 +731,9 @@ ContinueStatement: () = {
 ContinuingStatement = "continuing" <ContinuingCompoundStatement>;
 
 ContinuingCompoundStatement: ContinuingStatement = {
-    <attributes: S<Attribute>*> "{" <statements: S<Statement>*> <break_if: BreakIfStatement?> "}" => ContinuingStatement {
-        attributes, statements, break_if
+    <attributes: S<Attribute>*> "{" <statements: S<Statement>*> <break_if: BreakIfStatement?> "}" => {
+        let body = CompoundStatement { attributes, statements };
+        ContinuingStatement { body, break_if }
     },
 };
 
@@ -742,8 +743,8 @@ ReturnStatement: Option<S<Expression>> = {
 
 FuncCallStatement = CallPhrase;
 
-ConstAssertStatement: S<Expression> = {
-    "const_assert" <S<Expression>>,
+ConstAssertStatement: ConstAssert = {
+    "const_assert" <S<Expression>> => ConstAssert { expression: <> },
 };
 
 Statement: Statement = {
@@ -780,7 +781,7 @@ FunctionDecl: Function = {
     },
 };
 
-FunctionHeader: (Span, Vec<FormalParameter>, Vec<S<Attribute>>, Option<TypeExpression>) = {
+FunctionHeader: (Span, Vec<S<FormalParameter>>, Vec<S<Attribute>>, Option<TypeExpression>) = {
     "fn" <name: Ident> "(" <parameters: ParamList?> ")" <ret: ("->" <S<Attribute>*> <TemplateElaboratedIdent>)?> => {
         let (return_attributes, return_type) = ret.map(|(return_attributes, (name, template_args))| {
             let return_type = TypeExpression {name, template_args };
@@ -791,12 +792,12 @@ FunctionHeader: (Span, Vec<FormalParameter>, Vec<S<Attribute>>, Option<TypeExpre
     },
 };
 
-ParamList: Vec<FormalParameter> = {
-    Comma1<Param>,
+ParamList: Vec<S<FormalParameter>> = {
+    Comma1<S<Param>>,
 };
 
 Param: FormalParameter = {
-    <attributes: S<Attribute>*> <name: Ident> ":" <typ: S<TypeSpecifier>> => FormalParameter {
+    <attributes: S<Attribute>*> <name: Ident> ":" <typ: TypeSpecifier> => FormalParameter {
         attributes, name, typ
     },
 };

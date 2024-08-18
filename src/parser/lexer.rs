@@ -3,9 +3,7 @@ use std::fmt::Display;
 use lexical::{FromLexical, NumberFormatBuilder, ParseFloatOptions, ParseIntegerOptions};
 use logos::{Logos, Source, SpannedIter};
 
-use super::{wgsl_recognize, Error};
-
-pub type Span = std::ops::Range<usize>;
+use super::{wgsl_recognize, Error, Span};
 
 fn maybe_template_end(lex: &mut logos::Lexer<Token>) -> Token {
     if let Some(depth) = lex.extras.template_depths.last() {

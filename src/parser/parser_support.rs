@@ -1,6 +1,6 @@
 // support functions to be injected in the lalrpop parser.
 
-use super::{ast::*, lexer::Span};
+use super::{ast::*, Span};
 
 pub(crate) type S<T> = Spanned<T>;
 

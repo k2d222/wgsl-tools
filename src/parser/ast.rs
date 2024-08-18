@@ -1,20 +1,49 @@
-use std::str::FromStr;
+use super::Span;
 
-// follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
-use super::lexer::Span;
-use super::Error;
+/// A syntax tree for WGSL files. The root of the tree is a [TranslationUnit] (file).
+///
+/// Follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
+/// the syntax tree closely mirrors wgsl structure while allowing language extensions.
+///
+/// ## Spanned
+///
+/// The following elements are Spanned to allow easy modification of the source code:
+/// Directives, Declarations, Statements, Expressions, Struct Members, Attributes, Idents,
+/// Template Arguments, Formal Parameters.
+/// ... plus all language extensions, and maybe others.
+///
+/// Spans, if provided, are outer spans, meaning e.g. Statements include the `;` and
+/// Struct Members include the `,`, but do not include the spaces between neighbor items.
+/// Use the convenience methods to manipulate the spans as needed (TODO).
+///
+/// ## Strictness
+///
+/// This syntax tree is rather strict, meaning it cannot represent most syntaxically
+/// incorrect programs. But it is only syntactic, meaning it doesn't perform many
+/// contextual checks: for example, certain attributes can only appear in certain places,
+/// or declarations have different constraints depending on where they appear.
+/// stricter checking is TODO and will be optional.
+///
+/// ## Extensions
+///
+/// TODO, the syntax tree can be mutated to allow well-defined language extensions with
+/// feature flags (wgsl-tooling-imports, wgsl-tooling-generics, ...).
+///
+/// ## Design considerations
+///
+/// The parsing is not designed to be primarily efficient, but flexible and correct.
+/// It is made with the ultimate goal to implement spec-compliant language extensions.
 
-// spanned
 #[derive(Clone, Debug)]
 pub struct Spanned<T>(pub T, pub Span);
+
+type S<T> = Spanned<T>; // shorter alias
 
 impl<T> From<Spanned<T>> for Spanned<Box<T>> {
     fn from(value: Spanned<T>) -> Self {
         Spanned(value.0.into(), value.1)
     }
 }
-
-type S<T> = Spanned<T>;
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
@@ -63,19 +92,38 @@ pub struct RequiresDirective {
 #[allow(unused)]
 pub enum GlobalDeclaration {
     Void,
-    Variable(S<Declaration>),
-    Value(S<Declaration>),
-    TypeAlias(S<TypeAlias>),
-    Struct(S<Struct>),
-    Function(S<Function>),
-    ConstAssert(S<Expression>),
+    Declaration(Declaration),
+    TypeAlias(TypeAlias),
+    Struct(Struct),
+    Function(Function),
+    ConstAssert(ConstAssert),
+}
+
+#[derive(Clone, Debug)]
+#[allow(unused)]
+pub struct Declaration {
+    pub attributes: Vec<S<Attribute>>,
+    pub kind: DeclarationKind,
+    pub template_args: Option<Vec<S<TemplateArg>>>,
+    pub name: Span,
+    pub typ: Option<TypeExpression>,
+    pub initializer: Option<S<Expression>>,
+}
+
+#[derive(Clone, Debug)]
+#[allow(unused)]
+pub enum DeclarationKind {
+    Const,
+    Override,
+    Let,
+    Var,
 }
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct TypeAlias {
     pub name: Span,
-    pub typ: S<TypeExpression>,
+    pub typ: TypeExpression,
 }
 
 #[derive(Clone, Debug)]
@@ -90,7 +138,7 @@ pub struct Struct {
 pub struct StructMember {
     pub attributes: Vec<S<Attribute>>,
     pub name: Span,
-    pub typ: S<TypeExpression>,
+    pub typ: TypeExpression,
 }
 
 #[derive(Clone, Debug)]
@@ -98,7 +146,7 @@ pub struct StructMember {
 pub struct Function {
     pub attributes: Vec<S<Attribute>>,
     pub name: Span,
-    pub parameters: Vec<FormalParameter>,
+    pub parameters: Vec<S<FormalParameter>>,
     pub return_attributes: Vec<S<Attribute>>,
     pub return_type: Option<TypeExpression>,
     pub body: CompoundStatement,
@@ -109,7 +157,13 @@ pub struct Function {
 pub struct FormalParameter {
     pub attributes: Vec<S<Attribute>>,
     pub name: Span,
-    pub typ: S<TypeExpression>,
+    pub typ: TypeExpression,
+}
+
+#[derive(Clone, Debug)]
+#[allow(unused)]
+pub struct ConstAssert {
+    pub expression: S<Expression>,
 }
 
 // TODO incomplete
@@ -118,20 +172,20 @@ pub type Attribute = ();
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub enum Expression {
-    Literal(Literal),
-    Parenthesized(Box<Expression>),
+    Literal(LiteralExpression),
+    Parenthesized(ParenthesizedExpression),
     NamedComponent(NamedComponentExpression),
     Indexing(IndexingExpression),
     Unary(UnaryExpression),
     Binary(BinaryExpression),
     FunctionCall(FunctionCallExpression),
-    Identifier(Span),
+    Identifier(IdentifierExpression),
     Type(TypeExpression),
 }
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
-pub enum Literal {
+pub enum LiteralExpression {
     True,
     False,
     AbstractInt(i32),
@@ -142,10 +196,12 @@ pub enum Literal {
     F16(f32),
 }
 
+pub type ParenthesizedExpression = Box<Expression>;
+
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct NamedComponentExpression {
-    pub base: S<Box<Expression>>,
+    pub base: Box<S<Expression>>,
     pub component: Span,
 }
 
@@ -214,6 +270,8 @@ pub struct FunctionCallExpression {
     pub arguments: Vec<S<Expression>>,
 }
 
+pub type IdentifierExpression = Span;
+
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct TypeExpression {
@@ -230,8 +288,8 @@ pub enum Statement {
     Void,
     Compound(CompoundStatement),
     Assignment(AssignmentStatement),
-    Increment(S<Box<Expression>>),
-    Decrement(S<Box<Expression>>),
+    Increment(IncrementStatement),
+    Decrement(DecrementStatement),
     If(IfStatement),
     Switch(SwitchStatement),
     Loop(LoopStatement),
@@ -239,11 +297,11 @@ pub enum Statement {
     While(WhileStatement),
     Break,
     Continue,
-    Return(Option<S<Expression>>),
+    Return(ReturnStatement),
     Discard,
-    FunctionCall(FunctionCallExpression),
-    ConstAssert(S<Expression>),
-    Declaration(Declaration),
+    FunctionCall(FunctionCallStatement),
+    ConstAssert(ConstAssertStatement),
+    Declaration(DeclarationStatement),
 }
 
 #[derive(Clone, Debug)]
@@ -257,8 +315,8 @@ pub struct CompoundStatement {
 #[allow(unused)]
 pub struct AssignmentStatement {
     pub operator: AssignmentOperator,
-    pub lhs: S<Box<Expression>>,
-    pub rhs: S<Box<Expression>>,
+    pub lhs: S<Expression>,
+    pub rhs: S<Expression>,
 }
 
 #[derive(Clone, Debug)]
@@ -277,29 +335,33 @@ pub enum AssignmentOperator {
     ShiftLeftAssign,
 }
 
+pub type IncrementStatement = S<Expression>;
+
+pub type DecrementStatement = S<Expression>;
+
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct IfStatement {
     pub attributes: Vec<S<Attribute>>,
-    pub if_clause: (S<Expression>, S<CompoundStatement>),
-    pub else_if_clauses: Vec<(S<Expression>, S<CompoundStatement>)>,
-    pub else_clause: Option<S<CompoundStatement>>,
+    pub if_clause: (S<Expression>, CompoundStatement),
+    pub else_if_clauses: Vec<(S<Expression>, CompoundStatement)>,
+    pub else_clause: Option<CompoundStatement>,
 }
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct SwitchStatement {
     pub attributes: Vec<S<Attribute>>,
+    pub expression: S<Expression>,
     pub body_attributes: Vec<S<Attribute>>,
-    pub expression: S<Box<Expression>>,
-    pub clauses: Vec<S<SwitchClause>>,
+    pub clauses: Vec<SwitchClause>,
 }
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct SwitchClause {
-    pub case_selectors: Vec<S<CaseSelector>>,
-    pub statement: S<CompoundStatement>,
+    pub case_selectors: Vec<CaseSelector>,
+    pub statement: CompoundStatement,
 }
 
 #[derive(Clone, Debug)]
@@ -313,18 +375,24 @@ pub enum CaseSelector {
 #[allow(unused)]
 pub struct LoopStatement {
     pub attributes: Vec<S<Attribute>>,
-    pub body_attributes: Vec<S<Attribute>>,
-    pub body: Vec<S<Statement>>,
+    pub body: CompoundStatement,
+    // a ContinuingStatement can only appear inside a LoopStatement body, therefore it is
+    // not part of the Statement enum. it appear shere instead, but consider it part of
+    // body as the last statement of the CompoundStatement.
     pub continuing: Option<S<ContinuingStatement>>,
 }
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct ContinuingStatement {
-    pub attributes: Vec<S<Attribute>>,
-    pub statements: Vec<S<Statement>>,
-    pub break_if: Option<S<Expression>>,
+    pub body: CompoundStatement,
+    // a BreakIfStatement can only appear inside a ContinuingStatement body, therefore it
+    // not part of the Statement enum. it appear shere instead, but consider it part of
+    // body as the last statement of the CompoundStatement.
+    pub break_if: Option<S<BreakIfStatement>>,
 }
+
+pub type BreakIfStatement = Expression;
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
@@ -341,25 +409,13 @@ pub struct ForStatement {
 pub struct WhileStatement {
     pub attributes: Vec<S<Attribute>>,
     pub condition: S<Expression>,
-    pub body: S<CompoundStatement>,
+    pub body: CompoundStatement,
 }
 
-#[derive(Clone, Debug)]
-#[allow(unused)]
-pub struct Declaration {
-    pub attributes: Vec<S<Attribute>>,
-    pub kind: DeclarationKind,
-    pub template_args: Option<Vec<S<TemplateArg>>>,
-    pub name: Span,
-    pub typ: Option<TypeExpression>,
-    pub initializer: Option<S<Box<Expression>>>,
-}
+pub type ReturnStatement = Option<S<Expression>>;
 
-#[derive(Clone, Debug)]
-#[allow(unused)]
-pub enum DeclarationKind {
-    Const,
-    Override,
-    Let,
-    Var,
-}
+pub type FunctionCallStatement = FunctionCallExpression;
+
+pub type ConstAssertStatement = ConstAssert;
+
+pub type DeclarationStatement = Declaration;
