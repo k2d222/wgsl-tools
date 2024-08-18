@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
 use super::lexer::Span;
+use super::Error;
 
 // spanned
 #[derive(Clone, Debug)]
@@ -31,8 +34,17 @@ pub enum GlobalDirective {
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct DiagnosticDirective {
-    pub severity: Span, // TODO: parse severity
+    pub severity: DiagnosticSeverity,
     pub rule_name: Span,
+}
+
+#[derive(Clone, Debug)]
+#[allow(unused)]
+pub enum DiagnosticSeverity {
+    Error,
+    Warning,
+    Info,
+    Off,
 }
 
 #[derive(Clone, Debug)]
@@ -49,19 +61,10 @@ pub struct RequiresDirective {
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
-pub enum Severity {
-    Error,
-    Warning,
-    Info,
-    Off,
-}
-
-#[derive(Clone, Debug)]
-#[allow(unused)]
 pub enum GlobalDeclaration {
     Void,
-    Variable(S<DeclarationStatement>),
-    Value(S<DeclarationStatement>),
+    Variable(S<Declaration>),
+    Value(S<Declaration>),
     TypeAlias(S<TypeAlias>),
     Struct(S<Struct>),
     Function(S<Function>),
@@ -240,7 +243,7 @@ pub enum Statement {
     Discard,
     FunctionCall(FunctionCallExpression),
     ConstAssert(S<Expression>),
-    Declaration(DeclarationStatement),
+    Declaration(Declaration),
 }
 
 #[derive(Clone, Debug)]
@@ -343,7 +346,7 @@ pub struct WhileStatement {
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
-pub struct DeclarationStatement {
+pub struct Declaration {
     pub attributes: Vec<S<Attribute>>,
     pub kind: DeclarationKind,
     pub template_args: Option<Vec<S<TemplateArg>>>,

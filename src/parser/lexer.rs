@@ -3,12 +3,9 @@ use std::fmt::Display;
 use lexical::{FromLexical, NumberFormatBuilder, ParseFloatOptions, ParseIntegerOptions};
 use logos::{Logos, Source, SpannedIter};
 
-use super::wgsl_recognize;
+use super::{wgsl_recognize, Error};
 
 pub type Span = std::ops::Range<usize>;
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Error;
 
 fn maybe_template_end(lex: &mut logos::Lexer<Token>) -> Token {
     if let Some(depth) = lex.extras.template_depths.last() {
@@ -202,8 +199,8 @@ pub enum Token {
     KwWhile,
 
     // XXX: should we also register reserved words as tokens?
-    #[regex(r#"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])"#)]
-    Ident,
+    #[regex(r#"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])"#, |lex| lex.slice().to_string())]
+    Ident(String),
     #[regex(r#"0|[1-9][0-9]*"#, parse_lit)] // dec
     #[regex(r#"0[xX][0-9a-fA-F]+"#, parse_lit)] // hex
     AbstractInt(i32),
@@ -236,8 +233,8 @@ pub enum Token {
     )]
     // hex
     F16(f32),
-    #[regex(r#"@[\w_]+(\s?\([^\)]*\))?"#)]
-    Attribute,
+    #[regex(r#"@[\w_]+(\s?\([^\)]*\))?"#, |lex| lex.slice().to_string())]
+    Attribute(String),
     TemplateArgsStart,
     TemplateArgsEnd,
 }
@@ -317,14 +314,14 @@ impl Display for Token {
             Token::KwTrue => f.write_str("true"),
             Token::KwVar => f.write_str("var"),
             Token::KwWhile => f.write_str("while"),
-            Token::Ident => f.write_str("an identifier"),
+            Token::Ident(s) => write!(f, "identifier `{s}`"),
             Token::AbstractInt(n) => write!(f, "{n}"),
             Token::AbstractFloat(n) => write!(f, "{n}"),
             Token::I32(n) => write!(f, "{n}i"),
             Token::U32(n) => write!(f, "{n}u"),
             Token::F32(n) => write!(f, "{n}f"),
             Token::F16(n) => write!(f, "{n}h"),
-            Token::Attribute => f.write_str("an attribute"),
+            Token::Attribute(s) => write!(f, "attribute `{s}`"),
             Token::TemplateArgsStart => f.write_str("<"),
             Token::TemplateArgsEnd => f.write_str(">"),
         }
@@ -380,7 +377,7 @@ impl<'s> Iterator for Lexer<'s> {
         let mut next_token = self.token_stream.next();
         match next_token {
             Some((Ok(ref mut t), ref span)) if *t == Token::SymLessThan => match self.next_token {
-                Some((Ok(Token::Ident), _)) => {
+                Some((Ok(Token::Ident(_)), _)) => {
                     let source = &self.source[span.start..];
                     if Lexer::recognize_template_list(source) {
                         *t = Token::TemplateArgsStart;

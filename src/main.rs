@@ -4,8 +4,8 @@ mod parser;
 use clap::Parser;
 use itertools::Itertools;
 use lalrpop_util::ParseError;
-use parser::lexer::{self, Lexer, Token};
-use std::{error::Error, fs, path::PathBuf};
+use parser::lexer::Token;
+use std::{fs, path::PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(version = "0.1", author = "Mathis Brossier", about = "")]
@@ -18,7 +18,7 @@ fn print_type_of<T>(_: &T) {
 }
 
 fn panic_parse_error(
-    err: ParseError<usize, Token, (usize, lexer::Error, usize)>,
+    err: ParseError<usize, Token, (usize, parser::Error, usize)>,
     source: &str,
 ) -> ! {
     use annotate_snippets::*;

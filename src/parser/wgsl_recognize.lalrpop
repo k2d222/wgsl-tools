@@ -1,4 +1,5 @@
-use crate::parser::lexer::{self, Token, Span};
+use crate::parser::Error;
+use crate::parser::lexer::Token;
 
 // this grammar follows closely the wgsl spec.
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
@@ -7,7 +8,7 @@ grammar;
 
 extern {
     type Location = usize;
-    type Error = (usize, lexer::Error, usize);
+    type Error = (usize, Error, usize);
     enum Token {
         // syntactic tokens
         // https://www.w3.org/TR/WGSL/#syntactic-tokens
@@ -87,14 +88,14 @@ extern {
         "var" => Token::KwVar,
         "while" => Token::KwWhile,
 
-        IdentPatternToken => Token::Ident,
+        IdentPatternToken => Token::Ident(<String>),
         TokAbstractInt => Token::AbstractInt(<i32>),
         TokAbstractFloat => Token::AbstractFloat(<f32>),
         TokI32 => Token::I32(<i32>),
         TokU32 => Token::U32(<u32>),
         TokF32 => Token::F32(<f32>),
         TokF16 => Token::F16(<f32>),
-        TokAttribute => Token::Attribute,
+        TokAttribute => Token::Attribute(<String>),
         TokTemplateArgsStart => Token::TemplateArgsStart,
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
     }

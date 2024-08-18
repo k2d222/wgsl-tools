@@ -1,5 +1,9 @@
-use crate::parser::lexer::{self, Token, Span};
+use std::str::FromStr;
+use lalrpop_util::ParseError;
+use crate::parser::Error;
+use crate::parser::lexer::{Token, Span};
 use crate::parser::ast::*;
+use crate::parser::ast_impl::*;
 use crate::parser::parser_support::*;
 
 // this grammar follows closely the wgsl spec.
@@ -9,7 +13,7 @@ grammar;
 
 extern {
     type Location = usize;
-    type Error = (usize, lexer::Error, usize);
+    type Error = (usize, Error, usize);
     enum Token {
         // syntactic tokens
         // https://www.w3.org/TR/WGSL/#syntactic-tokens
@@ -89,14 +93,14 @@ extern {
         "var" => Token::KwVar,
         "while" => Token::KwWhile,
 
-        IdentPatternToken => Token::Ident,
+        IdentPatternToken => Token::Ident(<String>),
         TokAbstractInt => Token::AbstractInt(<i32>),
         TokAbstractFloat => Token::AbstractFloat(<f32>),
         TokI32 => Token::I32(<i32>),
         TokU32 => Token::U32(<u32>),
         TokF32 => Token::F32(<f32>),
         TokF16 => Token::F16(<f32>),
-        TokAttribute => Token::Attribute,
+        TokAttribute => Token::Attribute(<String>),
         TokTemplateArgsStart => Token::TemplateArgsStart,
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
     }
@@ -107,7 +111,9 @@ extern {
 
 // custom entrypoint called by the lexer when it sees [Token::Ident, Token::SymLessThan].
 // if this parse succeeds, the next token emitted by the lexer will be TokTemplateList.
-// pub TryTemplateList: Span = <l:@L> TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd <r:@R> => { (l..r) };
+// pub TryTemplateList: Span = {
+//    <l:@L> TokTemplateArgsStart TemplateArgCommaList TokTemplateArgsEnd <r:@R> => { (l..r) },
+//};
 
 // =====================
 // === Begin grammar ===
@@ -116,7 +122,9 @@ extern {
 // 2. WGSL MODULE
 // https://www.w3.org/TR/WGSL/#wgsl-module
 
-pub TranslationUnit: TranslationUnit = <global_directives: S<GlobalDirective>*> <global_declarations: S<GlobalDecl>*> => TranslationUnit {<>};
+pub TranslationUnit: TranslationUnit = {
+    <global_directives: S<GlobalDirective>*> <global_declarations: S<GlobalDecl>*> => TranslationUnit {<>},
+};
 
 GlobalDecl: GlobalDeclaration = {
     ";"                           => GlobalDeclaration::Void,
@@ -153,31 +161,57 @@ BoolLiteral: Literal = {
     "false" => Literal::False,
 };
 
-Ident: Span = <l: @L> IdentPatternToken <r: @R> /* _DisambiguateTemplate */ => l..r;
+Ident: Span = {
+    <l: @L> IdentPatternToken <r: @R> /* _DisambiguateTemplate */ => l..r,
+};
 
-MemberIdent: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+MemberIdent: Span = {
+    <l: @L> IdentPatternToken <r: @R> => l..r,
+};
 
 // TODO: check context-dependent names below.
 
-BuiltinValueName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+BuiltinValueName: Span = {
+    <l: @L> IdentPatternToken <r: @R> => l..r,
+};
 
-DiagnosticNameToken: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+DiagnosticNameToken: Span = {
+    <l: @L> IdentPatternToken <r: @R> => l..r,
+};
 
-SeverityControlName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+SeverityControlName: DiagnosticSeverity = {
+    <l: @L> <ident: IdentPatternToken> <r: @R> =>? {
+        DiagnosticSeverity::from_str(&ident).map_err(|e| ParseError::User{ error: (l, e, r) })
+    },
+};
 
-EnableExtensionName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+EnableExtensionName: Span = {
+    <l: @L> IdentPatternToken <r: @R> => l..r,
+};
 
-SoftwareExtensionName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+SoftwareExtensionName: Span = {
+    <l: @L> IdentPatternToken <r: @R> => l..r,
+};
 
-InterpolateSamplingName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+InterpolateSamplingName: Span = {
+    <l: @L> IdentPatternToken <r: @R> => l..r,
+};
 
-SwizzleName: Span = <l: @L> IdentPatternToken <r: @R> => l..r;
+SwizzleName: Span = {
+    <l: @L> IdentPatternToken <r: @R> => l..r,
+};
 
-TemplateList: Vec<S<TemplateArg>> = TokTemplateArgsStart <TemplateArgCommaList> TokTemplateArgsEnd;
+TemplateList: Vec<S<TemplateArg>> = {
+    TokTemplateArgsStart <TemplateArgCommaList> TokTemplateArgsEnd,
+};
 
-TemplateArgCommaList: Vec<S<TemplateArg>> = Comma1<S<TemplateArgExpression>>;
+TemplateArgCommaList: Vec<S<TemplateArg>> = {
+    Comma1<S<TemplateArgExpression>>,
+};
 
-TemplateArgExpression: Expression = Expression;
+TemplateArgExpression: Expression = {
+    Expression,
+};
 
 // 4. DIRECTIVES
 // https://www.w3.org/TR/WGSL/#directives
@@ -188,21 +222,31 @@ GlobalDirective: GlobalDirective = {
     RequiresDirective   => GlobalDirective::Requires(<>),
 };
 
-EnableDirective: EnableDirective = "enable" <extensions: EnableExtensionList> ";" => EnableDirective {
-    extensions
+EnableDirective: EnableDirective = {
+    "enable" <extensions: EnableExtensionList> ";" => EnableDirective {
+        extensions
+    },
 };
 
-EnableExtensionList: Vec<Span> = Comma1<EnableExtensionName>;
-
-RequiresDirective: RequiresDirective = "requires" <extensions: SoftwareExtensionList> ";" => RequiresDirective {
-    extensions
+EnableExtensionList: Vec<Span> = {
+    Comma1<EnableExtensionName>,
 };
 
-SoftwareExtensionList: Vec<Span> = Comma1<SoftwareExtensionName>;
+RequiresDirective: RequiresDirective = {
+    "requires" <extensions: SoftwareExtensionList> ";" => RequiresDirective {
+        extensions
+    },
+};
 
-DiagnosticDirective: DiagnosticDirective = "diagnostic" <DiagnosticControl> ";" => {
-    let (severity, rule_name) = <>;
-    DiagnosticDirective { severity, rule_name }
+SoftwareExtensionList: Vec<Span> = {
+    Comma1<SoftwareExtensionName>,
+};
+
+DiagnosticDirective: DiagnosticDirective = {
+    "diagnostic" <DiagnosticControl> ";" => {
+        let (severity, rule_name) = <>;
+        DiagnosticDirective { severity, rule_name }
+    },
 };
 
 // 5. DECLARATION AND SCOPE
@@ -211,23 +255,33 @@ DiagnosticDirective: DiagnosticDirective = "diagnostic" <DiagnosticControl> ";" 
 // 6. TYPES
 // https://www.w3.org/TR/WGSL/#types
 
-StructDecl: Struct = "struct" <name: Ident> <members: StructBodyDecl> => Struct {
-    name, members
+StructDecl: Struct = {
+    "struct" <name: Ident> <members: StructBodyDecl> => Struct {
+        name, members
+    },
 };
 
-StructBodyDecl: Vec<S<StructMember>> = "{" <Comma1<S<StructMember>>> "}";
-
-StructMember: StructMember = <attributes: S<Attribute>*> <name: MemberIdent> ":" <typ: S<TypeSpecifier>> => StructMember {
-    attributes, name, typ
+StructBodyDecl: Vec<S<StructMember>> = {
+    "{" <Comma1<S<StructMember>>> "}",
 };
 
-TypeAliasDecl: TypeAlias = "alias" <name: Ident> "=" <typ: S<TypeSpecifier>> => TypeAlias {
-    name, typ
+StructMember: StructMember = {
+    <attributes: S<Attribute>*> <name: MemberIdent> ":" <typ: S<TypeSpecifier>> => StructMember {
+        attributes, name, typ
+    },
 };
 
-TypeSpecifier: TypeExpression = TemplateElaboratedIdent => {
-    let (name, template_args) = <>;
-    TypeExpression { name, template_args }
+TypeAliasDecl: TypeAlias = {
+    "alias" <name: Ident> "=" <typ: S<TypeSpecifier>> => TypeAlias {
+        name, typ
+    },
+};
+
+TypeSpecifier: TypeExpression = {
+    TemplateElaboratedIdent => {
+        let (name, template_args) = <>;
+        TypeExpression { name, template_args }
+    },
 };
 
 TemplateElaboratedIdent = Ident /* DisambiguateTemplate */ TemplateList?;
@@ -235,7 +289,7 @@ TemplateElaboratedIdent = Ident /* DisambiguateTemplate */ TemplateList?;
 // 7. VARIABLE AND VALUE DECLARATIONS
 // https://www.w3.org/TR/WGSL/#var-and-value
 
-VariableOrValueStatement: DeclarationStatement = {
+VariableOrValueStatement: Declaration = {
     VariableDecl,
     <mut decl: VariableDecl> "=" <initializer: S<Expression>> => {
         decl.initializer = Some(initializer.into());
@@ -243,7 +297,7 @@ VariableOrValueStatement: DeclarationStatement = {
     },
     "let" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
         let (name, typ) = ident;
-        DeclarationStatement {
+        Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Let,
             template_args: None,
@@ -254,7 +308,7 @@ VariableOrValueStatement: DeclarationStatement = {
     },
     "const" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
         let (name, typ) = ident;
-        DeclarationStatement {
+        Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Let,
             template_args: None,
@@ -265,30 +319,36 @@ VariableOrValueStatement: DeclarationStatement = {
     },
 };
 
-VariableDecl: DeclarationStatement = "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
-    let (name, typ) = ident;
-    DeclarationStatement {
-        attributes: Vec::new(),
-        kind: DeclarationKind::Var,
-        template_args,
-        name,
-        typ,
-        initializer: None,
-    }
+VariableDecl: Declaration = {
+    "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
+        let (name, typ) = ident;
+        Declaration {
+            attributes: Vec::new(),
+            kind: DeclarationKind::Var,
+            template_args,
+            name,
+            typ,
+            initializer: None,
+        }
+    },
 };
 
-OptionallyTypedIdent: (Span, Option<TypeExpression>) = <Ident> <(":" <TypeSpecifier>)?>;
-
-GlobalVariableDecl: DeclarationStatement = <attributes: S<Attribute>*> <mut decl: VariableDecl> <initializer: ("=" <S<Expression>>)?> => {
-    decl.attributes = attributes;
-    decl.initializer = initializer.map(Into::into);
-    decl
+OptionallyTypedIdent: (Span, Option<TypeExpression>) = {
+    <Ident> <(":" <TypeSpecifier>)?>,
 };
 
-GlobalValueDecl: DeclarationStatement = {
+GlobalVariableDecl: Declaration = {
+    <attributes: S<Attribute>*> <mut decl: VariableDecl> <initializer: ("=" <S<Expression>>)?> => {
+        decl.attributes = attributes;
+        decl.initializer = initializer.map(Into::into);
+        decl
+    },
+};
+
+GlobalValueDecl: Declaration = {
     "const" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
         let (name, typ) = ident;
-        DeclarationStatement {
+        Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Const,
             template_args: None,
@@ -299,7 +359,7 @@ GlobalValueDecl: DeclarationStatement = {
     },
     <attributes: S<Attribute>*> "override" <ident: OptionallyTypedIdent> <initializer: ("=" <S<Expression>>)?> => {
         let (name, typ) = ident;
-        DeclarationStatement {
+        Declaration {
             attributes,
             kind: DeclarationKind::Override,
             template_args: None,
@@ -326,20 +386,30 @@ PrimaryExpression: Expression = {
     ParenExpression,
 };
 
-CallExpression: Expression = CallPhrase => Expression::FunctionCall(<>);
-
-CallPhrase: FunctionCallExpression = <callee: TemplateElaboratedIdent> <arguments: ArgumentExpressionList> => {
-    let (name, template_args) = callee;
-    FunctionCallExpression {
-        name, template_args, arguments
-    }
+CallExpression: Expression = {
+    CallPhrase => Expression::FunctionCall(<>),
 };
 
-ParenExpression: Expression = "(" <Expression> ")" => Expression::Parenthesized(<>.into());
+CallPhrase: FunctionCallExpression = {
+    <callee: TemplateElaboratedIdent> <arguments: ArgumentExpressionList> => {
+        let (name, template_args) = callee;
+        FunctionCallExpression {
+            name, template_args, arguments
+        }
+    },
+};
 
-ArgumentExpressionList: Vec<S<Expression>> = "(" <ExpressionCommaList?> ")" => <>.unwrap_or_default();
+ParenExpression: Expression = {
+    "(" <Expression> ")" => Expression::Parenthesized(<>.into()),
+};
 
-ExpressionCommaList: Vec<S<Expression>> = Comma1<S<Expression>>;
+ArgumentExpressionList: Vec<S<Expression>> = {
+    "(" <ExpressionCommaList?> ")" => <>.unwrap_or_default(),
+};
+
+ExpressionCommaList: Vec<S<Expression>> = {
+    Comma1<S<Expression>>,
+};
 
 // was modified from the spec, but should be equivalent
 ComponentOrSwizzleSpecifier: Vec<Component> = {
@@ -373,9 +443,11 @@ UnaryExpression: Expression = {
     }),
 };
 
-SingularExpression: Expression = <expr: S<PrimaryExpression>> <components: ComponentOrSwizzleSpecifier?> => match components {
-    Some(components) => apply_components(components, expr).0,
-    None => expr.0
+SingularExpression: Expression = {
+    <expr: S<PrimaryExpression>> <components: ComponentOrSwizzleSpecifier?> => match components {
+        Some(components) => apply_components(components, expr).0,
+        None => expr.0
+    },
 };
 
 LhsExpression: Expression = {
@@ -515,8 +587,10 @@ Expression: Expression = {
 // https://www.w3.org/TR/WGSL/#statements
 
 
-CompoundStatement: CompoundStatement = <attributes: S<Attribute>*> "{" <statements: S<Statement>*> "}" => CompoundStatement {
-    attributes, statements
+CompoundStatement: CompoundStatement = {
+    <attributes: S<Attribute>*> "{" <statements: S<Statement>*> "}" => CompoundStatement {
+        attributes, statements
+    },
 };
 
 AssignmentStatement: AssignmentStatement = {
@@ -545,12 +619,18 @@ CompoundAssignmentOperator: AssignmentOperator = {
     "<<=" => AssignmentOperator::ShiftLeftAssign,
 };
 
-IncrementStatement: S<Box<Expression>> = <S<LhsExpression>> "++" => <>.into();
+IncrementStatement: S<Box<Expression>> = {
+    <S<LhsExpression>> "++" => <>.into(),
+};
 
-DecrementStatement: S<Box<Expression>> = <S<LhsExpression>> "--" => <>.into();
+DecrementStatement: S<Box<Expression>> = {
+    <S<LhsExpression>> "--" => <>.into(),
+};
 
-IfStatement: IfStatement = <attributes: S<Attribute>*> <if_clause: IfClause> <else_if_clauses: ElseIfClause*> <else_clause: ElseClause?> => IfStatement {
-    attributes, if_clause, else_if_clauses, else_clause
+IfStatement: IfStatement = {
+    <attributes: S<Attribute>*> <if_clause: IfClause> <else_if_clauses: ElseIfClause*> <else_clause: ElseClause?> => IfStatement {
+        attributes, if_clause, else_if_clauses, else_clause
+    },
 };
 
 IfClause = "if" <S<Expression>> <S<CompoundStatement>>;
@@ -559,49 +639,65 @@ ElseIfClause = "else" "if" <S<Expression>> <S<CompoundStatement>>;
 
 ElseClause = "else" <S<CompoundStatement>>;
 
-SwitchStatement: SwitchStatement = <attributes: S<Attribute>*> "switch" <expression: S<Expression>> <body: SwitchBody> => {
-    let (body_attributes, clauses) = body;
-    SwitchStatement {
-        attributes, body_attributes, expression: expression.into(), clauses
-    }
+SwitchStatement: SwitchStatement = {
+    <attributes: S<Attribute>*> "switch" <expression: S<Expression>> <body: SwitchBody> => {
+        let (body_attributes, clauses) = body;
+        SwitchStatement {
+            attributes, body_attributes, expression: expression.into(), clauses
+        }
+    },
 };
 
-SwitchBody: (Vec<S<Attribute>>, Vec<S<SwitchClause>>) = <S<Attribute>*> "{" <S<SwitchClause>+> "}";
+SwitchBody: (Vec<S<Attribute>>, Vec<S<SwitchClause>>) = {
+    <S<Attribute>*> "{" <S<SwitchClause>+> "}",
+};
 
 SwitchClause: SwitchClause = {
     CaseClause,
     DefaultAloneClause,
 };
 
-CaseClause: SwitchClause = "case" <case_selectors: CaseSelectors> ":"? <statement: S<CompoundStatement>> => SwitchClause {
-    case_selectors, statement
+CaseClause: SwitchClause = {
+    "case" <case_selectors: CaseSelectors> ":"? <statement: S<CompoundStatement>> => SwitchClause {
+        case_selectors, statement
+    },
 };
 
-DefaultAloneClause: SwitchClause = <l: @L> "default" <r: @R> ":"? <statement: S<CompoundStatement>> => SwitchClause {
-    case_selectors: vec![Spanned(CaseSelector::Default, l..r)], statement
+DefaultAloneClause: SwitchClause = {
+    <l: @L> "default" <r: @R> ":"? <statement: S<CompoundStatement>> => SwitchClause {
+        case_selectors: vec![Spanned(CaseSelector::Default, l..r)], statement
+    },
 };
 
-CaseSelectors: Vec<S<CaseSelector>> = Comma1<S<CaseSelector>>;
+CaseSelectors: Vec<S<CaseSelector>> = {
+    Comma1<S<CaseSelector>>,
+};
 
 CaseSelector: CaseSelector = {
     "default" => CaseSelector::Default,
     S<Expression> => CaseSelector::Expression(<>),
 };
 
-LoopStatement: LoopStatement = <attributes: S<Attribute>*> "loop" <body_attributes: S<Attribute>*> "{" <body: S<Statement>*> <continuing: S<ContinuingStatement>?> "}" => {
-    LoopStatement {
-        attributes, body_attributes, body, continuing
-    }
+LoopStatement: LoopStatement = {
+    <attributes: S<Attribute>*> "loop" <body_attributes: S<Attribute>*> "{" <body: S<Statement>*> <continuing: S<ContinuingStatement>?> "}" => {
+        LoopStatement {
+            attributes, body_attributes, body, continuing
+        }
+    },
 };
 
-ForStatement: ForStatement = <attributes: S<Attribute>*> "for" "(" <header: ForHeader> ")" <body: CompoundStatement> => {
-    let (initializer, condition, update) = header;
-    ForStatement {
-        attributes, initializer: initializer.map(Into::into), condition, update: update.map(Into::into), body
-    }
+ForStatement: ForStatement = {
+     <attributes: S<Attribute>*> "for" "(" <header: ForHeader> ")" <body: CompoundStatement> => {
+        let (initializer, condition, update) = header;
+        ForStatement {
+            attributes, initializer: initializer.map(Into::into), condition, update: update.map(Into::into), body
+        }
+    },
 };
 
-ForHeader: (Option<S<Statement>>, Option<S<Expression>>, Option<S<Statement>>) = <S<ForInit>?> ";" <S<Expression>?> ";" <S<ForUpdate>?>;
+ForHeader: (Option<S<Statement>>, Option<S<Expression>>, Option<S<Statement>>) = {
+    <S<ForInit>?> ";" <S<Expression>?> ";" <S<ForUpdate>?>,
+};
 
 ForInit: Statement = {
     VariableOrValueStatement  => Statement::Declaration(<>),
@@ -614,27 +710,41 @@ ForUpdate: Statement = {
     FuncCallStatement         => Statement::FunctionCall(<>),
 };
 
-WhileStatement: WhileStatement = <attributes: S<Attribute>*> "while" <condition: S<Expression>> <body: S<CompoundStatement>> => WhileStatement {
-    attributes, condition, body
+WhileStatement: WhileStatement = {
+    <attributes: S<Attribute>*> "while" <condition: S<Expression>> <body: S<CompoundStatement>> => WhileStatement {
+        attributes, condition, body
+    },
 };
 
-BreakStatement: () = "break";
+BreakStatement: () = {
+    "break",
+};
 
-BreakIfStatement: S<Expression> = "break" "if" <S<Expression>> ";";
+BreakIfStatement: S<Expression> = {
+    "break" "if" <S<Expression>> ";",
+};
 
-ContinueStatement: () = "continue";
+ContinueStatement: () = {
+    "continue",
+};
 
 ContinuingStatement = "continuing" <ContinuingCompoundStatement>;
 
-ContinuingCompoundStatement: ContinuingStatement = <attributes: S<Attribute>*> "{" <statements: S<Statement>*> <break_if: BreakIfStatement?> "}" => ContinuingStatement {
-    attributes, statements, break_if
+ContinuingCompoundStatement: ContinuingStatement = {
+    <attributes: S<Attribute>*> "{" <statements: S<Statement>*> <break_if: BreakIfStatement?> "}" => ContinuingStatement {
+        attributes, statements, break_if
+    },
 };
 
-ReturnStatement: Option<S<Expression>> = "return" <S<Expression>?>;
+ReturnStatement: Option<S<Expression>> = {
+    "return" <S<Expression>?>,
+};
 
 FuncCallStatement = CallPhrase;
 
-ConstAssertStatement: S<Expression> = "const_assert" <S<Expression>>;
+ConstAssertStatement: S<Expression> = {
+    "const_assert" <S<Expression>>,
+};
 
 Statement: Statement = {
     ";" => Statement::Void,
@@ -663,34 +773,45 @@ VariableUpdatingStatement: Statement = {
 // 10. FUNCTIONS
 // https://www.w3.org/TR/WGSL/#functions
 
-FunctionDecl: Function = <attributes: S<Attribute>*> <header: FunctionHeader> <body: CompoundStatement> => {
-    let (name, parameters, return_attributes, return_type) = header;
-    Function { attributes, name, parameters, return_attributes, return_type, body }
+FunctionDecl: Function = {
+    <attributes: S<Attribute>*> <header: FunctionHeader> <body: CompoundStatement> => {
+        let (name, parameters, return_attributes, return_type) = header;
+        Function { attributes, name, parameters, return_attributes, return_type, body }
+    },
 };
 
-FunctionHeader: (Span, Vec<FormalParameter>, Vec<S<Attribute>>, Option<TypeExpression>) = "fn" <name: Ident> "(" <parameters: ParamList?> ")" <ret: ("->" <S<Attribute>*> <TemplateElaboratedIdent>)?> => {
-    let (return_attributes, return_type) = ret.map(|(return_attributes, (name, template_args))| {
-        let return_type = TypeExpression {name, template_args };
-        (return_attributes, Some(return_type))
-    }).unwrap_or_default();
-    let parameters = parameters.unwrap_or_default();
-    (name, parameters, return_attributes, return_type)
+FunctionHeader: (Span, Vec<FormalParameter>, Vec<S<Attribute>>, Option<TypeExpression>) = {
+    "fn" <name: Ident> "(" <parameters: ParamList?> ")" <ret: ("->" <S<Attribute>*> <TemplateElaboratedIdent>)?> => {
+        let (return_attributes, return_type) = ret.map(|(return_attributes, (name, template_args))| {
+            let return_type = TypeExpression {name, template_args };
+            (return_attributes, Some(return_type))
+        }).unwrap_or_default();
+        let parameters = parameters.unwrap_or_default();
+        (name, parameters, return_attributes, return_type)
+    },
 };
 
-ParamList: Vec<FormalParameter> = Comma1<Param>;
+ParamList: Vec<FormalParameter> = {
+    Comma1<Param>,
+};
 
-Param: FormalParameter = <attributes: S<Attribute>*> <name: Ident> ":" <typ: S<TypeSpecifier>> => FormalParameter {
-    attributes, name, typ
+Param: FormalParameter = {
+    <attributes: S<Attribute>*> <name: Ident> ":" <typ: S<TypeSpecifier>> => FormalParameter {
+        attributes, name, typ
+    },
 };
 
 // 11. ATTRIBUTES
 // https://www.w3.org/TR/WGSL/#attributes
 
 // TODO incomplete / non-conformant
-// Attribute: () =  r"@\w+(?:\s*\([^\)]*\))?";
-Attribute: () = TokAttribute;
+Attribute: () = {
+    TokAttribute,
+};
 
-DiagnosticControl: (Span, Span) = "(" <SeverityControlName> "," <DiagnosticRuleName> ","? ")";
+DiagnosticControl: (DiagnosticSeverity, Span) = {
+    "(" <SeverityControlName> "," <DiagnosticRuleName> ","? ")",
+};
 
 // ===================
 // === End grammar ===

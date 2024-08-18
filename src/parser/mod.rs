@@ -1,12 +1,23 @@
 use lalrpop_util::{lalrpop_mod, ParseError};
 
 pub mod ast;
+mod ast_impl;
 pub mod lexer;
 mod parser_support;
 
-use lexer::{Error, Lexer, Span, Token};
+use lexer::{Lexer, Span, Token};
+use thiserror::Error;
 
 use self::ast::TranslationUnit;
+
+#[derive(Error, Clone, Debug, Default, PartialEq)]
+pub enum Error {
+    #[default]
+    #[error("lexer error")]
+    LexerError,
+    #[error("invalid diagnostic severity")]
+    ParseDiagnosticSeverity,
+}
 
 lalrpop_mod!(pub wgsl_recognize, "/parser/wgsl_recognize.rs");
 lalrpop_mod!(pub wgsl_spanned, "/parser/wgsl_spanned.rs");
