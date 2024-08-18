@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use super::Span;
 
 /// A syntax tree for WGSL files. The root of the tree is a [TranslationUnit] (file).
@@ -36,6 +38,14 @@ use super::Span;
 
 #[derive(Clone, Debug)]
 pub struct Spanned<T>(pub T, pub Span);
+
+impl<T> Deref for Spanned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 type S<T> = Spanned<T>; // shorter alias
 
@@ -216,7 +226,7 @@ pub struct IndexingExpression {
 #[allow(unused)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
-    pub operand: S<Box<Expression>>,
+    pub operand: S<Box<Expression>>, // TODO maybe rename rhs
 }
 
 #[derive(Clone, Debug)]
@@ -233,7 +243,7 @@ pub enum UnaryOperator {
 #[allow(unused)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
-    pub left: S<Box<Expression>>,
+    pub left: S<Box<Expression>>, // TODO: rename lhs rhs
     pub right: S<Box<Expression>>,
 }
 
@@ -242,8 +252,6 @@ pub struct BinaryExpression {
 pub enum BinaryOperator {
     ShortCircuitOr,
     ShortCircuitAnd,
-    LogicalOr,
-    LogicalAnd,
     Addition,
     Subtraction,
     Multiplication,

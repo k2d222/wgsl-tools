@@ -97,14 +97,17 @@ fn main() {
         Err(err) => panic_parse_error(err, &source),
     };
 
-    println!("recognizer success");
+    println!("-- recognizer OK --");
 
     let ast = match parser::parse_spanned(&source) {
         Ok(ast) => ast,
         Err(err) => panic_parse_error(err, &source),
     };
 
+    println!("-- ast --");
     println!("{ast:?}");
+    println!("-- print --");
+    parser::print::print(&ast, &source);
 
     // let source = fs::read_to_string(&cli.input).expect("could not open input file");
     // let tree = parser.parse(&source, None).expect("parse failure");

@@ -1,7 +1,8 @@
 pub mod ast;
-mod ast_impl;
+pub mod ast_impl;
 pub mod lexer;
 mod parser_support;
+pub mod print;
 
 use lalrpop_util::{lalrpop_mod, ParseError};
 use lexer::{Lexer, Token};
