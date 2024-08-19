@@ -4,7 +4,6 @@ version = "0.0.1"
 edition = "2021"
 description = "Various tools to parse, verify, evaluate and modify wgsl shader source."
 authors = ["Mathis Brossier <mathis.brossier@gmail.com>"]
-license = "MIT"
 repository = "https://github.com/k2d222/wgsl-tools"
 documentation = "https://docs.rs/wgsl-tools"
 
