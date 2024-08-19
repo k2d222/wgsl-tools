@@ -1,24 +1,39 @@
-mod imports;
-mod parser;
+// mod import;
+mod parse;
 
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use itertools::Itertools;
 use lalrpop_util::ParseError;
-use parser::lexer::Token;
+use parse::lexer::Token;
 use std::{fs, path::PathBuf};
 
-#[derive(Parser, Debug)]
-#[command(version = "0.1", author = "Mathis Brossier", about = "")]
+#[derive(Parser)]
+#[command(version, author, about)]
+#[command(propagate_version = true)]
 struct Cli {
+    /// main command
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// check correctness of the source file
+    Check(CommonArgs),
+    /// parse the source and convert it back to code from the syntax tree.
+    Parse(CommonArgs),
+    /// output the syntax tree to stdout
+    Dump(CommonArgs),
+}
+
+#[derive(Args)]
+struct CommonArgs {
+    /// wgsl file entry-point
     input: PathBuf,
 }
 
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
-
 fn panic_parse_error(
-    err: ParseError<usize, Token, (usize, parser::Error, usize)>,
+    err: ParseError<usize, Token, (usize, parse::Error, usize)>,
     source: &str,
 ) -> ! {
     use annotate_snippets::*;
@@ -86,35 +101,38 @@ fn panic_parse_error(
 }
 
 fn main() {
-    // let mut parser = tree_sitter::Parser::new();
-    // parser.set_language(&tree_sitter_wesl::language()).unwrap();
-
     let cli = Cli::parse();
 
-    let source = fs::read_to_string(&cli.input).expect("could not open input file");
-    match parser::parse_recognize(&source) {
-        Ok(()) => (),
-        Err(err) => panic_parse_error(err, &source),
+    let args = match &cli.command {
+        Command::Check(args) => args,
+        Command::Parse(args) => args,
+        Command::Dump(args) => args,
     };
 
-    println!("-- recognizer OK --");
+    let source = fs::read_to_string(&args.input).expect("could not open input file");
 
-    let ast = match parser::parse_spanned(&source) {
-        Ok(ast) => ast,
-        Err(err) => panic_parse_error(err, &source),
-    };
-
-    println!("-- ast --");
-    println!("{ast:?}");
-    println!("-- print --");
-    parser::print::print(&ast, &source);
-
-    // let source = fs::read_to_string(&cli.input).expect("could not open input file");
-    // let tree = parser.parse(&source, None).expect("parse failure");
-    // println!("{tree:?}")
-    // let source = include_str!("test.wgsl");
-    // println!("source: {source}");
-
-    // let res = imports::run(&cli.input);
-    // println!("{res:?}");
+    match &cli.command {
+        Command::Check(_) => {
+            print!("{} -- ", args.input.display());
+            match parse::parse_recognize(&source) {
+                Ok(ast) => ast,
+                Err(err) => panic_parse_error(err, &source),
+            };
+            println!("OK");
+        }
+        Command::Parse(_) => {
+            let ast = match parse::parse_spanned(&source) {
+                Ok(ast) => ast,
+                Err(err) => panic_parse_error(err, &source),
+            };
+            parse::print::print(&ast, &source);
+        }
+        Command::Dump(_) => {
+            let ast = match parse::parse_spanned(&source) {
+                Ok(ast) => ast,
+                Err(err) => panic_parse_error(err, &source),
+            };
+            println!("{ast:?}")
+        }
+    }
 }

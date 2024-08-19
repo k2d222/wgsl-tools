@@ -9,13 +9,10 @@ documentation = "https://docs.rs/wgsl-tools"
 
 [dependencies]
 annotate-snippets = "0.11.4"
-anyhow = "1.0.86"
 clap = { version = "4.5.11", features = ["derive"] }
 itertools = "0.13.0"
 ropey = "1.6.1"
 thiserror = "1.0.63"
-unicode-ident = "1.0.12"
-winnow = { version = "0.6.18" } # , features = ["debug"]
 lalrpop-util = { version = "0.20.2", features = ["lexer", "unicode"] }
 logos = "0.14.1"
 lexical = { version = "6.1.1", features = ["format", "power-of-two"] }

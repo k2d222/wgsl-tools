@@ -1,7 +1,5 @@
 use std::{fmt::Display, num::NonZeroU8};
 
-use lexical::FromLexical;
-use lexical::FromLexicalWithOptions;
 use logos::{Logos, SpannedIter};
 
 use super::{span::Span, wgsl_recognize, Error};

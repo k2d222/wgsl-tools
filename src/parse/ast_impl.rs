@@ -1,9 +1,6 @@
-use std::{
-    fmt::{self, Display, Formatter},
-    str::FromStr,
-};
+use std::str::FromStr;
 
-use super::{ast::*, span::Span, Error};
+use super::{ast::*, Error};
 
 impl FromStr for DiagnosticSeverity {
     type Err = Error;
@@ -17,8 +14,4 @@ impl FromStr for DiagnosticSeverity {
             _ => Err(Error::ParseDiagnosticSeverity),
         }
     }
-}
-
-pub trait OuterSpan {
-    fn outer_span(&self) -> Span;
 }

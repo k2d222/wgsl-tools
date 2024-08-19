@@ -20,8 +20,8 @@ pub enum Error {
     ParseDiagnosticSeverity,
 }
 
-lalrpop_mod!(pub wgsl_recognize, "/parser/wgsl_recognize.rs");
-lalrpop_mod!(pub wgsl_spanned, "/parser/wgsl_spanned.rs");
+lalrpop_mod!(pub wgsl_recognize, "/parse/wgsl_recognize.rs");
+lalrpop_mod!(pub wgsl_spanned, "/parse/wgsl_spanned.rs");
 
 pub fn parse_recognize(
     source: &str,
