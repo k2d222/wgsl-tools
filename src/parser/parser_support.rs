@@ -1,8 +1,9 @@
 // support functions to be injected in the lalrpop parser.
 
-use super::{ast::*, Span};
-
-pub(crate) type S<T> = Spanned<T>;
+use super::{
+    ast::*,
+    span::{Span, Spanned},
+};
 
 pub(crate) enum Component {
     Named(Span),
@@ -15,8 +16,8 @@ pub(crate) fn apply_components(
 ) -> Spanned<Expression> {
     components.into_iter().fold(expr, |base, comp| match comp {
         Component::Named(component) => {
-            let span = base.1.start..component.end;
-            Spanned(
+            let span = base.span().start..component.end;
+            Spanned::new(
                 Expression::NamedComponent(NamedComponentExpression {
                     base: base.into(),
                     component,
@@ -25,8 +26,8 @@ pub(crate) fn apply_components(
             )
         }
         Component::Index(index) => {
-            let span = base.1.start..index.1.end;
-            Spanned(
+            let span = base.span().start..index.span().end;
+            Spanned::new(
                 Expression::Indexing(IndexingExpression {
                     base: base.into(),
                     index,

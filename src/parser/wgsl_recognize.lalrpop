@@ -95,7 +95,6 @@ extern {
         TokU32 => Token::U32(<u32>),
         TokF32 => Token::F32(<f32>),
         TokF16 => Token::F16(<f32>),
-        TokAttribute => Token::Attribute(<String>),
         TokTemplateArgsStart => Token::TemplateArgsStart,
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
     }
@@ -491,9 +490,8 @@ Param: () = Attribute * Ident ":" TypeSpecifier;
 // 11. ATTRIBUTES
 // https://www.w3.org/TR/WGSL/#attributes
 
-// TODO incomplete / non-conformant
-// Attribute: () =  r"@\w+(?:\s*\([^\)]*\))?";
-Attribute: () = TokAttribute;
+// TODO: maybe parse the well-known attributes.
+Attribute: () = "@" IdentPatternToken ArgumentExpressionList ?;
 
 DiagnosticControl: () = "(" SeverityControlName "," DiagnosticRuleName "," ? ")";
 

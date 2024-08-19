@@ -3,6 +3,7 @@ pub mod ast_impl;
 pub mod lexer;
 mod parser_support;
 pub mod print;
+pub mod span;
 
 use lalrpop_util::{lalrpop_mod, ParseError};
 use lexer::{Lexer, Token};
@@ -18,8 +19,6 @@ pub enum Error {
     #[error("invalid diagnostic severity")]
     ParseDiagnosticSeverity,
 }
-
-pub type Span = std::ops::Range<usize>;
 
 lalrpop_mod!(pub wgsl_recognize, "/parser/wgsl_recognize.rs");
 lalrpop_mod!(pub wgsl_spanned, "/parser/wgsl_spanned.rs");

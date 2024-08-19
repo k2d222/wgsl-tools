@@ -1,9 +1,9 @@
 use std::fmt::Display;
 
-use lexical::{FromLexical, NumberFormatBuilder, ParseFloatOptions, ParseIntegerOptions};
-use logos::{Logos, Source, SpannedIter};
+use lexical::FromLexical;
+use logos::{Logos, SpannedIter};
 
-use super::{wgsl_recognize, Error, Span};
+use super::{span::Span, wgsl_recognize, Error};
 
 fn maybe_template_end(lex: &mut logos::Lexer<Token>) -> Token {
     if let Some(depth) = lex.extras.template_depths.last() {
@@ -231,10 +231,109 @@ pub enum Token {
     )]
     // hex
     F16(f32),
-    #[regex(r#"@[\w_]+(\s?\([^\)]*\))?"#, |lex| lex.slice().to_string())]
-    Attribute(String),
     TemplateArgsStart,
     TemplateArgsEnd,
+}
+
+impl Token {
+    #[allow(unused)]
+    pub fn is_symbol(&self) -> bool {
+        matches!(
+            self,
+            Token::SymAnd
+                | Token::SymAndAnd
+                | Token::SymArrow
+                | Token::SymAttr
+                | Token::SymForwardSlash
+                | Token::SymBang
+                | Token::SymBracketLeft
+                | Token::SymBracketRight
+                | Token::SymBraceLeft
+                | Token::SymBraceRight
+                | Token::SymColon
+                | Token::SymComma
+                | Token::SymEqual
+                | Token::SymEqualEqual
+                | Token::SymNotEqual
+                | Token::SymGreaterThan
+                | Token::SymGreaterThanEqual
+                | Token::SymShiftRight
+                | Token::SymLessThan
+                | Token::SymLessThanEqual
+                | Token::SymShiftLeft
+                | Token::SymModulo
+                | Token::SymMinus
+                | Token::SymMinusMinus
+                | Token::SymPeriod
+                | Token::SymPlus
+                | Token::SymPlusPlus
+                | Token::SymOr
+                | Token::SymOrOr
+                | Token::SymParenLeft
+                | Token::SymParenRight
+                | Token::SymSemicolon
+                | Token::SymStar
+                | Token::SymTilde
+                | Token::SymUnderscore
+                | Token::SymXor
+                | Token::SymPlusEqual
+                | Token::SymMinusEqual
+                | Token::SymTimesEqual
+                | Token::SymDivisionEqual
+                | Token::SymModuloEqual
+                | Token::SymAndEqual
+                | Token::SymOrEqual
+                | Token::SymXorEqual
+                | Token::SymShiftRightAssign
+                | Token::SymShiftLeftAssign
+        )
+    }
+
+    #[allow(unused)]
+    pub fn is_keyword(&self) -> bool {
+        matches!(
+            self,
+            Token::KwAlias
+                | Token::KwBreak
+                | Token::KwCase
+                | Token::KwConst
+                | Token::KwConstAssert
+                | Token::KwContinue
+                | Token::KwContinuing
+                | Token::KwDefault
+                | Token::KwDiagnostic
+                | Token::KwDiscard
+                | Token::KwElse
+                | Token::KwEnable
+                | Token::KwFalse
+                | Token::KwFn
+                | Token::KwFor
+                | Token::KwIf
+                | Token::KwLet
+                | Token::KwLoop
+                | Token::KwOverride
+                | Token::KwRequires
+                | Token::KwReturn
+                | Token::KwStruct
+                | Token::KwSwitch
+                | Token::KwTrue
+                | Token::KwVar
+                | Token::KwWhile
+        )
+    }
+
+    #[allow(unused)]
+    pub fn is_numeric_literal(&self) -> bool {
+        matches!(
+            self,
+            Token::AbstractInt(_)
+                | Token::AbstractFloat(_)
+                | Token::I32(_)
+                | Token::U32(_)
+                | Token::F32(_)
+                | Token::F16(_)
+        )
+    }
 }
 
 impl Display for Token {
@@ -319,7 +418,6 @@ impl Display for Token {
             Token::U32(n) => write!(f, "{n}u"),
             Token::F32(n) => write!(f, "{n}f"),
             Token::F16(n) => write!(f, "{n}h"),
-            Token::Attribute(s) => write!(f, "attribute `{s}`"),
             Token::TemplateArgsStart => f.write_str("<"),
             Token::TemplateArgsEnd => f.write_str(">"),
         }
@@ -374,13 +472,15 @@ impl<'s> Iterator for Lexer<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut next_token = self.token_stream.next();
         match next_token {
-            Some((Ok(ref mut t), ref span)) if *t == Token::SymLessThan => match self.next_token {
-                Some((Ok(Token::Ident(_)), _)) => {
-                    let source = &self.source[span.start..];
-                    if Lexer::recognize_template_list(source) {
-                        *t = Token::TemplateArgsStart;
-                        let cur_depth = self.token_stream.extras.depth;
-                        self.token_stream.extras.template_depths.push(cur_depth);
+            Some((Ok(ref mut t), ref span)) if *t == Token::SymLessThan => match &self.next_token {
+                Some((Ok(tok), _)) => {
+                    if matches!(tok, Token::Ident(_)) || tok.is_keyword() {
+                        let source = &self.source[span.start..];
+                        if Lexer::recognize_template_list(source) {
+                            *t = Token::TemplateArgsStart;
+                            let cur_depth = self.token_stream.extras.depth;
+                            self.token_stream.extras.template_depths.push(cur_depth);
+                        }
                     }
                 }
                 _ => (),

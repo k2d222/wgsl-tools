@@ -1,6 +1,4 @@
-use std::ops::Deref;
-
-use super::Span;
+use super::span::{Span, S};
 
 /// A syntax tree for WGSL files. The root of the tree is a [TranslationUnit] (file).
 ///
@@ -35,25 +33,6 @@ use super::Span;
 ///
 /// The parsing is not designed to be primarily efficient, but flexible and correct.
 /// It is made with the ultimate goal to implement spec-compliant language extensions.
-
-#[derive(Clone, Debug)]
-pub struct Spanned<T>(pub T, pub Span);
-
-impl<T> Deref for Spanned<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-type S<T> = Spanned<T>; // shorter alias
-
-impl<T> From<Spanned<T>> for Spanned<Box<T>> {
-    fn from(value: Spanned<T>) -> Self {
-        Spanned(value.0.into(), value.1)
-    }
-}
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
@@ -176,8 +155,12 @@ pub struct ConstAssert {
     pub expression: S<Expression>,
 }
 
-// TODO incomplete
-pub type Attribute = ();
+#[derive(Clone, Debug)]
+#[allow(unused)]
+pub struct Attribute {
+    pub name: Span,
+    pub arguments: Option<Vec<S<Expression>>>,
+}
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
@@ -369,7 +352,7 @@ pub struct SwitchStatement {
 #[allow(unused)]
 pub struct SwitchClause {
     pub case_selectors: Vec<CaseSelector>,
-    pub statement: CompoundStatement,
+    pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug)]

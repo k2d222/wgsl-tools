@@ -3,7 +3,7 @@ use std::{
     str::FromStr,
 };
 
-use super::{ast::*, Error, Span};
+use super::{ast::*, span::Span, Error};
 
 impl FromStr for DiagnosticSeverity {
     type Err = Error;

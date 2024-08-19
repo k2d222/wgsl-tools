@@ -7,6 +7,8 @@ use std::{
 
 use itertools::Itertools;
 
+use super::span::Spanned;
+
 /// A type that implements display for the syntax tree.
 /// It *should* output a valid wgsl file equivalent to the parsed file.
 /// It should only be used for debugging!
@@ -70,7 +72,7 @@ impl<T: Display> Display for Indent<T> {
 
 impl<T: Display> Display for Spanned<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        self.as_ref().fmt(f)
     }
 }
 
@@ -88,14 +90,14 @@ impl Display for Print<'_, &TranslationUnit> {
         let directives = self
             .global_directives
             .iter()
-            .map(|x| Print::new(&x.0, self.source))
+            .map(|x| Print::new(x.as_ref(), self.source))
             .format("\n");
         let declarations = self
             .global_declarations
             .iter()
-            .map(|x| Print::new(&x.0, self.source))
-            .format("\n");
-        writeln!(f, "{directives}\n{declarations}")
+            .map(|x| Print::new(x.as_ref(), self.source))
+            .format("\n\n");
+        writeln!(f, "{directives}\n\n{declarations}")
     }
 }
 
@@ -179,7 +181,7 @@ impl Display for Print<'_, &Declaration> {
         let init = self
             .initializer
             .as_ref()
-            .map(|Spanned(typ, _)| format!(" = {}", Print::new(typ, self.source)))
+            .map(|typ| format!(" = {}", Print::new(typ.as_ref(), self.source)))
             .unwrap_or_default();
         write!(f, "{attrs}{kind}{tplt} {name}{typ}{init};")
     }
@@ -210,8 +212,8 @@ impl Display for Print<'_, &Struct> {
         let members = Indent(
             self.members
                 .iter()
-                .map(|mem| Print::new(&mem.0, self.source))
-                .format("\n"),
+                .map(|mem| Print::new(mem.as_ref(), self.source))
+                .format(",\n"),
         );
         write!(f, "struct {name} {{\n{members}\n}}")
     }
@@ -233,7 +235,7 @@ impl Display for Print<'_, &Function> {
         let params = self
             .parameters
             .iter()
-            .map(|p| Print::new(&p.0, self.source))
+            .map(|p| Print::new(p.as_ref(), self.source))
             .format(", ");
         let ret_attrs = fmt_attrs(&self.return_attributes, self.source, true);
         let ret_typ = self
@@ -257,19 +259,35 @@ impl Display for Print<'_, &FormalParameter> {
 
 impl Display for Print<'_, &ConstAssert> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let expr = Print::new(&self.expression.0, self.source);
+        let expr = Print::new(self.expression.as_ref(), self.source);
         write!(f, "const_assert {expr};",)
     }
 }
 
-// impl Display for Print<'_, &Attribute> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         write!(f, "@TODO")
-//     }
-// }
+impl Display for Print<'_, &Attribute> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let name = &self.source[self.name.clone()];
+        let args = self
+            .arguments
+            .as_ref()
+            .map(|args| {
+                format!(
+                    "({})",
+                    args.iter()
+                        .map(|arg| Print::new(arg.as_ref(), self.source))
+                        .format(", ")
+                )
+            })
+            .unwrap_or_default();
+        write!(f, "@{name}{args}")
+    }
+}
 
-fn fmt_attrs(attrs: &Vec<Spanned<Attribute>>, _source: &'_ str, inline: bool) -> String {
-    let print = attrs.iter().map(|attr| "@TODO").format(" ");
+fn fmt_attrs(attrs: &Vec<Spanned<Attribute>>, source: &'_ str, inline: bool) -> String {
+    let print = attrs
+        .iter()
+        .map(|attr| Print::new(attr.as_ref(), source))
+        .format(" ");
     let suffix = if attrs.is_empty() {
         ""
     } else if inline {
@@ -285,7 +303,10 @@ impl Display for Print<'_, &Expression> {
         let source = self.source;
         match self.deref() {
             Expression::Literal(print) => write!(f, "{}", print),
-            Expression::Parenthesized(print) => write!(f, "{}", Print::new(print, source)),
+            Expression::Parenthesized(print) => {
+                let expr = Print::new(print.deref(), self.source);
+                write!(f, "({expr})")
+            }
             Expression::NamedComponent(print) => write!(f, "{}", Print::new(print, source)),
             Expression::Indexing(print) => write!(f, "{}", Print::new(print, source)),
             Expression::Unary(print) => write!(f, "{}", Print::new(print, source)),
@@ -312,16 +333,16 @@ impl Display for LiteralExpression {
     }
 }
 
-impl Display for Print<'_, &ParenthesizedExpression> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let expr = Print::new(self.print.deref(), self.source);
-        write!(f, "({expr})")
-    }
-}
+// impl Display for Print<'_, &ParenthesizedExpression> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         let expr = Print::new(self.print.deref(), self.source);
+//         write!(f, "({expr})")
+//     }
+// }
 
 impl Display for Print<'_, &NamedComponentExpression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let base = Print::new(&self.base.0, self.source);
+        let base = Print::new(self.base.as_ref().as_ref(), self.source);
         let component = &self.source[self.component.clone()];
         write!(f, "{base}.{component}")
     }
@@ -329,8 +350,8 @@ impl Display for Print<'_, &NamedComponentExpression> {
 
 impl Display for Print<'_, &IndexingExpression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let base = Print::new(&self.base.0, self.source);
-        let index = Print::new(&self.index.0, self.source);
+        let base = Print::new(self.base.as_ref().as_ref(), self.source);
+        let index = Print::new(self.index.as_ref().as_ref(), self.source);
         write!(f, "{base}[{index}]")
     }
 }
@@ -338,7 +359,7 @@ impl Display for Print<'_, &IndexingExpression> {
 impl Display for Print<'_, &UnaryExpression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let operator = &self.operator;
-        let operand = Print::new(&self.operand.0, self.source);
+        let operand = Print::new(self.operand.as_ref().as_ref(), self.source);
         write!(f, "{operator}{operand}")
     }
 }
@@ -358,8 +379,8 @@ impl Display for UnaryOperator {
 impl Display for Print<'_, &BinaryExpression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let operator = &self.operator;
-        let left = Print::new(&self.left.0, self.source);
-        let right = Print::new(&self.right.0, self.source);
+        let left = Print::new(self.left.as_ref().as_ref(), self.source);
+        let right = Print::new(self.right.as_ref().as_ref(), self.source);
         write!(f, "{left} {operator} {right}")
     }
 }
@@ -396,7 +417,7 @@ impl Display for Print<'_, &FunctionCallExpression> {
         let args = self
             .arguments
             .iter()
-            .map(|arg| Print::new(&arg.0, self.source))
+            .map(|arg| Print::new(arg.as_ref(), self.source))
             .format(", ");
         write!(f, "{name}{tplt}({args})")
     }
@@ -428,7 +449,7 @@ fn fmt_template(tplt: &Option<Vec<Spanned<TemplateArg>>>, source: &'_ str) -> St
         Some(tplt) => {
             let print = tplt
                 .iter()
-                .map(|arg| Print::new(&arg.0, source))
+                .map(|arg| Print::new(arg.as_ref(), source))
                 .format(", ");
             format!("<{print}>")
         }
@@ -443,8 +464,8 @@ impl Display for Print<'_, &Statement> {
             Statement::Void => write!(f, ";"),
             Statement::Compound(print) => write!(f, "{}", Print::new(print, source)),
             Statement::Assignment(print) => write!(f, "{}", Print::new(print, source)),
-            Statement::Increment(expr) => write!(f, "{}++;", Print::new(&expr.0, source)),
-            Statement::Decrement(expr) => write!(f, "{}--;", Print::new(&expr.0, source)),
+            Statement::Increment(expr) => write!(f, "{}++;", Print::new(expr.as_ref(), source)),
+            Statement::Decrement(expr) => write!(f, "{}--;", Print::new(expr.as_ref(), source)),
             Statement::If(print) => write!(f, "{}", Print::new(print, source)),
             Statement::Switch(print) => write!(f, "{}", Print::new(print, source)),
             Statement::Loop(print) => write!(f, "{}", Print::new(print, source)),
@@ -455,7 +476,7 @@ impl Display for Print<'_, &Statement> {
             Statement::Return(expr) => {
                 let expr = expr
                     .as_ref()
-                    .map(|expr| format!(" {}", Print::new(&expr.0, self.source)))
+                    .map(|expr| format!(" {}", Print::new(expr.as_ref(), self.source)))
                     .unwrap_or_default();
                 write!(f, "return{expr};")
             }
@@ -473,7 +494,7 @@ impl Display for Print<'_, &CompoundStatement> {
         let stmts = Indent(
             self.statements
                 .iter()
-                .map(|stmt| Print::new(&stmt.0, self.source))
+                .map(|stmt| Print::new(stmt.as_ref(), self.source))
                 .format("\n"),
         );
         write!(f, "{attrs}{{\n{stmts}\n}}")
@@ -483,9 +504,9 @@ impl Display for Print<'_, &CompoundStatement> {
 impl Display for Print<'_, &AssignmentStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let operator = &self.operator;
-        let lhs = Print::new(&self.lhs.0, self.source);
-        let rhs = Print::new(&self.rhs.0, self.source);
-        write!(f, "{lhs} {operator} {rhs}")
+        let lhs = Print::new(self.lhs.as_ref(), self.source);
+        let rhs = Print::new(self.rhs.as_ref(), self.source);
+        write!(f, "{lhs} {operator} {rhs};")
     }
 }
 
@@ -522,11 +543,11 @@ impl Display for AssignmentOperator {
 impl Display for Print<'_, &IfStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, self.source, false);
-        let expr = Print::new(&self.if_clause.0 .0, self.source);
+        let expr = Print::new(self.if_clause.0.as_ref(), self.source);
         let stmt = Print::new(&self.if_clause.1, self.source);
         write!(f, "{attrs}if ({expr}) {stmt}")?;
         for else_if_clause in self.else_if_clauses.iter() {
-            let expr = Print::new(&else_if_clause.0 .0, self.source);
+            let expr = Print::new(else_if_clause.0.as_ref(), self.source);
             let stmt = Print::new(&else_if_clause.1, self.source);
             write!(f, "\nelse if ({expr}) {stmt}")?;
         }
@@ -540,31 +561,78 @@ impl Display for Print<'_, &IfStatement> {
 
 impl Display for Print<'_, &SwitchStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO format switch statements")
+        let attrs = fmt_attrs(&self.attributes, self.source, false);
+        let expr = Print::new(self.expression.as_ref(), self.source);
+        let body_attrs = fmt_attrs(&self.body_attributes, self.source, false);
+        let clauses = Indent(
+            self.clauses
+                .iter()
+                .map(|clause| Print::new(clause, self.source))
+                .format("\n"),
+        );
+        write!(f, "{attrs}switch {expr} {body_attrs}{{\n{clauses}\n}}")
     }
 }
 
 impl Display for Print<'_, &SwitchClause> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Ok(())
+        let cases = self
+            .case_selectors
+            .iter()
+            .map(|case| Print::new(case, self.source))
+            .format(", ");
+        let body = Print::new(&self.body, self.source);
+        write!(f, "case {cases} {body}")
     }
 }
 
 impl Display for Print<'_, &CaseSelector> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Ok(())
+        match self.deref() {
+            CaseSelector::Default => write!(f, "default"),
+            CaseSelector::Expression(expr) => {
+                write!(f, "{}", Print::new(expr.as_ref(), self.source))
+            }
+        }
     }
 }
 
 impl Display for Print<'_, &LoopStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO format loop statements")
+        let attrs = fmt_attrs(&self.attributes, self.source, false);
+        let body_attrs = fmt_attrs(&self.body.attributes, self.source, false);
+        let body = Indent(
+            self.body
+                .statements
+                .iter()
+                .map(|stmt| Print::new(stmt.as_ref(), self.source))
+                .format("\n"),
+        );
+        let continuing = self
+            .continuing
+            .as_ref()
+            .map(|cont| format!("{}\n", Indent(Print::new(cont.as_ref(), self.source))))
+            .unwrap_or_default();
+        write!(f, "{attrs}loop {body_attrs}{{\n{body}\n{continuing}}}")
     }
 }
 
 impl Display for Print<'_, &ContinuingStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Ok(())
+        let body_attrs = fmt_attrs(&self.body.attributes, self.source, false);
+        let body = Indent(
+            self.body
+                .statements
+                .iter()
+                .map(|stmt| Print::new(stmt.as_ref(), self.source))
+                .format("\n"),
+        );
+        let break_if = self
+            .break_if
+            .as_ref()
+            .map(|cont| format!("{};\n", Indent(Print::new(cont.as_ref(), self.source))))
+            .unwrap_or_default();
+        write!(f, "continuing {body_attrs}{{\n{body}\n{break_if}}}")
     }
 }
 
@@ -576,12 +644,32 @@ impl Display for Print<'_, &ContinuingStatement> {
 
 impl Display for Print<'_, &ForStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO format for statements")
+        let attrs = fmt_attrs(&self.attributes, self.source, false);
+        let init = self
+            .initializer
+            .as_ref()
+            .map(|stmt| format!("{}", Print::new(stmt.as_ref().as_ref(), self.source)))
+            .unwrap_or_default();
+        let cond = self
+            .condition
+            .as_ref()
+            .map(|expr| format!("{}", Print::new(expr.as_ref(), self.source)))
+            .unwrap_or_default();
+        let updt = self
+            .update
+            .as_ref()
+            .map(|stmt| format!("{}", Print::new(stmt.as_ref().as_ref(), self.source)))
+            .unwrap_or_default();
+        let body = Print::new(&self.body, self.source);
+        write!(f, "{attrs}for ({init}; {cond}; {updt}) {body}")
     }
 }
 
 impl Display for Print<'_, &WhileStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO format while statements")
+        let attrs = fmt_attrs(&self.attributes, self.source, false);
+        let cond = Print::new(self.condition.as_ref(), self.source);
+        let body = Print::new(&self.body, self.source);
+        write!(f, "{attrs}while ({cond}) {body}")
     }
 }

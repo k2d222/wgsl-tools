@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use lalrpop_util::ParseError;
-use crate::parser::{Span, Error, lexer::Token};
+use crate::parser::{span::{Span, Spanned, S}, Error, lexer::Token};
 use crate::parser::ast::*;
 use crate::parser::ast_impl::*;
 use crate::parser::parser_support::*;
@@ -99,7 +99,6 @@ extern {
         TokU32 => Token::U32(<u32>),
         TokF32 => Token::F32(<f32>),
         TokF16 => Token::F16(<f32>),
-        TokAttribute => Token::Attribute(<String>),
         TokTemplateArgsStart => Token::TemplateArgsStart,
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
     }
@@ -444,15 +443,15 @@ UnaryExpression: Expression = {
 
 SingularExpression: Expression = {
     <expr: S<PrimaryExpression>> <components: ComponentOrSwizzleSpecifier?> => match components {
-        Some(components) => apply_components(components, expr).0,
-        None => expr.0
+        Some(components) => apply_components(components, expr).into_inner(),
+        None => expr.into_inner()
     },
 };
 
 LhsExpression: Expression = {
     <expr: S<CoreLhsExpression>> <components: ComponentOrSwizzleSpecifier?> => match components {
-        Some(components) => apply_components(components, expr).0,
-        None => expr.0
+        Some(components) => apply_components(components, expr).into_inner(),
+        None => expr.into_inner()
     },
     "*" <operand: S<LhsExpression>> => Expression::Unary(UnaryExpression {
         operator: UnaryOperator::Indirection, operand: operand.into()
@@ -600,7 +599,7 @@ AssignmentStatement: AssignmentStatement = {
         operator, lhs: lhs.into(), rhs: rhs.into()
     },
     <l: @L> "_" <r: @R> "=" <rhs: S<Expression>> => {
-        let lhs = Spanned(Expression::Identifier(l..r), l..r);
+        let lhs = Spanned::new(Expression::Identifier(l..r), l..r);
         AssignmentStatement { operator: AssignmentOperator::Equal, lhs: lhs.into(), rhs: rhs.into() }
     },
 };
@@ -657,14 +656,14 @@ SwitchClause: SwitchClause = {
 };
 
 CaseClause: SwitchClause = {
-    "case" <case_selectors: CaseSelectors> ":"? <statement: CompoundStatement> => SwitchClause {
-        case_selectors, statement
+    "case" <case_selectors: CaseSelectors> ":"? <body: CompoundStatement> => SwitchClause {
+        case_selectors, body
     },
 };
 
 DefaultAloneClause: SwitchClause = {
-    "default" ":"? <statement: CompoundStatement> => SwitchClause {
-        case_selectors: vec![CaseSelector::Default], statement
+    "default" ":"? <body: CompoundStatement> => SwitchClause {
+        case_selectors: vec![CaseSelector::Default], body
     },
 };
 
@@ -805,9 +804,11 @@ Param: FormalParameter = {
 // 11. ATTRIBUTES
 // https://www.w3.org/TR/WGSL/#attributes
 
-// TODO incomplete / non-conformant
-Attribute: () = {
-    TokAttribute,
+// TODO: maybe parse the well-known attributes.
+Attribute: Attribute = {
+    "@" <l: @L> IdentPatternToken <r: @R> <arguments: ArgumentExpressionList?> => Attribute {
+        name: l..r, arguments
+    }
 };
 
 DiagnosticControl: (DiagnosticSeverity, Span) = {
@@ -838,4 +839,4 @@ Comma1<T>: Vec<T> = {
 };
 
 // spanned
-S<T>: Spanned<T> = <l: @L> <t: T> <r: @R> => Spanned(t, l..r);
+S<T>: Spanned<T> = <l: @L> <t: T> <r: @R> => Spanned::new(t, l..r);
