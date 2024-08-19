@@ -181,8 +181,8 @@ pub enum Expression {
 pub enum LiteralExpression {
     True,
     False,
-    AbstractInt(i32),
-    AbstractFloat(f32),
+    AbstractInt(i64),
+    AbstractFloat(f64),
     I32(i32),
     U32(u32),
     F32(f32),

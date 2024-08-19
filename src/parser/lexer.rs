@@ -1,6 +1,7 @@
-use std::fmt::Display;
+use std::{fmt::Display, num::NonZeroU8};
 
 use lexical::FromLexical;
+use lexical::FromLexicalWithOptions;
 use logos::{Logos, SpannedIter};
 
 use super::{span::Span, wgsl_recognize, Error};
@@ -30,10 +31,103 @@ fn decr_depth(lex: &mut logos::Lexer<Token>) {
     lex.extras.depth -= 1;
 }
 
-// TODO: adjust the settings to match wgsl literal syntax.
-fn parse_lit<T: FromLexical>(lex: &mut logos::Lexer<Token>) -> Option<T> {
+// don't have to be super strict, the lexer regex already did the heavy lifting
+const DEC_FORMAT: u128 = lexical::NumberFormatBuilder::new().build();
+
+// don't have to be super strict, the lexer regex already did the heavy lifting
+const HEX_FORMAT: u128 = lexical::NumberFormatBuilder::new()
+    .mantissa_radix(16)
+    .base_prefix(NonZeroU8::new(b'x'))
+    .exponent_base(NonZeroU8::new(16))
+    .exponent_radix(NonZeroU8::new(10))
+    .build();
+
+fn parse_dec_abstract_int(lex: &mut logos::Lexer<Token>) -> Option<i64> {
+    let options = &lexical::parse_integer_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial(str).map(|(n, _)| n).ok()
+    lexical::parse_with_options::<i64, _, DEC_FORMAT>(str, options).ok()
+}
+
+fn parse_hex_abstract_int(lex: &mut logos::Lexer<Token>) -> Option<i64> {
+    let options = &lexical::parse_integer_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_with_options::<i64, _, HEX_FORMAT>(str, options).ok()
+}
+
+fn parse_dec_i32(lex: &mut logos::Lexer<Token>) -> Option<i32> {
+    let options = &lexical::parse_integer_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<i32, _, DEC_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
+}
+
+fn parse_hex_i32(lex: &mut logos::Lexer<Token>) -> Option<i32> {
+    let options = &lexical::parse_integer_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<i32, _, HEX_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
+}
+
+fn parse_dec_u32(lex: &mut logos::Lexer<Token>) -> Option<u32> {
+    let options = &lexical::parse_integer_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<u32, _, DEC_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
+}
+
+fn parse_hex_u32(lex: &mut logos::Lexer<Token>) -> Option<u32> {
+    let options = &lexical::parse_integer_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<u32, _, HEX_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
+}
+
+fn parse_dec_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
+    let options = &lexical::parse_float_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_with_options::<f64, _, DEC_FORMAT>(str, options).ok()
+}
+
+fn parse_hex_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
+    let options = &lexical::parse_float_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_with_options::<f64, _, HEX_FORMAT>(str, options).ok()
+}
+
+fn parse_dec_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
+    let options = &lexical::parse_float_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<f32, _, DEC_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
+}
+
+fn parse_hex_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
+    let options = &lexical::parse_float_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<f32, _, HEX_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
+}
+
+fn parse_dec_f16(lex: &mut logos::Lexer<Token>) -> Option<f32> {
+    let options = &lexical::parse_float_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<f32, _, DEC_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
+}
+
+fn parse_hex_f16(lex: &mut logos::Lexer<Token>) -> Option<f32> {
+    let options = &lexical::parse_float_options::STANDARD;
+    let str = lex.slice();
+    lexical::parse_partial_with_options::<f32, _, HEX_FORMAT>(str, options)
+        .ok()
+        .map(|(x, _)| x)
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -205,37 +299,35 @@ pub enum Token {
     // XXX: should we also register reserved words as tokens?
     #[regex(r#"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])"#, |lex| lex.slice().to_string())]
     Ident(String),
-    #[regex(r#"0|[1-9][0-9]*"#, parse_lit)] // dec
-    #[regex(r#"0[xX][0-9a-fA-F]+"#, parse_lit)] // hex
-    AbstractInt(i32),
-    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?"#, parse_lit)] // dec
-    #[regex(
-        r#"0[xX]([\da-fA-F]+\.[\da-fA-F]*|\.[\da-fA-F]+)([pP][+-]?\d+)?"#,
-        parse_lit
-    )]
+    #[regex(r#"0|[1-9][0-9]*"#, parse_dec_abstract_int)]
+    #[regex(r#"0[xX][0-9a-fA-F]+"#, parse_hex_abstract_int)]
+    AbstractInt(i64),
+    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?"#, parse_dec_abs_float)]
+    #[regex(r#"\d+[eE][+-]?\d+"#, parse_dec_abs_float)]
+    #[regex(r#"0[xX][\da-fA-F]*\.[\da-fA-F]*([pP][+-]?\d+)?"#, parse_hex_abs_float)]
+    #[regex(r#"0[xX]\.[\da-fA-F]+([pP][+-]?\d+)?"#, parse_hex_abs_float)]
+    #[regex(r#"0[xX][\da-fA-F]+[pP][+-]?\d+"#, parse_hex_abs_float)]
     // hex
-    AbstractFloat(f32),
-    #[regex(r#"(0|[1-9][0-9]*)i"#, parse_lit)] // dec
-    #[regex(r#"0[xX][0-9a-fA-F]+i"#, parse_lit)]
+    AbstractFloat(f64),
+    #[regex(r#"(0|[1-9][0-9]*)i"#, parse_dec_i32)]
+    #[regex(r#"0[xX][0-9a-fA-F]+i"#, parse_hex_i32)]
     // hex
     I32(i32),
-    #[regex(r#"(0|[1-9][0-9]*)u"#, parse_lit)] // dec
-    #[regex(r#"0[xX][0-9a-fA-F]+u"#, parse_lit)]
+    #[regex(r#"(0|[1-9][0-9]*)u"#, parse_dec_u32)]
+    #[regex(r#"0[xX][0-9a-fA-F]+u"#, parse_hex_u32)]
     // hex
     U32(u32),
-    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?f"#, parse_lit)] // dec
-    #[regex(
-        r#"0[xX]([\da-fA-F]+\.[\da-fA-F]*|\.[\da-fA-F]+)([pP][+-]?\d+)?f"#,
-        parse_lit
-    )]
-    // hex
+    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?f"#, parse_dec_f32)]
+    #[regex(r#"\d+([eE][+-]?\d+)?f"#, parse_dec_f32)]
+    #[regex(r#"0[xX][\da-fA-F]*\.[\da-fA-F]*[pP][+-]?\d+f"#, parse_hex_f32)]
+    #[regex(r#"0[xX]\.[\da-fA-F]+[pP][+-]?\d+f"#, parse_hex_f32)]
+    #[regex(r#"0[xX][\da-fA-F]+[pP][+-]?\d+f"#, parse_hex_f32)]
     F32(f32),
-    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?h"#, parse_lit)] // dec
-    #[regex(
-        r#"0[xX]([\da-fA-F]+\.[\da-fA-F]*|\.[\da-fA-F]+)([pP][+-]?\d+)?h"#,
-        parse_lit
-    )]
-    // hex
+    #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?h"#, parse_dec_f16)]
+    #[regex(r#"\d+([eE][+-]?\d+)?h"#, parse_dec_f16)]
+    #[regex(r#"0[xX][\da-fA-F]*\.[\da-fA-F]*[pP][+-]?\d+h"#, parse_hex_f16)]
+    #[regex(r#"0[xX]\.[\da-fA-F]+[pP][+-]?\d+h"#, parse_hex_f16)]
+    #[regex(r#"0[xX][\da-fA-F]+[pP][+-]?\d+h"#, parse_hex_f16)]
     F16(f32),
     TemplateArgsStart,
     TemplateArgsEnd,

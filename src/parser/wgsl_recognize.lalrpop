@@ -89,8 +89,8 @@ extern {
         "while" => Token::KwWhile,
 
         IdentPatternToken => Token::Ident(<String>),
-        TokAbstractInt => Token::AbstractInt(<i32>),
-        TokAbstractFloat => Token::AbstractFloat(<f32>),
+        TokAbstractInt => Token::AbstractInt(<i64>),
+        TokAbstractFloat => Token::AbstractFloat(<f64>),
         TokI32 => Token::I32(<i32>),
         TokU32 => Token::U32(<u32>),
         TokF32 => Token::F32(<f32>),

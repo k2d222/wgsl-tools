@@ -16,7 +16,7 @@ unicode-ident = "1.0.12"
 winnow = { version = "0.6.18" } # , features = ["debug"]
 lalrpop-util = { version = "0.20.2", features = ["lexer", "unicode"] }
 logos = "0.14.1"
-lexical = { version = "6.1.1", features = ["power-of-two"] }
+lexical = { version = "6.1.1", features = ["format", "power-of-two"] }
 
 [build-dependencies]
 lalrpop = "0.20.2"
