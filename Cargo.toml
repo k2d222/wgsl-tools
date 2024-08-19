@@ -1,7 +1,12 @@
 [package]
-name = "wesl"
-version = "0.1.0"
+name = "wgsl-tools"
+version = "0.0.1"
 edition = "2021"
+description = "Various tools to parse, verify, evaluate and modify wgsl shader source."
+authors = ["Mathis Brossier <mathis.brossier@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/k2d222/wgsl-tools"
+documentation = "https://docs.rs/wgsl-tools"
 
 [dependencies]
 annotate-snippets = "0.11.4"
@@ -10,8 +15,6 @@ clap = { version = "4.5.11", features = ["derive"] }
 itertools = "0.13.0"
 ropey = "1.6.1"
 thiserror = "1.0.63"
-tree-sitter = "0.22.6"
-tree-sitter-wesl = { path = "../tree-sitter-wesl" }
 unicode-ident = "1.0.12"
 winnow = { version = "0.6.18" } # , features = ["debug"]
 lalrpop-util = { version = "0.20.2", features = ["lexer", "unicode"] }
