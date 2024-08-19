@@ -5,16 +5,21 @@ use logos::{Logos, SpannedIter};
 
 use super::{span::Span, wgsl_recognize, Error};
 
-fn maybe_template_end(lex: &mut logos::Lexer<Token>) -> Token {
+fn maybe_template_end(
+    lex: &mut logos::Lexer<Token>,
+    current: Token,
+    lookahead: Option<Token>,
+) -> Token {
     if let Some(depth) = lex.extras.template_depths.last() {
         if lex.extras.depth == *depth {
             // found a ">" on the same nesting level as the opening "<"
             lex.extras.template_depths.pop();
+            lex.extras.lookahead = lookahead;
             return Token::TemplateArgsEnd;
         }
     }
 
-    Token::SymGreaterThan
+    current
 }
 
 fn incr_depth(lex: &mut logos::Lexer<Token>) {
@@ -31,10 +36,11 @@ fn parse_lit<T: FromLexical>(lex: &mut logos::Lexer<Token>) -> Option<T> {
     lexical::parse_partial(str).map(|(n, _)| n).ok()
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct LexerState {
-    depth: usize,
-    template_depths: Vec<usize>,
+    depth: i32,
+    template_depths: Vec<i32>,
+    lookahead: Option<Token>,
 }
 
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
@@ -78,11 +84,11 @@ pub enum Token {
     SymEqualEqual,
     #[token("!=")]
     SymNotEqual,
-    #[token(">", maybe_template_end)]
+    #[token(">", |lex| maybe_template_end(lex, Token::SymGreaterThan, None))]
     SymGreaterThan,
-    #[token(">=")]
+    #[token(">=", |lex| maybe_template_end(lex, Token::SymGreaterThanEqual, Some(Token::SymEqual)))]
     SymGreaterThanEqual,
-    #[token(">>")]
+    #[token(">>", |lex| maybe_template_end(lex, Token::SymShiftRight, Some(Token::SymGreaterThan)))]
     SymShiftRight,
     #[token("<")]
     SymLessThan,
@@ -136,7 +142,7 @@ pub enum Token {
     SymOrEqual,
     #[token("^=")]
     SymXorEqual,
-    #[token(">>=")]
+    #[token(">>=", |lex| maybe_template_end(lex, Token::SymShiftRightAssign, Some(Token::SymGreaterThanEqual)))]
     SymShiftRightAssign,
     #[token("<<=")]
     SymShiftLeftAssign,
@@ -431,67 +437,76 @@ pub struct Lexer<'s> {
     source: &'s str,
     token_stream: SpannedIter<'s, Token>,
     next_token: Option<(Result<Token, Error>, Span)>,
-    parse_template_list: bool,
+    parsing_template: bool,
+    opened_templates: u32,
 }
 
 impl<'s> Lexer<'s> {
     pub fn new(source: &'s str) -> Self {
-        let mut token_stream = Token::lexer_with_extras(
-            source,
-            LexerState {
-                depth: 0,
-                template_depths: Vec::new(),
-            },
-        )
-        .spanned();
+        let mut token_stream = Token::lexer_with_extras(source, LexerState::default()).spanned();
         let next_token = token_stream.next();
         Self {
             source,
             token_stream,
             next_token,
-            parse_template_list: false,
+            parsing_template: false,
+            opened_templates: 0,
         }
     }
+}
 
-    pub fn recognize_template_list(source: &str) -> bool {
-        let mut lexer = Lexer::new(&source);
-        match lexer.next_token {
-            Some((Ok(ref mut t), _)) if *t == Token::SymLessThan => *t = Token::TemplateArgsStart,
-            _ => (),
-        };
-        lexer.parse_template_list = true;
-        lexer.token_stream.extras.template_depths.push(0);
-        let parser = wgsl_recognize::TryTemplateListParser::new();
-        parser.parse(lexer).is_ok()
-    }
+pub fn recognize_template_list(source: &str) -> bool {
+    let mut lexer = Lexer::new(&source);
+    match lexer.next_token {
+        Some((Ok(ref mut t), _)) if *t == Token::SymLessThan => *t = Token::TemplateArgsStart,
+        _ => return false,
+    };
+    lexer.parsing_template = true;
+    lexer.opened_templates = 1;
+    lexer.token_stream.extras.template_depths.push(0);
+    let parser = wgsl_recognize::TryTemplateListParser::new();
+    let parse = parser.parse(lexer);
+    parse.is_ok()
 }
 
 impl<'s> Iterator for Lexer<'s> {
     type Item = Spanned<Token, usize, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut next_token = self.token_stream.next();
-        match next_token {
-            Some((Ok(ref mut t), ref span)) if *t == Token::SymLessThan => match &self.next_token {
-                Some((Ok(tok), _)) => {
-                    if matches!(tok, Token::Ident(_)) || tok.is_keyword() {
-                        let source = &self.source[span.start..];
-                        if Lexer::recognize_template_list(source) {
-                            *t = Token::TemplateArgsStart;
-                            let cur_depth = self.token_stream.extras.depth;
-                            self.token_stream.extras.template_depths.push(cur_depth);
-                        }
-                    }
-                }
-                _ => (),
-            },
-            _ => (),
+        let cur_token = &self.next_token;
+
+        let lookahead = std::mem::replace(&mut self.token_stream.extras.lookahead, None);
+        let mut next_token = match lookahead {
+            Some(next_token) => {
+                let (_, span) = cur_token.as_ref().unwrap(); // safety: lookahead implies lexer looked at a token
+                let span = (span.start + 1)..span.end;
+                Some((Ok(next_token), span))
+            }
+            None => self.token_stream.next(),
         };
 
-        if self.parse_template_list
-            && matches!(self.next_token, Some((Ok(Token::TemplateArgsEnd), _)))
-        {
-            next_token = None; // push eof after end of template
+        match (cur_token, &mut next_token) {
+            (Some((Ok(cur_tok), _)), Some((Ok(next_tok), span))) => {
+                if (matches!(cur_tok, Token::Ident(_)) || cur_tok.is_keyword())
+                    && *next_tok == Token::SymLessThan
+                {
+                    let source = &self.source[span.start..];
+                    if recognize_template_list(source) {
+                        *next_tok = Token::TemplateArgsStart;
+                        let cur_depth = self.token_stream.extras.depth;
+                        self.token_stream.extras.template_depths.push(cur_depth);
+                        self.opened_templates += 1;
+                    }
+                }
+            }
+            _ => (),
+        }
+
+        if self.parsing_template && matches!(cur_token, Some((Ok(Token::TemplateArgsEnd), _))) {
+            self.opened_templates -= 1;
+            if self.opened_templates == 0 {
+                next_token = None; // push eof after end of template
+            }
         }
 
         std::mem::swap(&mut self.next_token, &mut next_token);

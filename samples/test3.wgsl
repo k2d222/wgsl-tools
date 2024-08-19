@@ -1,4 +1,6 @@
+var tile : array<array<vec3f, 128>, 4>;
+
 fn main() {
-  output.Position = uniforms.modelViewProjectionMatrix * position;
+  let foo: array<u32>= array();
 }
 

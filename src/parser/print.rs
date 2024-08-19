@@ -645,21 +645,27 @@ impl Display for Print<'_, &ContinuingStatement> {
 impl Display for Print<'_, &ForStatement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, self.source, false);
-        let init = self
+        let mut init = self
             .initializer
             .as_ref()
             .map(|stmt| format!("{}", Print::new(stmt.as_ref().as_ref(), self.source)))
             .unwrap_or_default();
+        if init.ends_with(";") {
+            init.pop();
+        }
         let cond = self
             .condition
             .as_ref()
             .map(|expr| format!("{}", Print::new(expr.as_ref(), self.source)))
             .unwrap_or_default();
-        let updt = self
+        let mut updt = self
             .update
             .as_ref()
             .map(|stmt| format!("{}", Print::new(stmt.as_ref().as_ref(), self.source)))
             .unwrap_or_default();
+        if updt.ends_with(";") {
+            updt.pop();
+        }
         let body = Print::new(&self.body, self.source);
         write!(f, "{attrs}for ({init}; {cond}; {updt}) {body}")
     }
