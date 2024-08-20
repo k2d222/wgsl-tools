@@ -1,3 +1,7 @@
+//! The Command-line interface for the `wgsl-tools` suite.
+//!
+//! Very much a work in progress.
+
 use clap::{Args, Parser, Subcommand};
 use std::{fs, path::PathBuf};
 use wgsl_parse::Parser as WgslParser;

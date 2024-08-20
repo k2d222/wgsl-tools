@@ -1,7 +1,12 @@
 [package]
 name = "wgsl-parse"
-version = "0.0.1"
-edition = "2021"
+description = "Parse a wgsl source file to a syntax tree"
+documentation = "https://docs.rs/wgsl-parse"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 annotate-snippets = "0.11.4"
