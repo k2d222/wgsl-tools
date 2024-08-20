@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::{ast::*, Error};
+use super::{error::Error, syntax::*};
 
 impl FromStr for DiagnosticSeverity {
     type Err = Error;

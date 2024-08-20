@@ -1,9 +1,6 @@
-// support functions to be injected in the lalrpop parser.
+//! support functions to be injected in the lalrpop parser.
 
-use super::{
-    ast::*,
-    span::{Span, Spanned},
-};
+use crate::{span::*, syntax::*};
 
 pub(crate) enum Component {
     Named(Span),

@@ -1,8 +1,8 @@
-use std::{fmt::Display, num::NonZeroU8};
+//! Prefer using [`Parser::parse_str`]. You shouldn't need to manipulate the lexer.
 
+use crate::{error::Error, parser::Parser, span::Span};
 use logos::{Logos, SpannedIter};
-
-use super::{span::Span, wgsl_recognize, Error};
+use std::{fmt::Display, num::NonZeroU8};
 
 fn maybe_template_end(
     lex: &mut logos::Lexer<Token>,
@@ -543,8 +543,24 @@ impl<'s> Lexer<'s> {
             opened_templates: 0,
         }
     }
+
+    pub fn source(&self) -> &str {
+        &self.source
+    }
 }
 
+/// Returns `true` if the source starts with a valid template list (ignoring spaces).
+///
+/// ## Examples
+///
+/// ```rust
+/// let source = "    <A, B<C < D>() <= E>...";
+/// asset_equal!(recognize_template_list(source), true);
+/// ```
+///
+/// ## Specification
+///
+/// [3.9. Template Lists](https://www.w3.org/TR/WGSL/#template-lists-sec)
 pub fn recognize_template_list(source: &str) -> bool {
     let mut lexer = Lexer::new(&source);
     match lexer.next_token {
@@ -554,8 +570,7 @@ pub fn recognize_template_list(source: &str) -> bool {
     lexer.parsing_template = true;
     lexer.opened_templates = 1;
     lexer.token_stream.extras.template_depths.push(0);
-    let parser = wgsl_recognize::TryTemplateListParser::new();
-    let parse = parser.parse(lexer);
+    let parse = Parser::recognize_template_list(&mut lexer);
     parse.is_ok()
 }
 

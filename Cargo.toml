@@ -1,3 +1,6 @@
+[workspace]
+members = ["crates/wgsl-parse"]
+
 [package]
 name = "wgsl-tools"
 version = "0.0.1"
@@ -17,6 +20,7 @@ thiserror = "1.0.63"
 lalrpop-util = { version = "0.20.2", features = ["lexer", "unicode"] }
 logos = "0.14.1"
 lexical = { version = "6.1.1", features = ["format", "power-of-two"] }
+wgsl-parse = { path = "crates/wgsl-parse" }
 
 [build-dependencies]
 lalrpop = "0.20.2"

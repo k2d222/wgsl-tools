@@ -4,7 +4,7 @@ pub type Span = std::ops::Range<usize>;
 
 pub(crate) type S<T> = Spanned<T>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Spanned<T>(T, Span);
 
 impl<T> Spanned<T> {

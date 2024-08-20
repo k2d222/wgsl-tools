@@ -1,5 +1,5 @@
-use crate::parse::Error;
-use crate::parse::lexer::Token;
+use crate::lexer::Token;
+use crate::error::Error;
 
 // this grammar follows closely the wgsl spec.
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/

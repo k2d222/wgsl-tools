@@ -1,4 +1,4 @@
-use crate::parse::ast::*;
+use super::syntax::*;
 use core::fmt;
 use std::{
     fmt::{Display, Formatter},
@@ -9,10 +9,6 @@ use itertools::Itertools;
 
 use super::span::Spanned;
 
-/// A type that implements display for the syntax tree.
-/// It *should* output a valid wgsl file equivalent to the parsed file.
-/// It should only be used for debugging!
-
 pub fn print<'s, T>(print: &'s T, source: &'s str)
 where
     Print<'s, &'s T>: Display,
@@ -20,6 +16,9 @@ where
     println!("{}", Print::new(print, source));
 }
 
+/// A type that implements display for the syntax tree.
+/// It *should* output a valid wgsl file equivalent to the parsed file.
+/// It should only be used for debugging!
 pub struct Print<'s, T> {
     print: T,
     source: &'s str,
