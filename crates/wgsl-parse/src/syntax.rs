@@ -23,7 +23,7 @@
 //! It is made with the ultimate goal to implement spec-compliant language extensions.
 //! This is why this parser doesn't borrow strings.
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 #[allow(unused)]
 pub struct TranslationUnit {
     pub global_directives: Vec<GlobalDirective>,

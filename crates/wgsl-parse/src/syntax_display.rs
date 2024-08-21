@@ -22,7 +22,11 @@ impl<T: Display> Display for Indent<T> {
 impl Display for TranslationUnit {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let directives = self.global_directives.iter().format("\n");
-        let declarations = self.global_declarations.iter().format("\n\n");
+        let declarations = self
+            .global_declarations
+            .iter()
+            .filter(|decl| !matches!(decl, GlobalDeclaration::Void))
+            .format("\n\n");
         writeln!(f, "{directives}\n\n{declarations}")
     }
 }
@@ -377,7 +381,13 @@ impl Display for Statement {
 impl Display for CompoundStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, true);
-        let stmts = Indent(self.statements.iter().map(|stmt| stmt).format("\n"));
+        let stmts = Indent(
+            self.statements
+                .iter()
+                .filter(|stmt| !matches!(stmt, Statement::Void))
+                .map(|stmt| stmt)
+                .format("\n"),
+        );
         write!(f, "{attrs}{{\n{stmts}\n}}")
     }
 }
@@ -472,26 +482,40 @@ impl Display for LoopStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, false);
         let body_attrs = fmt_attrs(&self.body.attributes, false);
-        let body = Indent(self.body.statements.iter().map(|stmt| stmt).format("\n"));
+        let stmts = Indent(
+            self.body
+                .statements
+                .iter()
+                .filter(|stmt| !matches!(stmt, Statement::Void))
+                .map(|stmt| stmt)
+                .format("\n"),
+        );
         let continuing = self
             .continuing
             .as_ref()
             .map(|cont| format!("{}\n", Indent(cont)))
             .unwrap_or_default();
-        write!(f, "{attrs}loop {body_attrs}{{\n{body}\n{continuing}}}")
+        write!(f, "{attrs}loop {body_attrs}{{\n{stmts}\n{continuing}}}")
     }
 }
 
 impl Display for ContinuingStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let body_attrs = fmt_attrs(&self.body.attributes, false);
-        let body = Indent(self.body.statements.iter().map(|stmt| stmt).format("\n"));
+        let stmts = Indent(
+            self.body
+                .statements
+                .iter()
+                .filter(|stmt| !matches!(stmt, Statement::Void))
+                .map(|stmt| stmt)
+                .format("\n"),
+        );
         let break_if = self
             .break_if
             .as_ref()
             .map(|cont| format!("{};\n", Indent(cont)))
             .unwrap_or_default();
-        write!(f, "continuing {body_attrs}{{\n{body}\n{break_if}}}")
+        write!(f, "continuing {body_attrs}{{\n{stmts}\n{break_if}}}")
     }
 }
 
