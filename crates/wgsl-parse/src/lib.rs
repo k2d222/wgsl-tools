@@ -1,10 +1,10 @@
 //! A parser for WGSL files, written directly from the [specification] with lalrpop.
 //!
-//! # Parsing
+//! # Parsing a source file
 //!
 //! ```rust
 //! let source = "@fragment fn frag_main() -> @location(0) vec4f { return vec4(1); }";
-//! let module = parser::parse(source);
+//! let module = wgsl_parse::Parser::parse_str(source);
 //! println!("{module:?}");
 //! ```
 //!
@@ -12,24 +12,18 @@
 //!
 //! see [syntax tree]
 //!
-//! # Parsing variants
+//! TODO: example how to create a module manually.
 //!
-//! ## Recognize
+//! # Stringification
 //!
-//! Parsing exists in two flavors: *recognize* and *spanned*. The *recognize* version
-//! simply ensures that the input file has no syntax errors. The *spanned* version returns
-//! a full [syntax tree].
+//! The syntax tree elements implement [`Display`][std::fmt::Display].
 //!
-//! ## Spanned
-//!
-//! The [spanned syntax tree] was designed with [`Span`s][span::Span] a bit everywhere. These spans
-//! allow referring to the source `&str` without a lifetime bind.
-//! In the future, different variants of the [`Span`][span::Span] will allow modifying the
-//! Source code while preserving correct syntax tree spans. (TODO)
-//!
-//! # Stringify
-//!
-//! To be documented (TODO)
+//! ```rust
+//! let source = "@fragment fn frag_main() -> @location(0) vec4f { return vec4(1); }";
+//! let module = wgsl_parse::Parser::parse_str(source);
+//! // modify the module as needed...
+//! println!("{module}");
+//! ```
 //!
 //! [specification]: https://www.w3.org/TR/WGSL/
 //! [syntax tree]: syntax

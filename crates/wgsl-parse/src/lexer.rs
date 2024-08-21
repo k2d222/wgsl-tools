@@ -21,6 +21,17 @@ fn maybe_template_end(
     current
 }
 
+// operators && and || have lower precedence than < and >.
+// therefore, this is not a template: a < b || c > d
+fn maybe_fail_template(lex: &mut logos::Lexer<Token>) -> bool {
+    if let Some(depth) = lex.extras.template_depths.last() {
+        if lex.extras.depth == *depth {
+            return false;
+        }
+    }
+    true
+}
+
 fn incr_depth(lex: &mut logos::Lexer<Token>) {
     lex.extras.depth += 1;
 }
@@ -148,7 +159,7 @@ pub enum Token {
     // https://www.w3.org/TR/WGSL/#syntactic-tokens
     #[token("&")]
     SymAnd,
-    #[token("&&")]
+    #[token("&&", maybe_fail_template)]
     SymAndAnd,
     #[token("->")]
     SymArrow,
@@ -202,7 +213,7 @@ pub enum Token {
     SymPlusPlus,
     #[token("|")]
     SymOr,
-    #[token("||")]
+    #[token("||", maybe_fail_template)]
     SymOrOr,
     #[token("(", incr_depth)]
     SymParenLeft,
@@ -549,18 +560,42 @@ impl<'s> Lexer<'s> {
     }
 }
 
-/// Returns `true` if the source starts with a valid template list (ignoring spaces).
+/// Returns `true` if the source starts with a valid template list.
+///
+/// # Bugs
+///
+/// There might be a bug in the spec algorithm, which rejects the following:
+/// `assert_eq!(recognize_template_list("<X<Y<Z>>>"), false);`
+/// This implementation doesn't.
 ///
 /// ## Examples
 ///
 /// ```rust
-/// let source = "    <A, B<C < D>() <= E>...";
-/// asset_equal!(recognize_template_list(source), true);
+/// # use wgsl_parse::lexer::recognize_template_list;
+/// // examples from the spec:
+/// assert_eq!(recognize_template_list("<i32,select(2,3,a>b)>"), true);
+/// assert_eq!(recognize_template_list("<d]>"), false);
+/// assert_eq!(recognize_template_list("<B<<C>"), true);
+/// assert_eq!(recognize_template_list("<B<=C>"), true);
+/// assert_eq!(recognize_template_list("<(B>=C)>"), true);
+/// assert_eq!(recognize_template_list("<(B!=C)>"), true);
+/// assert_eq!(recognize_template_list("<(B==C)>"), true);
+///
+/// // false cases
+/// assert_eq!(recognize_template_list(""), false);
+/// assert_eq!(recognize_template_list("<>"), false);
+/// assert_eq!(recognize_template_list("<b || c>d"), false);
 /// ```
 ///
 /// ## Specification
 ///
 /// [3.9. Template Lists](https://www.w3.org/TR/WGSL/#template-lists-sec)
+///
+/// Contrary to the specification [template list discovery algorithm], this function also
+/// checks that the template is syntactically valid (syntax: [*template_list*]).
+///
+/// [template list discovery algorigthm]: https://www.w3.org/TR/WGSL/#template-list-discovery
+/// [*template_list*]: https://www.w3.org/TR/WGSL/#syntax-template_list
 pub fn recognize_template_list(source: &str) -> bool {
     let mut lexer = Lexer::new(&source);
     match lexer.next_token {
