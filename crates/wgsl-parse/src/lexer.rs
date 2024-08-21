@@ -1,6 +1,6 @@
 //! Prefer using [`Parser::parse_str`]. You shouldn't need to manipulate the lexer.
 
-use crate::{error::Error, parser::Parser, span::Span};
+use crate::{error::ParseError, parser::Parser, span::Span};
 use logos::{Logos, SpannedIter};
 use std::{fmt::Display, num::NonZeroU8};
 
@@ -142,7 +142,7 @@ pub struct LexerState {
     skip r"//[^\n\r]*[\n\r]*", // line comment
     skip r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/", // block comment
     extras = LexerState,
-    error = Error)]
+    error = ParseError)]
 pub enum Token {
     // syntactic tokens
     // https://www.w3.org/TR/WGSL/#syntactic-tokens
@@ -520,13 +520,13 @@ impl Display for Token {
     }
 }
 
-pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), (Loc, Error, Loc)>;
+pub type Spanned<Tok, Loc, ParseError> = Result<(Loc, Tok, Loc), (Loc, ParseError, Loc)>;
 
 #[derive(Clone)]
 pub struct Lexer<'s> {
     source: &'s str,
     token_stream: SpannedIter<'s, Token>,
-    next_token: Option<(Result<Token, Error>, Span)>,
+    next_token: Option<(Result<Token, ParseError>, Span)>,
     parsing_template: bool,
     opened_templates: u32,
 }
@@ -575,7 +575,7 @@ pub fn recognize_template_list(source: &str) -> bool {
 }
 
 impl<'s> Iterator for Lexer<'s> {
-    type Item = Spanned<Token, usize, Error>;
+    type Item = Spanned<Token, usize, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let cur_token = &self.next_token;

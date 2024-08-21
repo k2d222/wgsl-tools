@@ -1,5 +1,5 @@
 use crate::lexer::Token;
-use crate::error::Error;
+use crate::error::ParseError;
 
 // this grammar follows closely the wgsl spec.
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
@@ -8,7 +8,7 @@ grammar;
 
 extern {
     type Location = usize;
-    type Error = (usize, Error, usize);
+    type Error = (usize, ParseError, usize);
     enum Token {
         // syntactic tokens
         // https://www.w3.org/TR/WGSL/#syntactic-tokens

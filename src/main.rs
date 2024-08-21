@@ -53,7 +53,7 @@ fn main() {
         Command::Parse(_) => {
             match WgslParser::parse_str(&source) {
                 Ok(ast) => {
-                    wgsl_parse::print::print(&ast, &source);
+                    println!("{ast}")
                 }
                 Err(err) => eprintln!("{err}"),
             };

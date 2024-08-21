@@ -20,4 +20,4 @@ license.workspace = true
 
 [dependencies]
 clap = { version = "4.5.11", features = ["derive"] }
-wgsl-parse = { path = "crates/wgsl-parse", version = "0.0.1" }
+wgsl-parse = { path = "crates/wgsl-parse", version = "0.0.2" }

@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::lexer::Token;
 
 #[derive(Error, Clone, Debug, Default, PartialEq)]
-pub enum Error {
+pub enum ParseError {
     #[default]
     #[error("syntax error")]
     SyntaxError,
@@ -17,16 +17,16 @@ pub enum Error {
     ParseDiagnosticSeverity,
 }
 
-type ParseError = lalrpop_util::ParseError<usize, Token, (usize, Error, usize)>;
+type LalrError = lalrpop_util::ParseError<usize, Token, (usize, ParseError, usize)>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpannedError<'s> {
-    inner: ParseError,
+    inner: LalrError,
     source: &'s str,
 }
 
 impl<'s> SpannedError<'s> {
-    pub(crate) fn new(inner: ParseError, source: &'s str) -> Self {
+    pub(crate) fn new(inner: LalrError, source: &'s str) -> Self {
         Self { inner, source }
     }
 }
@@ -39,7 +39,7 @@ impl<'s> Display for SpannedError<'s> {
         let source = &self.source;
         let renderer = Renderer::styled();
         match err {
-            ParseError::InvalidToken { location } => {
+            LalrError::InvalidToken { location } => {
                 let end = (*location + 1..)
                     .find(|e| source.is_char_boundary(*e))
                     .unwrap_or(*location);
@@ -52,7 +52,7 @@ impl<'s> Display for SpannedError<'s> {
                 );
                 write!(f, "{}", renderer.render(message))
             }
-            ParseError::UnrecognizedEof { location, expected } => {
+            LalrError::UnrecognizedEof { location, expected } => {
                 let annot = format!("expected {}", expected.iter().format(", "));
                 let message = Level::Error.title("unexpected end of file").snippet(
                     Snippet::source(source)
@@ -62,7 +62,7 @@ impl<'s> Display for SpannedError<'s> {
                 let rendered = renderer.render(message);
                 write!(f, "{}", rendered)
             }
-            ParseError::UnrecognizedToken { token, expected } => {
+            LalrError::UnrecognizedToken { token, expected } => {
                 let title = format!("unexpected token `{}`", &source[token.0..token.2]);
                 let annot = format!(
                     "expected {}, found {}",
@@ -77,7 +77,7 @@ impl<'s> Display for SpannedError<'s> {
                 let rendered = renderer.render(message);
                 write!(f, "{}", rendered)
             }
-            ParseError::ExtraToken { token } => {
+            LalrError::ExtraToken { token } => {
                 let title = format!("extra token `{}`", &source[token.0..token.2]);
                 let annot = format!("extra {} here", token.1);
                 let message = Level::Error.title(&title).snippet(
@@ -88,7 +88,7 @@ impl<'s> Display for SpannedError<'s> {
                 let rendered = renderer.render(message);
                 write!(f, "{}", rendered)
             }
-            ParseError::User {
+            LalrError::User {
                 error: (start, error, end),
             } => {
                 let title = error.to_string();

@@ -10,18 +10,22 @@
 //!
 //! # Syntax tree
 //!
-//! The [syntax tree] was designed with [`Span`s][span::Span] a bit everywhere. These spans
-//! allow referring to the source `&str` without a lifetime bind.
-//! In the future, different variants of the [`Span`][span::Span] will allow modifying the
-//! Source code while preserving correct syntax tree spans. (TODO)
+//! see [syntax tree]
 //!
 //! # Parsing variants
 //!
-//! ## recognize
+//! ## Recognize
 //!
 //! Parsing exists in two flavors: *recognize* and *spanned*. The *recognize* version
 //! simply ensures that the input file has no syntax errors. The *spanned* version returns
 //! a full [syntax tree].
+//!
+//! ## Spanned
+//!
+//! The [spanned syntax tree] was designed with [`Span`s][span::Span] a bit everywhere. These spans
+//! allow referring to the source `&str` without a lifetime bind.
+//! In the future, different variants of the [`Span`][span::Span] will allow modifying the
+//! Source code while preserving correct syntax tree spans. (TODO)
 //!
 //! # Stringify
 //!
@@ -29,15 +33,19 @@
 //!
 //! [specification]: https://www.w3.org/TR/WGSL/
 //! [syntax tree]: syntax
+//! [spanned syntax tree]: syntax_spanned
 
 pub mod error;
 pub mod lexer;
 pub mod parser;
-pub mod print;
 pub mod span;
 pub mod syntax;
+pub mod syntax_spanned;
 
 mod parser_support;
+mod parser_support_spanned;
+mod syntax_display;
+mod syntax_display_spanned;
 mod syntax_impl;
 
 pub use lexer::Lexer;

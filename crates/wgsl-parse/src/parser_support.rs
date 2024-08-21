@@ -1,36 +1,21 @@
 //! support functions to be injected in the lalrpop parser.
 
-use crate::{span::*, syntax::*};
+use crate::syntax::*;
 
 pub(crate) enum Component {
-    Named(Span),
-    Index(Spanned<Box<Expression>>),
+    Named(String),
+    Index(Box<Expression>),
 }
 
-pub(crate) fn apply_components(
-    components: Vec<Component>,
-    expr: Spanned<Expression>,
-) -> Spanned<Expression> {
+pub(crate) fn apply_components(components: Vec<Component>, expr: Expression) -> Expression {
     components.into_iter().fold(expr, |base, comp| match comp {
-        Component::Named(component) => {
-            let span = base.span().start..component.end;
-            Spanned::new(
-                Expression::NamedComponent(NamedComponentExpression {
-                    base: base.into(),
-                    component,
-                }),
-                span,
-            )
-        }
-        Component::Index(index) => {
-            let span = base.span().start..index.span().end;
-            Spanned::new(
-                Expression::Indexing(IndexingExpression {
-                    base: base.into(),
-                    index,
-                }),
-                span,
-            )
-        }
+        Component::Named(component) => Expression::NamedComponent(NamedComponentExpression {
+            base: base.into(),
+            component,
+        }),
+        Component::Index(index) => Expression::Indexing(IndexingExpression {
+            base: base.into(),
+            index,
+        }),
     })
 }
