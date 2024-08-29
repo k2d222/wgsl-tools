@@ -591,14 +591,14 @@ CompoundStatement: CompoundStatement = {
 
 AssignmentStatement: AssignmentStatement = {
     <lhs: LhsExpression> "=" <rhs: Expression> => AssignmentStatement {
-        operator: AssignmentOperator::Equal, lhs: lhs, rhs: rhs
+        operator: AssignmentOperator::Equal, lhs, rhs
     },
     <lhs: LhsExpression> <operator: CompoundAssignmentOperator> <rhs: Expression> => AssignmentStatement {
-        operator, lhs: lhs, rhs: rhs
+        operator, lhs, rhs
     },
     "_" "=" <rhs: Expression> => {
         let lhs = Expression::Identifier("_".to_string());
-        AssignmentStatement { operator: AssignmentOperator::Equal, lhs: lhs, rhs: rhs }
+        AssignmentStatement { operator: AssignmentOperator::Equal, lhs, rhs }
     },
 };
 
@@ -639,7 +639,7 @@ SwitchStatement: SwitchStatement = {
     <attributes: Attribute*> "switch" <expression: Expression> <body: SwitchBody> => {
         let (body_attributes, clauses) = body;
         SwitchStatement {
-            attributes, expression: expression, body_attributes, clauses
+            attributes, expression, body_attributes, clauses
         }
     },
 };

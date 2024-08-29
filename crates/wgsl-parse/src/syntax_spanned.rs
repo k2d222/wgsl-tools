@@ -32,7 +32,7 @@ impl<'s, T> WithSource<'s, T> {
         Self { syntax, source }
     }
     pub fn source(&self) -> &str {
-        &self.source
+        self.source
     }
 }
 

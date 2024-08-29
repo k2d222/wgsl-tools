@@ -129,7 +129,7 @@ impl Display for TypeAlias {
 impl Display for Struct {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = &self.name;
-        let members = Indent(self.members.iter().map(|mem| mem).format(",\n"));
+        let members = Indent(self.members.iter().format(",\n"));
         write!(f, "struct {name} {{\n{members}\n}}")
     }
 }
@@ -147,7 +147,7 @@ impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, false);
         let name = &self.name;
-        let params = self.parameters.iter().map(|p| p).format(", ");
+        let params = self.parameters.iter().format(", ");
         let ret_attrs = fmt_attrs(&self.return_attributes, true);
         let ret_typ = self
             .return_type
@@ -181,14 +181,14 @@ impl Display for Attribute {
         let args = self
             .arguments
             .as_ref()
-            .map(|args| format!("({})", args.iter().map(|arg| arg).format(", ")))
+            .map(|args| format!("({})", args.iter().format(", ")))
             .unwrap_or_default();
         write!(f, "@{name}{args}")
     }
 }
 
-fn fmt_attrs(attrs: &Vec<Attribute>, inline: bool) -> String {
-    let print = attrs.iter().map(|attr| attr).format(" ");
+fn fmt_attrs(attrs: &[Attribute], inline: bool) -> String {
+    let print = attrs.iter().format(" ");
     let suffix = if attrs.is_empty() {
         ""
     } else if inline {
@@ -313,7 +313,7 @@ impl Display for FunctionCallExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = &self.name;
         let tplt = fmt_template(&self.template_args);
-        let args = self.arguments.iter().map(|arg| arg).format(", ");
+        let args = self.arguments.iter().format(", ");
         write!(f, "{name}{tplt}({args})")
     }
 }
@@ -385,7 +385,6 @@ impl Display for CompoundStatement {
             self.statements
                 .iter()
                 .filter(|stmt| !matches!(stmt, Statement::Void))
-                .map(|stmt| stmt)
                 .format("\n"),
         );
         write!(f, "{attrs}{{\n{stmts}\n}}")
@@ -454,14 +453,14 @@ impl Display for SwitchStatement {
         let attrs = fmt_attrs(&self.attributes, false);
         let expr = &self.expression;
         let body_attrs = fmt_attrs(&self.body_attributes, false);
-        let clauses = Indent(self.clauses.iter().map(|clause| clause).format("\n"));
+        let clauses = Indent(self.clauses.iter().format("\n"));
         write!(f, "{attrs}switch {expr} {body_attrs}{{\n{clauses}\n}}")
     }
 }
 
 impl Display for SwitchClause {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let cases = self.case_selectors.iter().map(|case| case).format(", ");
+        let cases = self.case_selectors.iter().format(", ");
         let body = &self.body;
         write!(f, "case {cases} {body}")
     }
@@ -487,7 +486,6 @@ impl Display for LoopStatement {
                 .statements
                 .iter()
                 .filter(|stmt| !matches!(stmt, Statement::Void))
-                .map(|stmt| stmt)
                 .format("\n"),
         );
         let continuing = self
@@ -507,7 +505,6 @@ impl Display for ContinuingStatement {
                 .statements
                 .iter()
                 .filter(|stmt| !matches!(stmt, Statement::Void))
-                .map(|stmt| stmt)
                 .format("\n"),
         );
         let break_if = self
@@ -533,7 +530,7 @@ impl Display for ForStatement {
             .as_ref()
             .map(|stmt| format!("{}", stmt))
             .unwrap_or_default();
-        if init.ends_with(";") {
+        if init.ends_with(';') {
             init.pop();
         }
         let cond = self
@@ -546,7 +543,7 @@ impl Display for ForStatement {
             .as_ref()
             .map(|stmt| format!("{}", stmt))
             .unwrap_or_default();
-        if updt.ends_with(";") {
+        if updt.ends_with(';') {
             updt.pop();
         }
         let body = &self.body;

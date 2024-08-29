@@ -241,7 +241,7 @@ impl Display for WithSource<'_, &Attribute> {
     }
 }
 
-fn fmt_attrs(attrs: &Vec<Spanned<Attribute>>, source: &'_ str, inline: bool) -> String {
+fn fmt_attrs(attrs: &[Spanned<Attribute>], source: &'_ str, inline: bool) -> String {
     let print = attrs
         .iter()
         .map(|attr| attr.with_source(source))
@@ -607,7 +607,7 @@ impl Display for WithSource<'_, &ForStatement> {
             .as_ref()
             .map(|stmt| format!("{}", stmt.with_source(self.source())))
             .unwrap_or_default();
-        if init.ends_with(";") {
+        if init.ends_with(';') {
             init.pop();
         }
         let cond = self
@@ -620,7 +620,7 @@ impl Display for WithSource<'_, &ForStatement> {
             .as_ref()
             .map(|stmt| format!("{}", stmt.with_source(self.source())))
             .unwrap_or_default();
-        if updt.ends_with(";") {
+        if updt.ends_with(';') {
             updt.pop();
         }
         let body = &self.body.with_source(self.source());

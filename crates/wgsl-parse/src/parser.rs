@@ -1,6 +1,15 @@
-lalrpop_mod!(wgsl);
-lalrpop_mod!(wgsl_spanned);
-lalrpop_mod!(wgsl_recognize);
+lalrpop_mod!(
+    #[allow(clippy::type_complexity)]
+    wgsl
+);
+lalrpop_mod!(
+    #[allow(clippy::type_complexity)]
+    wgsl_spanned
+);
+lalrpop_mod!(
+    #[allow(clippy::type_complexity)]
+    wgsl_recognize
+);
 
 use lalrpop_util::lalrpop_mod;
 
@@ -9,7 +18,7 @@ use crate::{error::SpannedError, lexer::Lexer, syntax, syntax_spanned};
 pub struct Parser;
 
 impl Parser {
-    pub fn parse_str<'s>(source: &'s str) -> Result<syntax::TranslationUnit, SpannedError<'s>> {
+    pub fn parse_str(source: &str) -> Result<syntax::TranslationUnit, SpannedError> {
         let lexer = Lexer::new(source);
         let parser = wgsl::TranslationUnitParser::new();
         let res = parser.parse(lexer);
@@ -24,9 +33,9 @@ impl Parser {
     }
 }
 impl Parser {
-    pub fn parse_str_spanned<'s>(
-        source: &'s str,
-    ) -> Result<syntax_spanned::TranslationUnit, SpannedError<'s>> {
+    pub fn parse_str_spanned(
+        source: &str,
+    ) -> Result<syntax_spanned::TranslationUnit, SpannedError> {
         let lexer = Lexer::new(source);
         let parser = wgsl_spanned::TranslationUnitParser::new();
         let res = parser.parse(lexer);
@@ -42,7 +51,7 @@ impl Parser {
 }
 
 impl Parser {
-    pub fn recognize_str<'s>(source: &'s str) -> Result<(), SpannedError<'s>> {
+    pub fn recognize_str(source: &str) -> Result<(), SpannedError> {
         let lexer = Lexer::new(source);
         let parser = wgsl_recognize::TranslationUnitParser::new();
         let res = parser.parse(lexer);

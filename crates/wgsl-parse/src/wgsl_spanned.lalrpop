@@ -288,7 +288,7 @@ TemplateElaboratedIdent = Ident /* DisambiguateTemplate */ TemplateList?;
 VariableOrValueStatement: Declaration = {
     VariableDecl,
     <mut decl: VariableDecl> "=" <initializer: S<Expression>> => {
-        decl.initializer = Some(initializer.into());
+        decl.initializer = Some(initializer);
         decl
     },
     "let" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
@@ -299,7 +299,7 @@ VariableOrValueStatement: Declaration = {
             template_args: None,
             name,
             typ,
-            initializer: Some(initializer.into()),
+            initializer: Some(initializer),
         }
     },
     "const" <ident: OptionallyTypedIdent> "=" <initializer: S<Expression>> => {
@@ -310,7 +310,7 @@ VariableOrValueStatement: Declaration = {
             template_args: None,
             name,
             typ,
-            initializer: Some(initializer.into()),
+            initializer: Some(initializer),
         }
     },
 };
@@ -350,7 +350,7 @@ GlobalValueDecl: Declaration = {
             template_args: None,
             name,
             typ,
-            initializer: Some(initializer.into()),
+            initializer: Some(initializer),
         }
     },
     <attributes: S<Attribute>*> "override" <ident: OptionallyTypedIdent> <initializer: ("=" <S<Expression>>)?> => {
@@ -361,7 +361,7 @@ GlobalValueDecl: Declaration = {
             template_args: None,
             name,
             typ,
-            initializer: initializer.map(Into::into),
+            initializer,
         }
     },
 };
@@ -591,14 +591,14 @@ CompoundStatement: CompoundStatement = {
 
 AssignmentStatement: AssignmentStatement = {
     <lhs: S<LhsExpression>> "=" <rhs: S<Expression>> => AssignmentStatement {
-        operator: AssignmentOperator::Equal, lhs: lhs.into(), rhs: rhs.into()
+        operator: AssignmentOperator::Equal, lhs, rhs
     },
     <lhs: S<LhsExpression>> <operator: CompoundAssignmentOperator> <rhs: S<Expression>> => AssignmentStatement {
-        operator, lhs: lhs.into(), rhs: rhs.into()
+        operator, lhs, rhs
     },
     <l: @L> "_" <r: @R> "=" <rhs: S<Expression>> => {
         let lhs = Spanned::new(Expression::Identifier(l..r), l..r);
-        AssignmentStatement { operator: AssignmentOperator::Equal, lhs: lhs.into(), rhs: rhs.into() }
+        AssignmentStatement { operator: AssignmentOperator::Equal, lhs, rhs }
     },
 };
 
@@ -639,7 +639,7 @@ SwitchStatement: SwitchStatement = {
     <attributes: S<Attribute>*> "switch" <expression: S<Expression>> <body: SwitchBody> => {
         let (body_attributes, clauses) = body;
         SwitchStatement {
-            attributes, expression: expression.into(), body_attributes, clauses
+            attributes, expression, body_attributes, clauses
         }
     },
 };

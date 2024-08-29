@@ -556,7 +556,7 @@ impl<'s> Lexer<'s> {
     }
 
     pub fn source(&self) -> &str {
-        &self.source
+        self.source
     }
 }
 
@@ -597,7 +597,7 @@ impl<'s> Lexer<'s> {
 /// [template list discovery algorigthm]: https://www.w3.org/TR/WGSL/#template-list-discovery
 /// [*template_list*]: https://www.w3.org/TR/WGSL/#syntax-template_list
 pub fn recognize_template_list(source: &str) -> bool {
-    let mut lexer = Lexer::new(&source);
+    let mut lexer = Lexer::new(source);
     match lexer.next_token {
         Some((Ok(ref mut t), _)) if *t == Token::SymLessThan => *t = Token::TemplateArgsStart,
         _ => return false,
@@ -615,7 +615,7 @@ impl<'s> Iterator for Lexer<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         let cur_token = &self.next_token;
 
-        let lookahead = std::mem::replace(&mut self.token_stream.extras.lookahead, None);
+        let lookahead = self.token_stream.extras.lookahead.take();
         let mut next_token = match lookahead {
             Some(next_token) => {
                 let (_, span) = cur_token.as_ref().unwrap(); // safety: lookahead implies lexer looked at a token
@@ -625,21 +625,18 @@ impl<'s> Iterator for Lexer<'s> {
             None => self.token_stream.next(),
         };
 
-        match (cur_token, &mut next_token) {
-            (Some((Ok(cur_tok), _)), Some((Ok(next_tok), span))) => {
-                if (matches!(cur_tok, Token::Ident(_)) || cur_tok.is_keyword())
-                    && *next_tok == Token::SymLessThan
-                {
-                    let source = &self.source[span.start..];
-                    if recognize_template_list(source) {
-                        *next_tok = Token::TemplateArgsStart;
-                        let cur_depth = self.token_stream.extras.depth;
-                        self.token_stream.extras.template_depths.push(cur_depth);
-                        self.opened_templates += 1;
-                    }
+        if let (Some((Ok(cur_tok), _)), Some((Ok(next_tok), span))) = (cur_token, &mut next_token) {
+            if (matches!(cur_tok, Token::Ident(_)) || cur_tok.is_keyword())
+                && *next_tok == Token::SymLessThan
+            {
+                let source = &self.source[span.start..];
+                if recognize_template_list(source) {
+                    *next_tok = Token::TemplateArgsStart;
+                    let cur_depth = self.token_stream.extras.depth;
+                    self.token_stream.extras.template_depths.push(cur_depth);
+                    self.opened_templates += 1;
                 }
             }
-            _ => (),
         }
 
         if self.parsing_template && matches!(cur_token, Some((Ok(Token::TemplateArgsEnd), _))) {
