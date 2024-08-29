@@ -1,4 +1,4 @@
-//! A spanned syntax tree for WGSL files. The root of the tree is a [TranslationUnit].
+//! A spanned syntax tree for WGSL files. The root of the tree is a [`TranslationUnit`].
 //!
 //! Follwing the spec at this date:
 //! [2024-07-31](https://www.w3.org/TR/2024/WD-WGSL-20240731/).

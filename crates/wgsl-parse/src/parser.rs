@@ -1,3 +1,7 @@
+//! The [`Parser`] takes WGSL source code and returns a [syntax tree].
+//!
+//! [syntax tree]: syntax
+
 lalrpop_mod!(
     #[allow(clippy::type_complexity)]
     wgsl

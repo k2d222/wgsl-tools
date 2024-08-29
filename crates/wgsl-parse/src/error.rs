@@ -1,4 +1,4 @@
-//! A spanned error is the error type returned by `Parser::parse*` functions.
+//! A [`SpannedError`] is the error type returned by `Parser::parse*` functions.
 
 use std::fmt::Display;
 
