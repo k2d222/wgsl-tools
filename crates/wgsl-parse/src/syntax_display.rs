@@ -25,7 +25,7 @@ impl Display for TranslationUnit {
         let declarations = self
             .global_declarations
             .iter()
-            .filter(|decl| !matches!(decl, GlobalDeclaration::Void))
+            // .filter(|decl| !matches!(decl, GlobalDeclaration::Void))
             .format("\n\n");
         writeln!(f, "{directives}\n\n{declarations}")
     }
@@ -152,10 +152,10 @@ impl Display for Function {
         let ret_typ = self
             .return_type
             .as_ref()
-            .map(|typ| format!("-> {} ", typ))
+            .map(|typ| format!("-> {ret_attrs}{} ", typ))
             .unwrap_or_default();
         let body = &self.body;
-        write!(f, "{attrs}fn {name}({params}) {ret_attrs}{ret_typ}{body}")
+        write!(f, "{attrs}fn {name}({params}) {ret_typ}{body}")
     }
 }
 
@@ -223,7 +223,7 @@ impl Display for LiteralExpression {
             LiteralExpression::True => write!(f, "true"),
             LiteralExpression::False => write!(f, "false"),
             LiteralExpression::AbstractInt(num) => write!(f, "{num}"),
-            LiteralExpression::AbstractFloat(num) => write!(f, "{num}"),
+            LiteralExpression::AbstractFloat(num) => write!(f, "{num:?}"), // using the Debug formatter to print the trailing .0 in floats representing integers. because format!("{}", 3.0f32) == "3"
             LiteralExpression::I32(num) => write!(f, "{num}i"),
             LiteralExpression::U32(num) => write!(f, "{num}u"),
             LiteralExpression::F32(num) => write!(f, "{num}f"),
@@ -384,7 +384,7 @@ impl Display for CompoundStatement {
         let stmts = Indent(
             self.statements
                 .iter()
-                .filter(|stmt| !matches!(stmt, Statement::Void))
+                // .filter(|stmt| !matches!(stmt, Statement::Void))
                 .format("\n"),
         );
         write!(f, "{attrs}{{\n{stmts}\n}}")
@@ -435,11 +435,11 @@ impl Display for IfStatement {
         let attrs = fmt_attrs(&self.attributes, false);
         let expr = &self.if_clause.0;
         let stmt = &self.if_clause.1;
-        write!(f, "{attrs}if ({expr}) {stmt}")?;
+        write!(f, "{attrs}if {expr} {stmt}")?;
         for else_if_clause in self.else_if_clauses.iter() {
             let expr = &else_if_clause.0;
             let stmt = &else_if_clause.1;
-            write!(f, "\nelse if ({expr}) {stmt}")?;
+            write!(f, "\nelse if {expr} {stmt}")?;
         }
         if let Some(ref else_stmt) = self.else_clause {
             write!(f, "\nelse {else_stmt}")?;
@@ -485,7 +485,7 @@ impl Display for LoopStatement {
             self.body
                 .statements
                 .iter()
-                .filter(|stmt| !matches!(stmt, Statement::Void))
+                // .filter(|stmt| !matches!(stmt, Statement::Void))
                 .format("\n"),
         );
         let continuing = self
@@ -504,7 +504,7 @@ impl Display for ContinuingStatement {
             self.body
                 .statements
                 .iter()
-                .filter(|stmt| !matches!(stmt, Statement::Void))
+                // .filter(|stmt| !matches!(stmt, Statement::Void))
                 .format("\n"),
         );
         let break_if = self

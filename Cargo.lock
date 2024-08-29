@@ -751,6 +751,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "wgsl-test"
+version = "0.0.2"
+dependencies = [
+ "wgsl-parse",
+]
+
+[[package]]
 name = "wgsl-tools"
 version = "0.0.2"
 dependencies = [

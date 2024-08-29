@@ -199,10 +199,10 @@ impl Display for WithSource<'_, &Function> {
         let ret_typ = self
             .return_type
             .as_ref()
-            .map(|typ| format!("-> {} ", typ.with_source(self.source())))
+            .map(|typ| format!("-> {ret_attrs}{} ", typ.with_source(self.source())))
             .unwrap_or_default();
         let body = self.body.with_source(self.source());
-        write!(f, "{attrs}fn {name}({params}) {ret_attrs}{ret_typ}{body}")
+        write!(f, "{attrs}fn {name}({params}) {ret_typ}{body}")
     }
 }
 
@@ -502,11 +502,11 @@ impl Display for WithSource<'_, &IfStatement> {
         let attrs = fmt_attrs(&self.attributes, self.source(), false);
         let expr = self.if_clause.0.with_source(self.source());
         let stmt = self.if_clause.1.with_source(self.source());
-        write!(f, "{attrs}if ({expr}) {stmt}")?;
+        write!(f, "{attrs}if {expr} {stmt}")?;
         for else_if_clause in self.else_if_clauses.iter() {
             let expr = else_if_clause.0.with_source(self.source());
             let stmt = &else_if_clause.1.with_source(self.source());
-            write!(f, "\nelse if ({expr}) {stmt}")?;
+            write!(f, "\nelse if {expr} {stmt}")?;
         }
         if let Some(ref else_stmt) = self.else_clause {
             let else_stmt = else_stmt.with_source(self.source());
