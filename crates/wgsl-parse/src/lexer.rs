@@ -340,6 +340,19 @@ pub enum Token {
     F16(f32),
     TemplateArgsStart,
     TemplateArgsEnd,
+
+    // extension: wesl-imports
+    // https://github.com/wgsl-tooling-wg/wgsl-import-spec/blob/main/Imports.md
+    // date: 2024-08-29, hash: 8e3b878958980c9092ed6e45a151c6b915f5041b
+    #[cfg(feature = "imports")]
+    #[token("..")]
+    SymPeriodPeriod,
+    #[cfg(feature = "imports")]
+    #[token("as")]
+    KwAs,
+    #[cfg(feature = "imports")]
+    #[token("import")]
+    KwImport,
 }
 
 impl Token {
@@ -527,6 +540,12 @@ impl Display for Token {
             Token::F16(n) => write!(f, "{n}h"),
             Token::TemplateArgsStart => f.write_str("<"),
             Token::TemplateArgsEnd => f.write_str(">"),
+            #[cfg(feature = "imports")]
+            Token::SymPeriodPeriod => write!(f, ".."),
+            #[cfg(feature = "imports")]
+            Token::KwAs => write!(f, "as"),
+            #[cfg(feature = "imports")]
+            Token::KwImport => write!(f, "import"),
         }
     }
 }

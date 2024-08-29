@@ -18,3 +18,7 @@ thiserror = "1.0.63"
 
 [build-dependencies]
 lalrpop = { version = "0.20.2", default-features = false }
+
+[features]
+default = ["imports"]
+imports = []

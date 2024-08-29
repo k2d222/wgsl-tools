@@ -92,14 +92,12 @@ impl SpannedSyntax for WhileStatement {}
 impl SpannedSyntax for IdentifierExpression {}
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct TranslationUnit {
     pub global_directives: Vec<S<GlobalDirective>>,
     pub global_declarations: Vec<S<GlobalDeclaration>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub enum GlobalDirective {
     Diagnostic(DiagnosticDirective),
     Enable(EnableDirective),
@@ -107,14 +105,12 @@ pub enum GlobalDirective {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct DiagnosticDirective {
     pub severity: DiagnosticSeverity,
     pub rule_name: Span,
 }
 
 // #[derive(Clone, Debug, PartialEq)]
-// #[allow(unused)]
 // pub enum DiagnosticSeverity {
 //     Error,
 //     Warning,
@@ -123,19 +119,16 @@ pub struct DiagnosticDirective {
 // }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct EnableDirective {
     pub extensions: Vec<Span>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct RequiresDirective {
     pub extensions: Vec<Span>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub enum GlobalDeclaration {
     Void,
     Declaration(Declaration),
@@ -146,7 +139,6 @@ pub enum GlobalDeclaration {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct Declaration {
     pub attributes: Vec<S<Attribute>>,
     pub kind: DeclarationKind,
@@ -157,7 +149,6 @@ pub struct Declaration {
 }
 
 // #[derive(Clone, Debug, PartialEq)]
-// #[allow(unused)]
 // pub enum DeclarationKind {
 //     Const,
 //     Override,
@@ -166,21 +157,18 @@ pub struct Declaration {
 // }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct TypeAlias {
     pub name: Span,
     pub typ: TypeExpression,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct Struct {
     pub name: Span,
     pub members: Vec<S<StructMember>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct StructMember {
     pub attributes: Vec<S<Attribute>>,
     pub name: Span,
@@ -188,7 +176,6 @@ pub struct StructMember {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct Function {
     pub attributes: Vec<S<Attribute>>,
     pub name: Span,
@@ -199,7 +186,6 @@ pub struct Function {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct FormalParameter {
     pub attributes: Vec<S<Attribute>>,
     pub name: Span,
@@ -207,20 +193,17 @@ pub struct FormalParameter {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct ConstAssert {
     pub expression: S<Expression>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct Attribute {
     pub name: Span,
     pub arguments: Option<Vec<S<Expression>>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub enum Expression {
     Literal(LiteralExpression),
     Parenthesized(ParenthesizedExpression),
@@ -234,7 +217,6 @@ pub enum Expression {
 }
 
 // #[derive(Clone, Debug, PartialEq)]
-// #[allow(unused)]
 // pub enum LiteralExpression {
 //     True,
 //     False,
@@ -249,28 +231,24 @@ pub enum Expression {
 pub type ParenthesizedExpression = Box<Expression>;
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct NamedComponentExpression {
     pub base: Box<S<Expression>>,
     pub component: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct IndexingExpression {
     pub base: S<Box<Expression>>,
     pub index: S<Box<Expression>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
     pub operand: S<Box<Expression>>, // TODO maybe rename rhs
 }
 
 // #[derive(Clone, Debug, PartialEq)]
-// #[allow(unused)]
 // pub enum UnaryOperator {
 //     LogicalNegation,
 //     Negation,
@@ -280,7 +258,6 @@ pub struct UnaryExpression {
 // }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
     pub left: S<Box<Expression>>, // TODO: rename lhs rhs
@@ -288,7 +265,6 @@ pub struct BinaryExpression {
 }
 
 // #[derive(Clone, Debug, PartialEq)]
-// #[allow(unused)]
 // pub enum BinaryOperator {
 //     ShortCircuitOr,
 //     ShortCircuitAnd,
@@ -311,7 +287,6 @@ pub struct BinaryExpression {
 // }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct FunctionCallExpression {
     pub name: Span,
     pub template_args: Option<Vec<S<TemplateArg>>>,
@@ -321,7 +296,6 @@ pub struct FunctionCallExpression {
 pub type IdentifierExpression = Span;
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct TypeExpression {
     pub name: Span,
     pub template_args: Option<Vec<S<TemplateArg>>>,
@@ -331,7 +305,6 @@ pub struct TypeExpression {
 pub type TemplateArg = Expression;
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub enum Statement {
     Void,
     Compound(CompoundStatement),
@@ -353,14 +326,12 @@ pub enum Statement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct CompoundStatement {
     pub attributes: Vec<S<Attribute>>,
     pub statements: Vec<S<Statement>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct AssignmentStatement {
     pub operator: AssignmentOperator,
     pub lhs: S<Expression>,
@@ -368,7 +339,6 @@ pub struct AssignmentStatement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub enum AssignmentOperator {
     Equal,
     PlusEqual,
@@ -388,7 +358,6 @@ pub type IncrementStatement = S<Expression>;
 pub type DecrementStatement = S<Expression>;
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct IfStatement {
     pub attributes: Vec<S<Attribute>>,
     pub if_clause: (S<Expression>, CompoundStatement),
@@ -397,7 +366,6 @@ pub struct IfStatement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct SwitchStatement {
     pub attributes: Vec<S<Attribute>>,
     pub expression: S<Expression>,
@@ -406,21 +374,18 @@ pub struct SwitchStatement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct SwitchClause {
     pub case_selectors: Vec<CaseSelector>,
     pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub enum CaseSelector {
     Default,
     Expression(S<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct LoopStatement {
     pub attributes: Vec<S<Attribute>>,
     pub body: CompoundStatement,
@@ -431,7 +396,6 @@ pub struct LoopStatement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct ContinuingStatement {
     pub body: CompoundStatement,
     // a BreakIfStatement can only appear inside a ContinuingStatement body, therefore it
@@ -443,7 +407,6 @@ pub struct ContinuingStatement {
 pub type BreakIfStatement = Expression;
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct ForStatement {
     pub attributes: Vec<S<Attribute>>,
     pub initializer: Option<S<Box<Statement>>>,
@@ -453,7 +416,6 @@ pub struct ForStatement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(unused)]
 pub struct WhileStatement {
     pub attributes: Vec<S<Attribute>>,
     pub condition: S<Expression>,

@@ -25,8 +25,31 @@
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct TranslationUnit {
+    #[cfg(feature = "imports")]
+    pub imports: Vec<Import>,
     pub global_directives: Vec<GlobalDirective>,
     pub global_declarations: Vec<GlobalDeclaration>,
+}
+
+#[cfg(feature = "imports")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Import {
+    pub path: Vec<String>,
+    pub content: ImportContent,
+}
+
+#[cfg(feature = "imports")]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportContent {
+    Item(ImportItem),
+    Collection(Vec<Import>),
+}
+
+#[cfg(feature = "imports")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImportItem {
+    pub name: String,
+    pub rename: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

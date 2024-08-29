@@ -99,6 +99,16 @@ extern {
         TokF16 => Token::F16(<f32>),
         TokTemplateArgsStart => Token::TemplateArgsStart,
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
+
+        // extension: wesl-imports
+        // https://github.com/wgsl-tooling-wg/wgsl-import-spec/blob/main/Imports.md
+        // date: 2024-08-29, hash: 8e3b878958980c9092ed6e45a151c6b915f5041b
+        // #[cfg(feature = "imports")]
+        ".." => Token::SymPeriodPeriod,
+        // #[cfg(feature = "imports")]
+        "as" => Token::KwAs,
+        // #[cfg(feature = "imports")]
+        "import" => Token::KwImport
     }
 }
 
@@ -118,8 +128,11 @@ extern {
 // 2. WGSL MODULE
 // https://www.w3.org/TR/WGSL/#wgsl-module
 
+#[cfg(not(feature = "imports"))]
 pub TranslationUnit: TranslationUnit = {
-    <global_directives: GlobalDirective*> <global_declarations: GlobalDecl*> => TranslationUnit {<>},
+    <global_directives: GlobalDirective*> <global_declarations: GlobalDecl*> => TranslationUnit {
+        global_directives, global_declarations
+    },
 };
 
 GlobalDecl: GlobalDeclaration = {
@@ -813,6 +826,74 @@ DiagnosticControl: (DiagnosticSeverity, String) = {
     "(" <SeverityControlName> "," <DiagnosticRuleName> ","? ")",
 };
 
+// EXTENSION: WESL-IMPORTS
+// https://github.com/wgsl-tooling-wg/wgsl-import-spec/blob/main/Imports.md
+// date: 2024-08-29, hash: 8e3b878958980c9092ed6e45a151c6b915f5041b
+
+#[cfg(feature = "imports")]
+pub TranslationUnit: TranslationUnit = {
+    <imports: Import*> <global_directives: GlobalDirective*> <global_declarations: GlobalDecl*> => TranslationUnit {
+        imports, global_directives, global_declarations
+    },
+};
+
+#[cfg(feature = "imports")]
+Import: Import = {
+    "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => match relative {
+        Some(mut relative) => {
+            relative.extend(import.path);
+            import.path = relative;
+            import
+        },
+        None => import,
+    }
+};
+
+#[cfg(feature = "imports")]
+ImportRelative: Vec<String> = {
+    "." "/" <parents: (".." "/")*> => {
+        std::iter::once(".").chain(parents.iter().map(|_| "..")).map(str::to_string).collect()
+    },
+    ".." "/" <parents: (".." "/")*> => {
+        std::iter::once("..").chain(parents.iter().map(|_| "..")).map(str::to_string).collect()
+    },
+};
+
+#[cfg(feature = "imports")]
+ImportPath: Import = {
+    <path: (<Ident> "/")+> <content: ImportContent> => Import {
+        path, content
+    },
+    ItemImport => Import {
+        path: Vec::new(), content: ImportContent::Item(<>)
+    },
+};
+
+ImportContent: ImportContent = {
+    ImportCollection => ImportContent::Collection(<>),
+    ItemImport => ImportContent::Item(<>),
+    StarImport => ImportContent::Item(<>),
+};
+
+#[cfg(feature = "imports")]
+StarImport: ImportItem = {
+    "*" <rename: ("as" <Ident>)?> => ImportItem {
+        name: "*".to_string(), rename
+    }
+};
+
+#[cfg(feature = "imports")]
+ItemImport: ImportItem = {
+    <name: Ident> <rename: ("as" <Ident>)?> => ImportItem {
+        name, rename
+    }
+};
+
+#[cfg(feature = "imports")]
+ImportCollection: Vec<Import> = {
+    "{" <Comma1<ImportPath>> "}"
+};
+
 // ===================
 // === End grammar ===
 // ===================
@@ -829,8 +910,10 @@ Comma<T>: Vec<T> = {
     }
 };
 
-Comma1<T>: Vec<T> = {
-    <mut v: (<T> ",")*> <e: T> ","? => {
+Comma1<T> = Sep1<",", T>;
+
+Sep1<S, T>: Vec<T> = {
+    <mut v: (<T> S)*> <e: T> S? => {
         v.push(e);
         v
     }
