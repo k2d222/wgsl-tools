@@ -8,16 +8,12 @@ lalrpop_mod!(
 );
 lalrpop_mod!(
     #[allow(clippy::type_complexity)]
-    wgsl_spanned
-);
-lalrpop_mod!(
-    #[allow(clippy::type_complexity)]
     wgsl_recognize
 );
 
 use lalrpop_util::lalrpop_mod;
 
-use crate::{error::SpannedError, lexer::Lexer, syntax, syntax_spanned};
+use crate::{error::SpannedError, lexer::Lexer, syntax};
 
 pub struct Parser;
 
@@ -32,23 +28,6 @@ impl Parser {
         mut lexer: &'s mut Lexer,
     ) -> Result<syntax::TranslationUnit, SpannedError<'s>> {
         let parser = wgsl::TranslationUnitParser::new();
-        let res = parser.parse(&mut lexer);
-        res.map_err(|e| SpannedError::new(e, lexer.source()))
-    }
-}
-impl Parser {
-    pub fn parse_str_spanned(
-        source: &str,
-    ) -> Result<syntax_spanned::TranslationUnit, SpannedError> {
-        let lexer = Lexer::new(source);
-        let parser = wgsl_spanned::TranslationUnitParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source))
-    }
-    pub fn parse_spanned<'s>(
-        mut lexer: &'s mut Lexer,
-    ) -> Result<syntax_spanned::TranslationUnit, SpannedError<'s>> {
-        let parser = wgsl_spanned::TranslationUnitParser::new();
         let res = parser.parse(&mut lexer);
         res.map_err(|e| SpannedError::new(e, lexer.source()))
     }

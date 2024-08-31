@@ -1,6 +1,6 @@
 //! Prefer using [`Parser::parse_str`]. You shouldn't need to manipulate the lexer.
 
-use crate::{error::ParseError, parser::Parser, span::Span};
+use crate::{error::ParseError, parser::Parser};
 use logos::{Logos, SpannedIter};
 use std::{fmt::Display, num::NonZeroU8};
 
@@ -556,7 +556,7 @@ pub type Spanned<Tok, Loc, ParseError> = Result<(Loc, Tok, Loc), (Loc, ParseErro
 pub struct Lexer<'s> {
     source: &'s str,
     token_stream: SpannedIter<'s, Token>,
-    next_token: Option<(Result<Token, ParseError>, Span)>,
+    next_token: Option<(Result<Token, ParseError>, std::ops::Range<usize>)>,
     parsing_template: bool,
     opened_templates: u32,
 }
