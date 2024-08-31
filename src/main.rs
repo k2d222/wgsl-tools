@@ -4,7 +4,6 @@
 
 use clap::{Args, Parser, Subcommand};
 use std::{fs, path::PathBuf};
-use wgsl_imports::resolve::{FileResolver, FileResource, Module};
 use wgsl_parse::Parser as WgslParser;
 
 #[derive(Parser)]
@@ -67,10 +66,8 @@ fn main() {
             }
         }
         Command::Compile(args) => {
-            let resolver = FileResolver::default();
-            let entry_point = FileResource::from(args.input.clone());
-            match Module::resolve(&entry_point, &resolver) {
-                Ok(module) => println!("{}", module.assemble()),
+            match wgsl_imports::compile(&args.input) {
+                Ok(module) => println!("{module}"),
                 Err(err) => eprintln!("{err}"),
             };
         }

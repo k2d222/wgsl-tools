@@ -1,24 +1,42 @@
-use ropey::Rope;
+use std::collections::HashSet;
+
+use wgsl_parse::syntax::TranslationUnit;
+
+use crate::resolve::Resolver;
 
 use super::resolve::Module;
 
-#[derive(Default)]
-struct Assembler {}
+impl<R: Resolver> Module<R> {
+    pub fn assemble(&self) -> TranslationUnit {
+        let mut visited = HashSet::new();
 
-impl Assembler {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+        fn rec_insert<'s, R: Resolver>(
+            module: &'s Module<R>,
+            resource: &'s R::Resource,
+            wgsl: &mut TranslationUnit,
+            visited: &mut HashSet<&'s R::Resource>,
+        ) {
+            if !visited.contains(resource) {
+                visited.insert(resource);
+                for (resource, module) in &module.resolutions {
+                    rec_insert(module, resource, wgsl, visited);
+                }
+                wgsl.global_declarations
+                    .extend(module.source.global_declarations.iter().cloned());
+            }
+        }
 
-impl Module {
-    pub fn assemble(&self) -> String {
-        let mut source = Rope::new();
+        let mut wgsl = TranslationUnit::default();
 
-        source.insert(0, &format!("{}", self.source));
-        // source.insert(0, &self.source);
-        // source.remove(self.imports_span.clone());
+        for (path, module) in &self.resolutions {
+            rec_insert(module, path, &mut wgsl, &mut visited);
+        }
 
-        source.to_string()
+        wgsl.global_declarations
+            .extend(self.source.global_declarations.iter().cloned());
+        wgsl.global_directives
+            .extend(self.source.global_directives.iter().cloned());
+
+        wgsl
     }
 }

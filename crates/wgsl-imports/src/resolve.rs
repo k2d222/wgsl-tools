@@ -10,10 +10,10 @@ use std::{collections::HashMap, fmt::Display, fs, hash::Hash, path::PathBuf, rc:
 /// convenience functions to build a module resolver
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct ImportPath(Vec<String>);
+pub struct ImportPath(Vec<String>);
 
 impl ImportPath {
-    fn to_pathbuf(&self) -> PathBuf {
+    pub fn to_pathbuf(&self) -> PathBuf {
         PathBuf::from_iter(self.0.iter())
     }
 }
@@ -24,8 +24,11 @@ impl Display for ImportPath {
     }
 }
 
-type Imports = HashMap<ImportPath, Vec<syntax::ImportItem>>;
-type Modules = HashMap<ImportPath, Rc<Module>>;
+// XXX: are imports are supposed to order-independent?
+#[allow(type_alias_bounds)]
+type Imports<R: Resolver> = HashMap<R::Resource, Vec<syntax::ImportItem>>;
+#[allow(type_alias_bounds)]
+type Modules<R: Resolver> = HashMap<R::Resource, Rc<Module<R>>>;
 
 #[derive(Clone, Debug, Error)]
 pub enum ImportError {
@@ -43,76 +46,86 @@ pub enum ImportError {
     CircularDependency(ImportPath, ImportPath),
 }
 
-/// Flatten imports to a list of imports path and items to import.
-fn normalize_imports(imports: Vec<syntax::Import>) -> Imports {
-    let mut res = Imports::new();
+/// Flatten imports to a list of resources and items to import.
+fn resolve_import_paths<R: Resolver>(
+    imports: &[syntax::Import],
+    parent: &R::Resource,
+    resolver: &R,
+) -> Result<Imports<R>, ImportError> {
+    let mut res = Imports::<R>::new();
 
-    for import in imports.into_iter() {
-        let import_path = ImportPath(import.path);
-        match import.content {
+    for import in imports {
+        match &import.content {
             syntax::ImportContent::Star(item) => {
-                if let Some(entry) = res.get_mut(&import_path) {
-                    entry.push(item);
+                let mut path = import.path.clone();
+                path.push(item.name.clone());
+                let resource = resolver.resolve_path(&path, Some(parent))?;
+                if let Some(entry) = res.get_mut(&resource) {
+                    entry.push(item.clone());
                 } else {
-                    res.insert(import_path, vec![item]);
+                    res.insert(resource, vec![item.clone()]);
                 }
             }
             syntax::ImportContent::Item(item) => {
-                if let Some(entry) = res.get_mut(&import_path) {
-                    entry.push(item);
+                let resource = resolver.resolve_path(&import.path, Some(parent))?;
+                if let Some(entry) = res.get_mut(&resource) {
+                    entry.push(item.clone());
                 } else {
-                    res.insert(import_path, vec![item]);
+                    res.insert(resource, vec![item.clone()]);
                 }
             }
             syntax::ImportContent::Collection(imports) => {
-                let normalized = normalize_imports(imports);
-                for (path, items) in normalized.into_iter() {
-                    let mut import_path = import_path.0.clone();
-                    import_path.extend(path.0);
-                    let import_path = ImportPath(import_path);
-                    if let Some(entry) = res.get_mut(&import_path) {
+                // prepend the parent import path to the children in the collection
+                let imports = imports
+                    .clone()
+                    .into_iter()
+                    .map(|mut child| {
+                        let mut path = import.path.clone();
+                        path.extend(child.path.into_iter());
+                        child.path = path;
+                        child
+                    })
+                    .collect::<Vec<_>>();
+
+                let resolved = resolve_import_paths(&imports, parent, resolver)?;
+                for (resource, items) in resolved {
+                    if let Some(entry) = res.get_mut(&resource) {
                         entry.extend_from_slice(items.as_slice());
                     } else {
-                        res.insert(import_path, items);
+                        res.insert(resource, items);
                     }
                 }
             }
         }
     }
-    res
+
+    Ok(res)
 }
 
-pub struct Module {
+pub struct Module<R: Resolver> {
     pub(crate) source: TranslationUnit,
-    pub(crate) imports: Imports,
-    pub(crate) exports: Option<Vec<String>>,
-    pub(crate) resolutions: Modules,
+    pub(crate) imports: Imports<R>,
+    pub(crate) resolutions: Modules<R>,
 }
 
-impl Module {
-    pub fn new(source: syntax::TranslationUnit) -> Result<Self, ImportError> {
-        let imports = normalize_imports(source.imports.clone());
-
+impl<R: Resolver> Module<R> {
+    pub fn new(source: syntax::TranslationUnit, imports: Imports<R>) -> Result<Self, ImportError> {
         Ok(Self {
             source,
             imports,
-            exports: None,
             resolutions: HashMap::new(),
         })
     }
 
-    pub fn resolve_import(&mut self, import_path: &ImportPath, module: Rc<Module>) {
-        self.resolutions.insert(import_path.clone(), module);
+    fn resolve_import(&mut self, resource: &R::Resource, module: Rc<Module<R>>) {
+        self.resolutions.insert(resource.clone(), module);
     }
 
+    #[allow(unused)]
     fn is_resolved(&self) -> bool {
         self.imports
             .keys()
             .all(|path| self.resolutions.contains_key(path))
-    }
-
-    pub fn imports(&self) -> &Imports {
-        &self.imports
     }
 }
 
@@ -124,16 +137,18 @@ pub trait Resolver {
     /// `parent_resource` is the resource identifier of the importer module.
     fn resolve_path(
         &self,
-        import_path: &ImportPath,
-        parent_resource: &Self::Resource,
-    ) -> Option<Self::Resource>;
+        import_path: &[String],
+        parent_resource: Option<&Self::Resource>,
+    ) -> Result<Self::Resource, ImportError>;
 
+    /// Tries to resolve a source file identified by a resource.
     fn resolve_file(
         &self,
         resource: &Self::Resource,
     ) -> Result<syntax::TranslationUnit, ImportError>;
 }
 
+#[derive(Default)]
 pub struct FileResolver {
     base: PathBuf,
 }
@@ -156,16 +171,9 @@ impl From<PathBuf> for FileResource {
 
 impl FileResolver {
     /// `base` is the root directory to which absolute paths refer to.
+    #[allow(dead_code)]
     pub fn new(base: PathBuf) -> Self {
         Self { base }
-    }
-}
-
-impl Default for FileResolver {
-    fn default() -> Self {
-        Self {
-            base: Default::default(),
-        }
     }
 }
 
@@ -174,21 +182,24 @@ impl Resolver for FileResolver {
 
     fn resolve_path(
         &self,
-        import_path: &ImportPath,
-        parent_path: &FileResource,
-    ) -> Option<FileResource> {
-        let mut rel_path = import_path.to_pathbuf();
+        import_path: &[String],
+        parent_path: Option<&FileResource>,
+    ) -> Result<FileResource, ImportError> {
+        let mut rel_path = PathBuf::from_iter(import_path.iter());
         rel_path.set_extension("wgsl");
 
         let mut base_path = if rel_path.is_absolute() {
             self.base.clone()
+        } else if let Some(parent_path) = parent_path {
+            // SAFETY: parent_path must be a file, therefore must have a contaning directory
+            PathBuf::from_iter(parent_path.0.parent().unwrap().iter())
         } else {
-            parent_path.0.parent().unwrap().to_path_buf()
+            self.base.clone()
         };
 
-        base_path.extend(rel_path.into_iter());
+        base_path.extend(&rel_path);
 
-        Some(FileResource(base_path))
+        Ok(FileResource(base_path))
     }
 
     fn resolve_file(&self, path: &FileResource) -> Result<syntax::TranslationUnit, ImportError> {
@@ -198,38 +209,37 @@ impl Resolver for FileResolver {
     }
 }
 
-fn parse_module_impl<R: Resolver>(
+fn resolve_rec<R: Resolver>(
     resource: &R::Resource,
     resolver: &R,
-    visited: &mut Modules,
-) -> Result<Module, ImportError> {
+    visited: &mut Modules<R>,
+) -> Result<Module<R>, ImportError> {
     let source = resolver.resolve_file(resource)?;
+    let imports = resolve_import_paths(&source.imports, resource, resolver)?;
+    let mut module = Module::new(source, imports.clone())?;
 
-    let mut module = Module::new(source)?;
-    let imports = module.imports().clone();
-
-    for (path, _) in imports.iter() {
-        if let Some(submodule) = visited.get(path) {
-            module.resolve_import(path, submodule.clone());
+    for child in imports.keys() {
+        if let Some(submodule) = visited.get(child) {
+            module.resolve_import(child, submodule.clone());
         } else {
-            let resource = resolver
-                .resolve_path(path, resource)
-                .ok_or_else(|| ImportError::ResolutionFailure(path.clone()))?;
-            let submodule = parse_module_impl(&resource, resolver, visited)?;
-            visited.insert(path.clone(), Rc::new(submodule));
+            let submodule = resolve_rec(child, resolver, visited)?;
+            let submodule = Rc::new(submodule);
+            module.resolve_import(child, submodule.clone());
+            visited.insert(child.clone(), submodule);
         }
     }
+
+    // mangle only after imports have been resolved.
+    assert!(module.is_resolved());
+    module.mangle()?;
 
     Ok(module)
 }
 
-impl Module {
-    pub fn resolve<R: Resolver>(
-        resource: &R::Resource,
-        resolver: &R,
-    ) -> Result<Module, ImportError> {
-        let mut visited_modules = HashMap::new();
-        let module = parse_module_impl(resource, resolver, &mut visited_modules)?;
+impl<R: Resolver> Module<R> {
+    pub fn resolve(resource: &R::Resource, resolver: &R) -> Result<Module<R>, ImportError> {
+        let mut submodules = Modules::new();
+        let module = resolve_rec(resource, resolver, &mut submodules)?;
         Ok(module)
     }
 }

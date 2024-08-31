@@ -1,6 +1,6 @@
 //! A [`SpannedError`] is the error type returned by `Parser::parse*` functions.
 
-use std::{borrow::Borrow, fmt::Display};
+use std::fmt::Display;
 
 use annotate_snippets::*;
 use itertools::Itertools;
