@@ -867,6 +867,9 @@ ImportPath: Import = {
     ItemImport => Import {
         path: Vec::new(), content: ImportContent::Item(<>)
     },
+    StarImport => Import {
+        path: Vec::new(), content: ImportContent::Star(<>)
+    },
 };
 
 ImportContent: ImportContent = {
@@ -877,8 +880,8 @@ ImportContent: ImportContent = {
 
 #[cfg(feature = "imports")]
 StarImport: ImportItem = {
-    "*" <rename: ("as" <Ident>)?> => ImportItem {
-        name: "*".to_string(), rename
+    <name: Ident> "/" "*" <rename: ("as" <Ident>)?> => ImportItem {
+        name, rename
     }
 };
 

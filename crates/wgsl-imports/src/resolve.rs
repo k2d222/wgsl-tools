@@ -1,66 +1,36 @@
 use itertools::Itertools;
 use thiserror::Error;
-
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    fs,
-    hash::Hash,
-    ops::Range,
-    path::PathBuf,
-    rc::Rc,
+use wgsl_parse::{
+    syntax::{self, TranslationUnit},
+    Parser,
 };
+
+use std::{collections::HashMap, fmt::Display, fs, hash::Hash, path::PathBuf, rc::Rc};
 
 /// convenience functions to build a module resolver
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ImportPath {
-    Quoted(String),
-    Hierarchy(Vec<String>),
-}
+struct ImportPath(Vec<String>);
 
 impl ImportPath {
     fn to_pathbuf(&self) -> PathBuf {
-        match self {
-            ImportPath::Quoted(s) => PathBuf::from(s),
-            ImportPath::Hierarchy(v) => PathBuf::from_iter(v.iter()),
-        }
+        PathBuf::from_iter(self.0.iter())
     }
 }
 
 impl Display for ImportPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ImportPath::Quoted(s) => write!(f, "\"{s}\""),
-            ImportPath::Hierarchy(v) => write!(f, "{}", v.iter().format("::")),
-        }
+        write!(f, "{}", self.0.iter().format("/"))
     }
 }
 
-// convenience functions for library users
-impl<'s> parse::ImportSection<'s> {
-    pub fn import_paths(&self) -> Vec<ImportPath> {
-        self.imports
-            .iter()
-            .map(|import| ImportPath::from(&import.path))
-            .collect()
-    }
-
-    pub fn imported_items(&self, import_path: &ImportPath) -> Option<Vec<String>> {
-        self.imports
-            .iter()
-            .find(|import| import_path == &import.path)
-            .map(|import| import.items.iter().map(|s| s.name.to_string()).collect())
-    }
-}
-
-type Imports = HashMap<ImportPath, Vec<(String, String)>>;
+type Imports = HashMap<ImportPath, Vec<syntax::ImportItem>>;
 type Modules = HashMap<ImportPath, Rc<Module>>;
 
 #[derive(Clone, Debug, Error)]
 pub enum ImportError {
-    #[error("parse error: {0}")]
-    ParseError(#[from] WgslParseError),
+    #[error("parse error: `{0}`")]
+    ParseError(wgsl_parse::error::Error),
     #[error("duplicate imported symbol `{0}`")]
     DuplicateSymbol(String),
     #[error("failed to resolve import path `{0}`")]
@@ -73,24 +43,59 @@ pub enum ImportError {
     CircularDependency(ImportPath, ImportPath),
 }
 
+/// Flatten imports to a list of imports path and items to import.
+fn normalize_imports(imports: Vec<syntax::Import>) -> Imports {
+    let mut res = Imports::new();
+
+    for import in imports.into_iter() {
+        let import_path = ImportPath(import.path);
+        match import.content {
+            syntax::ImportContent::Star(item) => {
+                if let Some(entry) = res.get_mut(&import_path) {
+                    entry.push(item);
+                } else {
+                    res.insert(import_path, vec![item]);
+                }
+            }
+            syntax::ImportContent::Item(item) => {
+                if let Some(entry) = res.get_mut(&import_path) {
+                    entry.push(item);
+                } else {
+                    res.insert(import_path, vec![item]);
+                }
+            }
+            syntax::ImportContent::Collection(imports) => {
+                let normalized = normalize_imports(imports);
+                for (path, items) in normalized.into_iter() {
+                    let mut import_path = import_path.0.clone();
+                    import_path.extend(path.0);
+                    let import_path = ImportPath(import_path);
+                    if let Some(entry) = res.get_mut(&import_path) {
+                        entry.extend_from_slice(items.as_slice());
+                    } else {
+                        res.insert(import_path, items);
+                    }
+                }
+            }
+        }
+    }
+    res
+}
+
 pub struct Module {
-    pub(crate) source: String,
+    pub(crate) source: TranslationUnit,
     pub(crate) imports: Imports,
-    pub(crate) imports_span: Range<usize>,
     pub(crate) exports: Option<Vec<String>>,
     pub(crate) resolutions: Modules,
 }
 
 impl Module {
-    pub fn new(source: String) -> Result<Self, ImportError> {
-        let parse_imports = parse::parse_imports(&source).map_err(ImportError::ParseError)?;
-        let imports = parse_imports.canonicalize()?;
-        let imports_span = parse_imports.span;
+    pub fn new(source: syntax::TranslationUnit) -> Result<Self, ImportError> {
+        let imports = normalize_imports(source.imports.clone());
 
         Ok(Self {
             source,
             imports,
-            imports_span,
             exports: None,
             resolutions: HashMap::new(),
         })
@@ -106,52 +111,8 @@ impl Module {
             .all(|path| self.resolutions.contains_key(path))
     }
 
-    pub fn source(&self) -> &str {
-        &self.source
-    }
-
     pub fn imports(&self) -> &Imports {
         &self.imports
-    }
-}
-
-impl<'s> parse::ImportSection<'s> {
-    fn canonicalize(&self) -> Result<Imports, ImportError> {
-        // ensure all imported symbols are unique
-        {
-            let mut symbols = HashSet::new();
-            for import in self.imports.iter() {
-                for item in import.items.iter() {
-                    let name = item.rename.unwrap_or(item.name);
-                    if symbols.contains(name) {
-                        return Err(ImportError::DuplicateSymbol(name.to_owned()));
-                    } else {
-                        symbols.insert(name);
-                    }
-                }
-            }
-        }
-
-        let mut res: Imports = HashMap::new();
-
-        for import in self.imports.iter() {
-            let path = ImportPath::from(&import.path);
-
-            let symbols = import.items.iter().map(|item| {
-                (
-                    item.name.to_owned(),
-                    item.rename.unwrap_or(item.name).to_owned(),
-                )
-            });
-
-            if let Some(v) = res.get_mut(&path) {
-                v.extend(symbols);
-            } else {
-                res.insert(path, symbols.collect());
-            }
-        }
-
-        Ok(res)
     }
 }
 
@@ -167,7 +128,10 @@ pub trait Resolver {
         parent_resource: &Self::Resource,
     ) -> Option<Self::Resource>;
 
-    fn resolve_file(&self, resource: &Self::Resource) -> Option<String>;
+    fn resolve_file(
+        &self,
+        resource: &Self::Resource,
+    ) -> Result<syntax::TranslationUnit, ImportError>;
 }
 
 pub struct FileResolver {
@@ -207,12 +171,14 @@ impl Default for FileResolver {
 
 impl Resolver for FileResolver {
     type Resource = FileResource;
+
     fn resolve_path(
         &self,
         import_path: &ImportPath,
         parent_path: &FileResource,
     ) -> Option<FileResource> {
-        let rel_path = import_path.to_pathbuf();
+        let mut rel_path = import_path.to_pathbuf();
+        rel_path.set_extension("wgsl");
 
         let mut base_path = if rel_path.is_absolute() {
             self.base.clone()
@@ -225,8 +191,10 @@ impl Resolver for FileResolver {
         Some(FileResource(base_path))
     }
 
-    fn resolve_file(&self, path: &FileResource) -> Option<String> {
-        fs::read_to_string(&path.0).ok()
+    fn resolve_file(&self, path: &FileResource) -> Result<syntax::TranslationUnit, ImportError> {
+        let source = fs::read_to_string(&path.0)
+            .map_err(|_| ImportError::FileNotFound(path.0.to_string_lossy().to_string()))?;
+        Parser::parse_str(&source).map_err(|e| ImportError::ParseError(e.into_owned()))
     }
 }
 
@@ -235,9 +203,7 @@ fn parse_module_impl<R: Resolver>(
     resolver: &R,
     visited: &mut Modules,
 ) -> Result<Module, ImportError> {
-    let source = resolver
-        .resolve_file(resource)
-        .ok_or_else(|| ImportError::FileNotFound(resource.to_string()))?;
+    let source = resolver.resolve_file(resource)?;
 
     let mut module = Module::new(source)?;
     let imports = module.imports().clone();

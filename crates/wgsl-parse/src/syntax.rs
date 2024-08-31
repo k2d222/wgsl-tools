@@ -41,6 +41,7 @@ pub struct Import {
 #[cfg(feature = "imports")]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ImportContent {
+    Star(ImportItem),
     Item(ImportItem),
     Collection(Vec<Import>),
 }

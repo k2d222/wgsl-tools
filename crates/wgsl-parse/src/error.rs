@@ -1,6 +1,6 @@
 //! A [`SpannedError`] is the error type returned by `Parser::parse*` functions.
 
-use std::fmt::Display;
+use std::{borrow::Borrow, fmt::Display};
 
 use annotate_snippets::*;
 use itertools::Itertools;
@@ -19,10 +19,26 @@ pub enum ParseError {
 
 type LalrError = lalrpop_util::ParseError<usize, Token, (usize, ParseError, usize)>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct SpannedError<'s> {
     inner: LalrError,
     source: &'s str,
+}
+
+impl<'s> SpannedError<'s> {
+    pub fn into_owned(self) -> Error {
+        Error {
+            inner: self.inner,
+            source: self.source.to_owned(),
+        }
+    }
+}
+
+// TODO: this error handling is not very clean
+#[derive(Clone, Debug, PartialEq)]
+pub struct Error {
+    inner: LalrError,
+    source: String,
 }
 
 impl<'s> SpannedError<'s> {
@@ -32,6 +48,8 @@ impl<'s> SpannedError<'s> {
 }
 
 impl<'s> std::error::Error for SpannedError<'s> {}
+
+impl std::error::Error for Error {}
 
 impl<'s> Display for SpannedError<'s> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -103,5 +121,15 @@ impl<'s> Display for SpannedError<'s> {
                 write!(f, "{}", rendered)
             }
         }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        SpannedError {
+            inner: self.inner.clone(),
+            source: &self.source,
+        }
+        .fmt(f)
     }
 }
