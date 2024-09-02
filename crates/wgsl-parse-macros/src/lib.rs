@@ -8,29 +8,42 @@ pub fn derive_visit_fn(input: TokenStream) -> TokenStream {
 
     let name = &input.ident;
     let visit_name = format_ident!("Visit{name}");
+    let visit_mut_name = format_ident!("VisitMut{name}");
 
     let expanded = match input.data {
         Data::Struct(data) => match data.fields {
             syn::Fields::Named(fields) => {
-                let trait_fns = fields.named.iter().map(|field| {
-                    let name = &field.ident;
-                    let ty = &field.ty;
+                let fields = fields.named.iter().map(|field| (&field.ident, &field.ty));
+                let trait_fns = fields.clone().map(|(name, ty)| {
                     quote! {
                         fn #name(self) -> impl Iterator<Item = &'a #ty>;
                     }
                 });
-                let trait_fn_impls = fields.named.iter().map(|field| {
-                    let name = &field.ident;
-                    let ty = &field.ty;
+                let trait_mut_fns = fields.clone().map(|(name, ty)| {
+                    quote! {
+                        fn #name(self) -> impl Iterator<Item = &'a mut #ty>;
+                    }
+                });
+                let trait_fn_impls = fields.clone().map(|(name, ty)| {
                     quote! {
                         fn #name(self) -> impl Iterator<Item = &'a #ty> {
                             self.map(|x| &x.#name)
                         }
                     }
                 });
+                let trait_mut_fn_impls = fields.map(|(name, ty)| {
+                    quote! {
+                        fn #name(self) -> impl Iterator<Item = &'a mut #ty> {
+                            self.map(|x| &mut x.#name)
+                        }
+                    }
+                });
                 quote! {
                     pub trait #visit_name<'a> {
                         #(#trait_fns)*
+                    }
+                    pub trait #visit_mut_name<'a> {
+                        #(#trait_mut_fns)*
                     }
 
                     impl<'a, I> #visit_name<'a> for I
@@ -39,8 +52,20 @@ pub fn derive_visit_fn(input: TokenStream) -> TokenStream {
                     {
                         #(#trait_fn_impls)*
                     }
+                    impl<'a, I> #visit_mut_name<'a> for I
+                    where
+                        I: Iterator<Item = &'a mut #name>,
+                    {
+                        #(#trait_mut_fn_impls)*
+                    }
+
                     impl #name {
                         pub fn visit(&self) -> impl Iterator<Item = &#name> {
+                            std::iter::once(self)
+                        }
+                    }
+                    impl #name {
+                        pub fn visit_mut(&mut self) -> impl Iterator<Item = &mut #name> {
                             std::iter::once(self)
                         }
                     }
@@ -67,10 +92,27 @@ pub fn derive_visit_fn(input: TokenStream) -> TokenStream {
                     fn #var_snake(self) -> impl Iterator<Item = &'a #ty>;
                 }
             });
-            let trait_fn_impls = unnamed_variants.map(|(var, var_snake, fields)| {
+            let trait_mut_fns = unnamed_variants.clone().map(|(_, var_snake, fields)| {
+                let ty = &fields.unnamed.first().unwrap().ty;
+                quote! {
+                    fn #var_snake(self) -> impl Iterator<Item = &'a mut #ty>;
+                }
+            });
+            let trait_fn_impls = unnamed_variants.clone().map(|(var, var_snake, fields)| {
                 let ty = &fields.unnamed.first().unwrap().ty;
                 quote! {
                     fn #var_snake(self) -> impl Iterator<Item = &'a #ty> {
+                        self.filter_map(|x| match x {
+                            #name::#var(x) => Some(x),
+                            _ => None,
+                        })
+                    }
+                }
+            });
+            let trait_mut_fn_impls = unnamed_variants.map(|(var, var_snake, fields)| {
+                let ty = &fields.unnamed.first().unwrap().ty;
+                quote! {
+                    fn #var_snake(self) -> impl Iterator<Item = &'a mut #ty> {
                         self.filter_map(|x| match x {
                             #name::#var(x) => Some(x),
                             _ => None,
@@ -82,6 +124,9 @@ pub fn derive_visit_fn(input: TokenStream) -> TokenStream {
                 pub trait #visit_name<'a> {
                     #(#trait_fns)*
                 }
+                pub trait #visit_mut_name<'a> {
+                    #(#trait_mut_fns)*
+                }
 
                 impl<'a, I> #visit_name<'a> for I
                 where
@@ -89,8 +134,20 @@ pub fn derive_visit_fn(input: TokenStream) -> TokenStream {
                 {
                     #(#trait_fn_impls)*
                 }
+                impl<'a, I> #visit_mut_name<'a> for I
+                where
+                    I: Iterator<Item = &'a mut #name>,
+                {
+                    #(#trait_mut_fn_impls)*
+                }
+
                 impl #name {
                     pub fn visit(&self) -> impl Iterator<Item = &#name> {
+                        std::iter::once(self)
+                    }
+                }
+                impl #name {
+                    pub fn visit_mut(&mut self) -> impl Iterator<Item = &mut #name> {
                         std::iter::once(self)
                     }
                 }

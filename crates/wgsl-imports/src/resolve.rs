@@ -7,6 +7,8 @@ use wgsl_parse::{
 
 use std::{collections::HashMap, fmt::Display, fs, hash::Hash, path::PathBuf, rc::Rc};
 
+use crate::mangle::Mangler;
+
 /// convenience functions to build a module resolver
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -212,6 +214,7 @@ impl Resolver for FileResolver {
 fn resolve_rec<R: Resolver>(
     resource: &R::Resource,
     resolver: &R,
+    mangler: &impl Mangler<R>,
     visited: &mut Modules<R>,
 ) -> Result<Module<R>, ImportError> {
     let source = resolver.resolve_file(resource)?;
@@ -222,7 +225,7 @@ fn resolve_rec<R: Resolver>(
         if let Some(submodule) = visited.get(child) {
             module.resolve_import(child, submodule.clone());
         } else {
-            let submodule = resolve_rec(child, resolver, visited)?;
+            let submodule = resolve_rec(child, resolver, mangler, visited)?;
             let submodule = Rc::new(submodule);
             module.resolve_import(child, submodule.clone());
             visited.insert(child.clone(), submodule);
@@ -231,15 +234,19 @@ fn resolve_rec<R: Resolver>(
 
     // mangle only after imports have been resolved.
     assert!(module.is_resolved());
-    // module.mangle()?;
+    module.mangle(mangler)?;
 
     Ok(module)
 }
 
 impl<R: Resolver> Module<R> {
-    pub fn resolve(resource: &R::Resource, resolver: &R) -> Result<Module<R>, ImportError> {
+    pub fn resolve(
+        resource: &R::Resource,
+        resolver: &R,
+        mangler: &impl Mangler<R>,
+    ) -> Result<Module<R>, ImportError> {
         let mut submodules = Modules::new();
-        let module = resolve_rec(resource, resolver, &mut submodules)?;
+        let module = resolve_rec(resource, resolver, mangler, &mut submodules)?;
         Ok(module)
     }
 }
