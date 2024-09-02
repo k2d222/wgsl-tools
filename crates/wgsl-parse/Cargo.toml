@@ -15,6 +15,7 @@ lalrpop-util = "0.20.2"
 lexical = { version = "6.1.1", features = ["format", "power-of-two"] }
 logos = "0.14.1"
 thiserror = "1.0.63"
+wgsl-parse-macros = { path = "../wgsl-parse-macros" }
 
 [build-dependencies]
 lalrpop = { version = "0.20.2", default-features = false }

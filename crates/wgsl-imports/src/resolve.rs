@@ -34,7 +34,7 @@ type Modules<R: Resolver> = HashMap<R::Resource, Rc<Module<R>>>;
 pub enum ImportError {
     #[error("parse error: `{0}`")]
     ParseError(wgsl_parse::error::Error),
-    #[error("duplicate imported symbol `{0}`")]
+    #[error("duplicate imported item `{0}`")]
     DuplicateSymbol(String),
     #[error("failed to resolve import path `{0}`")]
     ResolutionFailure(ImportPath),
@@ -231,7 +231,7 @@ fn resolve_rec<R: Resolver>(
 
     // mangle only after imports have been resolved.
     assert!(module.is_resolved());
-    module.mangle()?;
+    // module.mangle()?;
 
     Ok(module)
 }
