@@ -11,3 +11,4 @@ itertools = "0.13.0"
 ropey = "1.6.1"
 thiserror = "1.0.63"
 wgsl-parse = { path = "../wgsl-parse" }
+wgsl-parse-macros = { path = "../wgsl-parse-macros" }
