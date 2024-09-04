@@ -824,6 +824,7 @@ dependencies = [
  "ropey",
  "thiserror",
  "wgsl-parse",
+ "wgsl-parse-macros",
 ]
 
 [[package]]

@@ -125,53 +125,109 @@ fn stat_visit_exprs(stat: &mut Statement) -> impl Iterator<Item = &mut Expressio
 }
 
 fn replace_imported_ident(module: &mut TranslationUnit, old_ident: &str, new_ident: &str) {
-    for type_expr in mod_visit_type_exprs(module) {
-        if type_expr.name == old_ident {
-            type_expr.name = new_ident.to_string();
-        }
+    fn expr_visit_exprs(expr: &Expression) -> impl Iterator<Item = &Expression> {
+        query!(
+            expr.{
+                Expression::Parenthesized.(x => expr_visit_exprs(x)),
+                Expression::NamedComponent.base.(x => expr_visit_exprs(x)),
+                Expression::Indexing.{
+                    base.(x => expr_visit_exprs(x)),
+                    index.(x => expr_visit_exprs(x)),
+                },
+                Expression::Unary.operand.(x => expr_visit_exprs(x)),
+                Expression::Binary.{
+                    left.(x => expr_visit_exprs(x)),
+                    right.(x => expr_visit_exprs(x)),
+                },
+                Expression::FunctionCall.arguments.[].(expr_visit_exprs),
+            }
+        )
     }
 
-    fn expr_replace(expr: &mut Expression, old_ident: &str, new_ident: &str) {
-        match expr {
-            Expression::Parenthesized(expr) => {
-                expr_visit_exprs(expr).for_each(|x| expr_replace(x, old_ident, new_ident))
+    fn stat_visit_exprs(statement: &Statement) -> impl Iterator<Item = &Expression> {
+        query!(
+            statement.{
+                Statement::Compound.statements.[].(stat_visit_exprs),
+                Statement::Assignment.{ lhs, rhs },
+                Statement::Increment,
+                Statement::Decrement,
+                Statement::If.{
+                    if_clause.{
+                        0,
+                        1.statements.[].(stat_visit_exprs),
+                    },
+                    else_if_clauses.[].{
+                        0,
+                        1.statements.[].(stat_visit_exprs),
+                    }
+                },
+                Statement::Switch.{
+                    expression,
+                    clauses.[].{
+                        case_selectors.[].CaseSelector::Expression,
+                        body.statements.[].(stat_visit_exprs),
+                    }
+                },
+                Statement::Loop.{
+                    body.statements.[].(stat_visit_exprs),
+                    continuing.[].{
+                        body.statements.[].(stat_visit_exprs),
+                        break_if.[],
+                    }
+                },
+                Statement::For.{
+                    initializer.[].(x => stat_visit_exprs(x)),
+                    condition.[],
+                    update.[].(x => stat_visit_exprs(x)),
+                    body.statements.[].(stat_visit_exprs),
+                },
+                Statement::While.{
+                    condition,
+                    body.statements.[].(stat_visit_exprs),
+                },
+                Statement::Return.[],
+                Statement::FunctionCall.arguments.[],
+                Statement::ConstAssert.expression,
+                Statement::Declaration.initializer.[],
             }
-            Expression::NamedComponent(x) => {
-                expr_visit_exprs(&mut x.base).for_each(|x| expr_replace(x, old_ident, new_ident))
-            }
-            Expression::Indexing(x) => {
-                expr_visit_exprs(&mut x.base).for_each(|x| expr_replace(x, old_ident, new_ident));
-                expr_visit_exprs(&mut x.index).for_each(|x| expr_replace(x, old_ident, new_ident));
-            }
-            Expression::Unary(x) => {
-                expr_visit_exprs(&mut x.operand).for_each(|x| expr_replace(x, old_ident, new_ident))
-            }
-            Expression::Binary(x) => {
-                expr_visit_exprs(&mut x.left).for_each(|x| expr_replace(x, old_ident, new_ident));
-                expr_visit_exprs(&mut x.right).for_each(|x| expr_replace(x, old_ident, new_ident));
-            }
-            Expression::FunctionCall(call_expr) => {
-                if call_expr.name == old_ident {
-                    call_expr.name = new_ident.to_string();
-                }
-                call_expr
-                    .arguments
-                    .visit_mut()
-                    .each()
-                    .flat_map(expr_visit_exprs)
-                    .for_each(|x| expr_replace(x, old_ident, new_ident));
-            }
-            Expression::Type(type_expr) => {
-                if type_expr.name == old_ident {
-                    type_expr.name = new_ident.to_string();
-                }
-            }
-            _ => (),
-        }
+        )
     }
 
+    fn expr_visit_type_exprs(expr: &Expression) -> impl Iterator<Item = &TypeExpression> {
+        query!(expr.{
+            Expression::Parenthesized.(x => expr_visit_type_exprs(x)),
+            Expression::NamedComponent.base.(x => expr_visit_type_exprs(x)),
+            Expression::Indexing.{ base.(x => expr_visit_type_exprs(x)), index.(x => expr_visit_type_exprs(x)) },
+            Expression::Unary.operand.(x => expr_visit_type_exprs(x)),
+            Expression::Binary.{ left.(x => expr_visit_type_exprs(x)), right.(x => expr_visit_type_exprs(x)) },
+            Expression::FunctionCall.arguments.[].(expr_visit_type_exprs),
+            Expression::Type,
+        })
+    }
+
+    fn mod_visit_type_exprs(module: &TranslationUnit) -> impl Iterator<Item = &TypeExpression> {
+        query!(
+            module.global_declarations.[].{
+                GlobalDeclaration::Declaration.{
+                    typ.[],
+                    initializer.[].(expr_visit_type_exprs),
+                },
+                GlobalDeclaration::TypeAlias.typ,
+                GlobalDeclaration::Struct.members.[].typ,
+                GlobalDeclaration::Function.{
+                    parameters.[].typ,
+                    return_type.[],
+                    body.statements.[].(stat_visit_exprs).(expr_visit_type_exprs),
+                }
+            }
+        )
+    }
+
+    for ty in mod_visit_type_exprs(module) {
+        println!("ty: {ty:?}");
+    }
     for expr in mod_visit_exprs(module) {
-        expr_replace(expr, old_ident, new_ident)
+        println!("ty: {expr:?}");
     }
 }
 
