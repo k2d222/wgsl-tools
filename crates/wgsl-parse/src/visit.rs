@@ -1,148 +1,233 @@
-pub use wgsl_parse_macros::Visit;
+use wgsl_parse_macros::{query, query_mut};
 
-pub trait Visit {
-    fn visit(&self) -> impl Iterator<Item = &Self> {
-        std::iter::once(self)
-    }
-    fn visit_mut(&mut self) -> impl Iterator<Item = &mut Self> {
-        std::iter::once(self)
-    }
+use crate::syntax::*;
+
+pub trait Visit<T> {
+    fn visit<'a>(&'a self) -> impl Iterator<Item = &'a T>
+    where
+        T: 'a;
 }
 
-impl<T> Visit for Vec<T> {}
-
-pub trait VisitVec<'a, T>
-where
-    T: 'a,
-{
-    fn each(self) -> impl Iterator<Item = &'a T>;
+pub trait VisitMut<T> {
+    fn visit_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T>
+    where
+        T: 'a;
 }
 
-impl<'a, T, I> VisitVec<'a, T> for I
-where
-    I: Iterator<Item = &'a Vec<T>>,
-    T: 'a,
-{
-    fn each(self) -> impl Iterator<Item = &'a T> {
-        self.map(|x| x.iter()).flatten()
-    }
-}
+// TODO: find a way to avoid duplication
 
-pub trait VisitMutVec<'a, T>
-where
-    T: 'a,
-{
-    fn each(self) -> impl Iterator<Item = &'a mut T>;
-}
-
-impl<'a, T, I> VisitMutVec<'a, T> for I
-where
-    I: Iterator<Item = &'a mut Vec<T>>,
-    T: 'a,
-{
-    fn each(self) -> impl Iterator<Item = &'a mut T> {
-        self.map(|x| x.iter_mut()).flatten()
-    }
-}
-
-impl<T> Visit for Option<T> {}
-
-pub trait VisitOption<'a, T>
-where
-    T: 'a,
-{
-    fn some(self) -> impl Iterator<Item = &'a T>;
-}
-
-impl<'a, T, I> VisitOption<'a, T> for I
-where
-    I: Iterator<Item = &'a Option<T>>,
-    T: 'a,
-{
-    fn some(self) -> impl Iterator<Item = &'a T> {
-        self.map(|x| x.iter()).flatten()
-    }
-}
-
-pub trait VisitMutOption<'a, T>
-where
-    T: 'a,
-{
-    fn some(self) -> impl Iterator<Item = &'a mut T>;
-}
-
-impl<'a, T, I> VisitMutOption<'a, T> for I
-where
-    I: Iterator<Item = &'a mut Option<T>>,
-    T: 'a,
-{
-    fn some(self) -> impl Iterator<Item = &'a mut T> {
-        self.map(|x| x.iter_mut()).flatten()
-    }
-}
-
-// #[macro_export]
-// macro_rules! visit_variants {
-//     ($m:ident { $($pat:pat => $expr:expr),* $(,)? }) => {
-//         {
-//             let x: Box<dyn Iterator<Item = _>> = match $m {
-//                 $(
-//                     $pat => Box::new($expr),
-//                 )*
-//                 _ => Box::new(std::iter::empty()),
-//             };
-//             x
-//         }
-//     };
-// }
-
-// #[macro_export]
-// macro_rules! visit_fields {
-//     ({ $($expr:expr),* $(,)? }) => {
-//         itertools::chain!(
-//             $( $expr, )*
-//         )
-//     };
-// }
-
-#[macro_export]
-macro_rules! visit_variants {
-    { $($pat:pat => $expr:expr),* $(,)? } => {
-        |x: &mut _| {
-            let x: Box<dyn Iterator<Item = _>> = match x {
-                $(
-                    $pat => Box::new($expr),
-                )*
-                _ => Box::new(std::iter::empty()),
-            };
-            x
-        }
-    };
-    ($m:ident, { $($pat:pat => $expr:expr),* $(,)? }) => {
-        {
-            let x: Box<dyn Iterator<Item = _>> = match $m {
-                $(
-                    $pat => Box::new($expr),
-                )*
-                _ => Box::new(std::iter::empty()),
-            };
-            x
+macro_rules! impl_visit {
+    ($type:ident => $visited:ident, $expr:tt) => {
+        impl Visit<$visited> for $type {
+            fn visit<'a>(&'a self) -> impl Iterator<Item = &'a $visited>
+            where
+                $visited: 'a,
+            {
+                let root: &$type = self;
+                query!(root.$expr)
+            }
         }
     };
 }
 
-#[macro_export]
-macro_rules! visit_fields {
-    { $($field:ident => $expr:expr),* $(,)? } => {
-        |x: &mut _| {
-            itertools::chain!(
-                $( { let $field = &mut x.$field; $expr }, )*
-            )
+macro_rules! impl_visit_mut {
+    ($type:ident => $visited:ident, $expr:tt) => {
+        impl VisitMut<$visited> for $type {
+            fn visit_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut $visited>
+            where
+                $visited: 'a,
+            {
+                let root: &mut $type = self;
+                query_mut!(root.$expr)
+            }
         }
     };
-    ($m:ident, { $($field:ident => $expr:expr),* $(,)? }) => {
-        itertools::chain!(
-            $( { let $field = &mut $m.$field; $expr }, )*
-        )
-    };
+}
+
+impl_visit! { Expression => Expression,
+    {
+        Expression::Parenthesized.(x => Visit::<Expression>::visit(&**x)),
+        Expression::NamedComponent.base.(x => Visit::<Expression>::visit(&**x)),
+        Expression::Indexing.{
+            base.(x => Visit::<Expression>::visit(&**x)),
+            index.(x => Visit::<Expression>::visit(&**x)),
+        },
+        Expression::Unary.operand.(x => Visit::<Expression>::visit(&**x)),
+        Expression::Binary.{
+            left.(x => Visit::<Expression>::visit(&**x)),
+            right.(x => Visit::<Expression>::visit(&**x)),
+        },
+        Expression::FunctionCall.arguments.[].(x => Visit::<Expression>::visit(x)),
+    }
+}
+
+impl_visit_mut! { Expression => Expression,
+    {
+        Expression::Parenthesized.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        Expression::NamedComponent.base.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        Expression::Indexing.{
+            base.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+            index.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        },
+        Expression::Unary.operand.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        Expression::Binary.{
+            left.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+            right.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        },
+        Expression::FunctionCall.arguments.[].(x => VisitMut::<Expression>::visit_mut(x)),
+    }
+}
+
+impl_visit! { Expression => TypeExpression,
+    {
+        Expression::Parenthesized.(x => Visit::<TypeExpression>::visit(&**x)),
+        Expression::NamedComponent.base.(x => Visit::<TypeExpression>::visit(&**x)),
+        Expression::Indexing.{ base.(x => Visit::<TypeExpression>::visit(&**x)), index.(x => Visit::<TypeExpression>::visit(&**x)) },
+        Expression::Unary.operand.(x => Visit::<TypeExpression>::visit(&**x)),
+        Expression::Binary.{ left.(x => Visit::<TypeExpression>::visit(&**x)), right.(x => Visit::<TypeExpression>::visit(&**x)) },
+        Expression::FunctionCall.arguments.[].(x => Visit::<TypeExpression>::visit(x)),
+        Expression::Type,
+    }
+}
+
+impl_visit_mut! { Expression => TypeExpression,
+    {
+        Expression::Parenthesized.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
+        Expression::NamedComponent.base.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
+        Expression::Indexing.{ base.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)), index.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)) },
+        Expression::Unary.operand.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
+        Expression::Binary.{ left.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)), right.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)) },
+        Expression::FunctionCall.arguments.[].(x => VisitMut::<TypeExpression>::visit_mut(x)),
+        Expression::Type,
+    }
+}
+
+impl_visit! { Statement => Expression,
+    {
+        Statement::Compound.statements.[].(x => Visit::<Expression>::visit(x)),
+        Statement::Assignment.{ lhs, rhs },
+        Statement::Increment,
+        Statement::Decrement,
+        Statement::If.{
+            if_clause.{
+                0,
+                1.statements.[].(x => Visit::<Expression>::visit(x)),
+            },
+            else_if_clauses.[].{
+                0,
+                1.statements.[].(x => Visit::<Expression>::visit(x)),
+            }
+        },
+        Statement::Switch.{
+            expression,
+            clauses.[].{
+                case_selectors.[].CaseSelector::Expression,
+                body.statements.[].(x => Visit::<Expression>::visit(x)),
+            }
+        },
+        Statement::Loop.{
+            body.statements.[].(x => Visit::<Expression>::visit(x)),
+            continuing.[].{
+                body.statements.[].(x => Visit::<Expression>::visit(x)),
+                break_if.[],
+            }
+        },
+        Statement::For.{
+            initializer.[].(x => Visit::<Expression>::visit(&**x)),
+            condition.[],
+            update.[].(x => Visit::<Expression>::visit(&**x)),
+            body.statements.[].(x => Visit::<Expression>::visit(x)),
+        },
+        Statement::While.{
+            condition,
+            body.statements.[].(x => Visit::<Expression>::visit(x)),
+        },
+        Statement::Return.[],
+        Statement::FunctionCall.arguments.[],
+        Statement::ConstAssert.expression,
+        Statement::Declaration.initializer.[],
+    }
+}
+
+impl_visit_mut! { Statement => Expression,
+    {
+        Statement::Compound.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+        Statement::Assignment.{ lhs, rhs },
+        Statement::Increment,
+        Statement::Decrement,
+        Statement::If.{
+            if_clause.{
+                0,
+                1.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            },
+            else_if_clauses.[].{
+                0,
+                1.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            }
+        },
+        Statement::Switch.{
+            expression,
+            clauses.[].{
+                case_selectors.[].CaseSelector::Expression,
+                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            }
+        },
+        Statement::Loop.{
+            body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            continuing.[].{
+                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                break_if.[],
+            }
+        },
+        Statement::For.{
+            initializer.[].(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+            condition.[],
+            update.[].(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+            body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+        },
+        Statement::While.{
+            condition,
+            body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+        },
+        Statement::Return.[],
+        Statement::FunctionCall.arguments.[],
+        Statement::ConstAssert.expression,
+        Statement::Declaration.initializer.[],
+    }
+}
+
+impl_visit! { TranslationUnit => TypeExpression,
+    {
+        global_declarations.[].{
+            GlobalDeclaration::Declaration.{
+                typ.[],
+                initializer.[].(x => Visit::<TypeExpression>::visit(x)),
+            },
+            GlobalDeclaration::TypeAlias.typ,
+            GlobalDeclaration::Struct.members.[].typ,
+            GlobalDeclaration::Function.{
+                parameters.[].typ,
+                return_type.[],
+                body.statements.[].(x => Visit::<Expression>::visit(x)).(x => Visit::<TypeExpression>::visit(x)),
+            }
+        }
+    }
+}
+
+impl_visit_mut! { TranslationUnit => TypeExpression,
+    {
+        global_declarations.[].{
+            GlobalDeclaration::Declaration.{
+                typ.[],
+                initializer.[].(x => VisitMut::<TypeExpression>::visit_mut(x)),
+            },
+            GlobalDeclaration::TypeAlias.typ,
+            GlobalDeclaration::Struct.members.[].typ,
+            GlobalDeclaration::Function.{
+                parameters.[].typ,
+                return_type.[],
+                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)).(x => VisitMut::<TypeExpression>::visit_mut(x)),
+            }
+        }
+    }
 }

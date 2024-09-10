@@ -1,169 +1,12 @@
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::quote;
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
-    token, Data, DeriveInput, Expr, Fields, Ident, LitInt, Token,
+    token, Expr, Ident, LitInt, Token,
 };
-
-#[proc_macro_derive(Visit)]
-pub fn derive_visit_fn(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let name = &input.ident;
-    let visit_name = format_ident!("Visit{name}");
-    let visit_mut_name = format_ident!("VisitMut{name}");
-
-    let expanded = match input.data {
-        Data::Struct(data) => match data.fields {
-            Fields::Named(fields) => {
-                let fields = fields.named.iter().map(|field| (&field.ident, &field.ty));
-                let trait_fns = fields.clone().map(|(name, ty)| {
-                    quote! {
-                        fn #name(self) -> impl Iterator<Item = &'a #ty>;
-                    }
-                });
-                let trait_mut_fns = fields.clone().map(|(name, ty)| {
-                    quote! {
-                        fn #name(self) -> impl Iterator<Item = &'a mut #ty>;
-                    }
-                });
-                let trait_fn_impls = fields.clone().map(|(name, ty)| {
-                    quote! {
-                        fn #name(self) -> impl Iterator<Item = &'a #ty> {
-                            self.map(|x| &x.#name)
-                        }
-                    }
-                });
-                let trait_mut_fn_impls = fields.map(|(name, ty)| {
-                    quote! {
-                        fn #name(self) -> impl Iterator<Item = &'a mut #ty> {
-                            self.map(|x| &mut x.#name)
-                        }
-                    }
-                });
-                quote! {
-                    pub trait #visit_name<'a> {
-                        #(#trait_fns)*
-                    }
-                    pub trait #visit_mut_name<'a> {
-                        #(#trait_mut_fns)*
-                    }
-
-                    impl<'a, I> #visit_name<'a> for I
-                    where
-                        I: Iterator<Item = &'a #name>,
-                    {
-                        #(#trait_fn_impls)*
-                    }
-                    impl<'a, I> #visit_mut_name<'a> for I
-                    where
-                        I: Iterator<Item = &'a mut #name>,
-                    {
-                        #(#trait_mut_fn_impls)*
-                    }
-
-                    impl #name {
-                        pub fn visit(&self) -> impl Iterator<Item = &#name> {
-                            std::iter::once(self)
-                        }
-                    }
-                    impl #name {
-                        pub fn visit_mut(&mut self) -> impl Iterator<Item = &mut #name> {
-                            std::iter::once(self)
-                        }
-                    }
-                }
-            }
-            Fields::Unnamed(_) => todo!(),
-            Fields::Unit => todo!(),
-        },
-        Data::Enum(data) => {
-            let unnamed_variants =
-                data.variants
-                    .iter()
-                    .filter_map(|variant| match &variant.fields {
-                        Fields::Unnamed(fields) => {
-                            let var_snake =
-                                format_ident!("match_{}", variant.ident.to_string().to_lowercase());
-                            Some((&variant.ident, var_snake, fields))
-                        }
-                        _ => None,
-                    });
-            let trait_fns = unnamed_variants.clone().map(|(_, var_snake, fields)| {
-                let ty = &fields.unnamed.first().unwrap().ty;
-                quote! {
-                    fn #var_snake(self) -> impl Iterator<Item = &'a #ty>;
-                }
-            });
-            let trait_mut_fns = unnamed_variants.clone().map(|(_, var_snake, fields)| {
-                let ty = &fields.unnamed.first().unwrap().ty;
-                quote! {
-                    fn #var_snake(self) -> impl Iterator<Item = &'a mut #ty>;
-                }
-            });
-            let trait_fn_impls = unnamed_variants.clone().map(|(var, var_snake, fields)| {
-                let ty = &fields.unnamed.first().unwrap().ty;
-                quote! {
-                    fn #var_snake(self) -> impl Iterator<Item = &'a #ty> {
-                        self.filter_map(|x| match x {
-                            #name::#var(x) => Some(x),
-                            _ => None,
-                        })
-                    }
-                }
-            });
-            let trait_mut_fn_impls = unnamed_variants.map(|(var, var_snake, fields)| {
-                let ty = &fields.unnamed.first().unwrap().ty;
-                quote! {
-                    fn #var_snake(self) -> impl Iterator<Item = &'a mut #ty> {
-                        self.filter_map(|x| match x {
-                            #name::#var(x) => Some(x),
-                            _ => None,
-                        })
-                    }
-                }
-            });
-            quote! {
-                pub trait #visit_name<'a> {
-                    #(#trait_fns)*
-                }
-                pub trait #visit_mut_name<'a> {
-                    #(#trait_mut_fns)*
-                }
-
-                impl<'a, I> #visit_name<'a> for I
-                where
-                    I: Iterator<Item = &'a #name>,
-                {
-                    #(#trait_fn_impls)*
-                }
-                impl<'a, I> #visit_mut_name<'a> for I
-                where
-                    I: Iterator<Item = &'a mut #name>,
-                {
-                    #(#trait_mut_fn_impls)*
-                }
-
-                impl #name {
-                    pub fn visit(&self) -> impl Iterator<Item = &#name> {
-                        std::iter::once(self)
-                    }
-                }
-                impl #name {
-                    pub fn visit_mut(&mut self) -> impl Iterator<Item = &mut #name> {
-                        std::iter::once(self)
-                    }
-                }
-            }
-        }
-        Data::Union(_) => todo!(),
-    };
-
-    TokenStream::from(expanded)
-}
 
 struct QueryInput {
     components: Punctuated<QueryComponent, Token![.]>,
@@ -239,14 +82,17 @@ impl Parse for QueryInput {
     }
 }
 
-#[proc_macro]
-pub fn query(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as QueryInput);
-
+fn query_impl(input: QueryInput, mutable: bool) -> TokenStream {
     fn quote_components(
         iter: impl Iterator<Item = QueryComponent>,
+        mutable: bool,
     ) -> impl Iterator<Item = proc_macro2::TokenStream> {
-        iter.map(|component| match component {
+        let ref_ = if mutable {
+            quote! { &mut }
+        } else {
+            quote! { & }
+        };
+        iter.map(move |component| match component {
             QueryComponent::Variant(enum_name, variant) => quote! {
                 filter_map(|x| match x {
                     #enum_name :: #variant(x) => Some(x),
@@ -254,10 +100,10 @@ pub fn query(input: TokenStream) -> TokenStream {
                 })
             },
             QueryComponent::Member(member) => {
-                quote! { map(|x| &x.#member) }
+                quote! { map(|x| #ref_ x.#member) }
             }
             QueryComponent::Index(index) => {
-                quote! { map(|x| &x.#index) }
+                quote! { map(|x| #ref_ x.#index) }
             }
             QueryComponent::Branch(kind, branch) => match kind {
                 BranchKind::Variants => {
@@ -269,7 +115,7 @@ pub fn query(input: TokenStream) -> TokenStream {
                             }
                             _ => return None,
                         };
-                        let rest = quote_components(iter);
+                        let rest = quote_components(iter, mutable);
                         Some(quote! { #first => Box::new(std::iter::once(x) #(.#rest)*) })
                     });
                     quote! {
@@ -286,11 +132,11 @@ pub fn query(input: TokenStream) -> TokenStream {
                         let mut iter = case.components.into_iter();
                         let first = match iter.next() {
                             Some(QueryComponent::Member(member)) => {
-                                quote! { std::iter::once(&x.#member) }
+                                quote! { std::iter::once(#ref_ x.#member) }
                             }
                             _ => return None,
                         };
-                        let rest = quote_components(iter);
+                        let rest = quote_components(iter, mutable);
                         Some(quote! { #first #(.#rest)* })
                     });
                     quote! {
@@ -301,7 +147,7 @@ pub fn query(input: TokenStream) -> TokenStream {
                 }
             },
             QueryComponent::Iter => {
-                quote! { flat_map(|x| { x.iter() }) }
+                quote! { flat_map(|x| { x.into_iter() }) }
             }
             QueryComponent::Expr(ident, expr) => {
                 if let Some(ident) = ident {
@@ -321,11 +167,23 @@ pub fn query(input: TokenStream) -> TokenStream {
         _ => return quote! {}.into(),
     };
 
-    let rest = quote_components(iter);
+    let rest = quote_components(iter, mutable);
 
     let expanded = quote! {
         #first #(.#rest)*
     };
 
     expanded.into()
+}
+
+#[proc_macro]
+pub fn query(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as QueryInput);
+    query_impl(input, false)
+}
+
+#[proc_macro]
+pub fn query_mut(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as QueryInput);
+    query_impl(input, true)
 }
