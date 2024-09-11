@@ -46,7 +46,7 @@ macro_rules! impl_visit_mut {
 
 impl_visit! { Expression => Expression,
     {
-        Expression::Parenthesized.(x => Visit::<Expression>::visit(&**x)),
+        Expression::Parenthesized.expression.(x => Visit::<Expression>::visit(&**x)),
         Expression::NamedComponent.base.(x => Visit::<Expression>::visit(&**x)),
         Expression::Indexing.{
             base.(x => Visit::<Expression>::visit(&**x)),
@@ -63,7 +63,7 @@ impl_visit! { Expression => Expression,
 
 impl_visit_mut! { Expression => Expression,
     {
-        Expression::Parenthesized.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        Expression::Parenthesized.expression.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
         Expression::NamedComponent.base.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
         Expression::Indexing.{
             base.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
@@ -80,7 +80,7 @@ impl_visit_mut! { Expression => Expression,
 
 impl_visit! { Expression => TypeExpression,
     {
-        Expression::Parenthesized.(x => Visit::<TypeExpression>::visit(&**x)),
+        Expression::Parenthesized.expression.(x => Visit::<TypeExpression>::visit(&**x)),
         Expression::NamedComponent.base.(x => Visit::<TypeExpression>::visit(&**x)),
         Expression::Indexing.{ base.(x => Visit::<TypeExpression>::visit(&**x)), index.(x => Visit::<TypeExpression>::visit(&**x)) },
         Expression::Unary.operand.(x => Visit::<TypeExpression>::visit(&**x)),
@@ -92,7 +92,7 @@ impl_visit! { Expression => TypeExpression,
 
 impl_visit_mut! { Expression => TypeExpression,
     {
-        Expression::Parenthesized.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
+        Expression::Parenthesized.expression.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
         Expression::NamedComponent.base.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
         Expression::Indexing.{ base.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)), index.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)) },
         Expression::Unary.operand.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
@@ -106,8 +106,8 @@ impl_visit! { Statement => Expression,
     {
         Statement::Compound.statements.[].(x => Visit::<Expression>::visit(x)),
         Statement::Assignment.{ lhs, rhs },
-        Statement::Increment,
-        Statement::Decrement,
+        Statement::Increment.expression,
+        Statement::Decrement.expression,
         Statement::If.{
             if_clause.{
                 0,
@@ -129,7 +129,7 @@ impl_visit! { Statement => Expression,
             body.statements.[].(x => Visit::<Expression>::visit(x)),
             continuing.[].{
                 body.statements.[].(x => Visit::<Expression>::visit(x)),
-                break_if.[],
+                break_if.[].expression,
             }
         },
         Statement::For.{
@@ -142,7 +142,7 @@ impl_visit! { Statement => Expression,
             condition,
             body.statements.[].(x => Visit::<Expression>::visit(x)),
         },
-        Statement::Return.[],
+        Statement::Return.expression.[],
         Statement::FunctionCall.arguments.[],
         Statement::ConstAssert.expression,
         Statement::Declaration.initializer.[],
@@ -153,8 +153,8 @@ impl_visit_mut! { Statement => Expression,
     {
         Statement::Compound.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
         Statement::Assignment.{ lhs, rhs },
-        Statement::Increment,
-        Statement::Decrement,
+        Statement::Increment.expression,
+        Statement::Decrement.expression,
         Statement::If.{
             if_clause.{
                 0,
@@ -176,7 +176,7 @@ impl_visit_mut! { Statement => Expression,
             body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
             continuing.[].{
                 body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
-                break_if.[],
+                break_if.[].expression,
             }
         },
         Statement::For.{
@@ -189,7 +189,7 @@ impl_visit_mut! { Statement => Expression,
             condition,
             body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
         },
-        Statement::Return.[],
+        Statement::Return.expression.[],
         Statement::FunctionCall.arguments.[],
         Statement::ConstAssert.expression,
         Statement::Declaration.initializer.[],

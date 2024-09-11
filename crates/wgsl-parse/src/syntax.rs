@@ -184,7 +184,10 @@ pub enum LiteralExpression {
     F16(f32),
 }
 
-pub type ParenthesizedExpression = Box<Expression>;
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParenthesizedExpression {
+    pub expression: Box<Expression>,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedComponentExpression {
@@ -243,13 +246,18 @@ pub enum BinaryOperator {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FunctionCallExpression {
+pub struct FunctionCall {
     pub name: String,
     pub template_args: Option<Vec<TemplateArg>>,
     pub arguments: Vec<Expression>,
 }
 
-pub type IdentifierExpression = String;
+pub type FunctionCallExpression = FunctionCall;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IdentifierExpression {
+    pub identifier: String,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeExpression {
@@ -309,9 +317,15 @@ pub enum AssignmentOperator {
     ShiftLeftAssign,
 }
 
-pub type IncrementStatement = Expression;
+#[derive(Clone, Debug, PartialEq)]
+pub struct IncrementStatement {
+    pub expression: Expression,
+}
 
-pub type DecrementStatement = Expression;
+#[derive(Clone, Debug, PartialEq)]
+pub struct DecrementStatement {
+    pub expression: Expression,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfStatement {
@@ -360,7 +374,10 @@ pub struct ContinuingStatement {
     pub break_if: Option<BreakIfStatement>,
 }
 
-pub type BreakIfStatement = Expression;
+#[derive(Clone, Debug, PartialEq)]
+pub struct BreakIfStatement {
+    pub expression: Expression,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForStatement {
@@ -378,9 +395,12 @@ pub struct WhileStatement {
     pub body: CompoundStatement,
 }
 
-pub type ReturnStatement = Option<Expression>;
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReturnStatement {
+    pub expression: Option<Expression>,
+}
 
-pub type FunctionCallStatement = FunctionCallExpression;
+pub type FunctionCallStatement = FunctionCall;
 
 pub type ConstAssertStatement = ConstAssert;
 

@@ -202,17 +202,17 @@ fn fmt_attrs(attrs: &[Attribute], inline: bool) -> String {
 impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Expression::Literal(print) => write!(f, "{}", print),
-            Expression::Parenthesized(expr) => {
-                write!(f, "({expr})")
+            Expression::Literal(print) => write!(f, "{print}"),
+            Expression::Parenthesized(print) => {
+                write!(f, "{print}")
             }
-            Expression::NamedComponent(print) => write!(f, "{}", print),
-            Expression::Indexing(print) => write!(f, "{}", print),
-            Expression::Unary(print) => write!(f, "{}", print),
-            Expression::Binary(print) => write!(f, "{}", print),
-            Expression::FunctionCall(print) => write!(f, "{}", print),
-            Expression::Identifier(print) => write!(f, "{}", print),
-            Expression::Type(print) => write!(f, "{}", print),
+            Expression::NamedComponent(print) => write!(f, "{print}"),
+            Expression::Indexing(print) => write!(f, "{print}"),
+            Expression::Unary(print) => write!(f, "{print}"),
+            Expression::Binary(print) => write!(f, "{print}"),
+            Expression::FunctionCall(print) => write!(f, "{print}"),
+            Expression::Identifier(print) => write!(f, "{print}"),
+            Expression::Type(print) => write!(f, "{print}"),
         }
     }
 }
@@ -232,12 +232,12 @@ impl Display for LiteralExpression {
     }
 }
 
-// impl Display for ParenthesizedExpression {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         let expr = self);
-//         write!(f, "({expr})")
-//     }
-// }
+impl Display for ParenthesizedExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = &self.expression;
+        write!(f, "({expr})")
+    }
+}
 
 impl Display for NamedComponentExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -309,7 +309,7 @@ impl Display for BinaryOperator {
     }
 }
 
-impl Display for FunctionCallExpression {
+impl Display for FunctionCall {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = &self.name;
         let tplt = fmt_template(&self.template_args);
@@ -318,11 +318,12 @@ impl Display for FunctionCallExpression {
     }
 }
 
-// impl Display for IdentifierExpression {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         write!(f, "{self}")
-//     }
-// }
+impl Display for IdentifierExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let ident = &self.identifier;
+        write!(f, "{ident}")
+    }
+}
 
 impl Display for TypeExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -352,28 +353,22 @@ impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Statement::Void => write!(f, ";"),
-            Statement::Compound(print) => write!(f, "{}", print),
-            Statement::Assignment(print) => write!(f, "{}", print),
-            Statement::Increment(expr) => write!(f, "{}++;", expr),
-            Statement::Decrement(expr) => write!(f, "{}--;", expr),
-            Statement::If(print) => write!(f, "{}", print),
-            Statement::Switch(print) => write!(f, "{}", print),
-            Statement::Loop(print) => write!(f, "{}", print),
-            Statement::For(print) => write!(f, "{}", print),
-            Statement::While(print) => write!(f, "{}", print),
+            Statement::Compound(print) => write!(f, "{print}"),
+            Statement::Assignment(print) => write!(f, "{print}"),
+            Statement::Increment(print) => write!(f, "{print}"),
+            Statement::Decrement(print) => write!(f, "{print}"),
+            Statement::If(print) => write!(f, "{print}"),
+            Statement::Switch(print) => write!(f, "{print}"),
+            Statement::Loop(print) => write!(f, "{print}"),
+            Statement::For(print) => write!(f, "{print}"),
+            Statement::While(print) => write!(f, "{print}"),
             Statement::Break => write!(f, "break;"),
             Statement::Continue => write!(f, "continue;"),
-            Statement::Return(expr) => {
-                let expr = expr
-                    .as_ref()
-                    .map(|expr| format!(" {}", expr))
-                    .unwrap_or_default();
-                write!(f, "return{expr};")
-            }
+            Statement::Return(print) => write!(f, "{print}"),
             Statement::Discard => write!(f, "discard;"),
-            Statement::FunctionCall(expr) => write!(f, "{};", expr),
-            Statement::ConstAssert(print) => write!(f, "{}", print),
-            Statement::Declaration(print) => write!(f, "{}", print),
+            Statement::FunctionCall(print) => write!(f, "{print};"),
+            Statement::ConstAssert(print) => write!(f, "{print}"),
+            Statement::Declaration(print) => write!(f, "{print}"),
         }
     }
 }
@@ -418,17 +413,19 @@ impl Display for AssignmentOperator {
     }
 }
 
-// impl Display for IncrementStatement {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         Ok(())
-//     }
-// }
+impl Display for IncrementStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = &self.expression;
+        write!(f, "{expr}++;")
+    }
+}
 
-// impl Display for DecrementStatement {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         Ok(())
-//     }
-// }
+impl Display for DecrementStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = &self.expression;
+        write!(f, "{expr}--;")
+    }
+}
 
 impl Display for IfStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -510,17 +507,18 @@ impl Display for ContinuingStatement {
         let break_if = self
             .break_if
             .as_ref()
-            .map(|cont| format!("{};\n", Indent(cont)))
+            .map(|print| format!("{print}\n"))
             .unwrap_or_default();
         write!(f, "continuing {body_attrs}{{\n{stmts}\n{break_if}}}")
     }
 }
 
-// impl Display for BreakIfStatement {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         Ok(())
-//     }
-// }
+impl Display for BreakIfStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = &self.expression;
+        write!(f, "break if {expr};")
+    }
+}
 
 impl Display for ForStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -557,5 +555,16 @@ impl Display for WhileStatement {
         let cond = &self.condition;
         let body = &self.body;
         write!(f, "{attrs}while ({cond}) {body}")
+    }
+}
+
+impl Display for ReturnStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = self
+            .expression
+            .as_ref()
+            .map(|expr| format!(" {expr}"))
+            .unwrap_or_default();
+        write!(f, "return{expr};")
     }
 }

@@ -387,12 +387,12 @@ PrimaryExpression: Expression = {
         let (name, template_args) = <>;
         match template_args {
             Some(_) => Expression::Type(TypeExpression { name, template_args }),
-            None => Expression::Identifier(name),
+            None => Expression::Identifier(name.into()),
         }
     }, // XXX: not sure about this one, is it type?
     CallExpression,
     Literal => Expression::Literal(<>),
-    ParenExpression,
+    ParenExpression => Expression::Parenthesized(<>),
 };
 
 CallExpression: Expression = {
@@ -408,8 +408,10 @@ CallPhrase: FunctionCallExpression = {
     },
 };
 
-ParenExpression: Expression = {
-    "(" <Expression> ")" => Expression::Parenthesized(<>.into()),
+ParenExpression: ParenthesizedExpression = {
+    "(" <Expression> ")" => ParenthesizedExpression {
+        expression: <>.into()
+    },
 };
 
 ArgumentExpressionList: Vec<Expression> = {
@@ -473,8 +475,10 @@ LhsExpression: Expression = {
  };
  
 CoreLhsExpression: Expression = {
-    Ident /* DisambiguateTemplate */ => Expression::Identifier(<>),
-    "(" <LhsExpression> ")" => Expression::Parenthesized(<>.into()),
+    Ident /* DisambiguateTemplate */ => Expression::Identifier(<>.into()),
+    "(" <LhsExpression> ")" => Expression::Parenthesized(ParenthesizedExpression {
+        expression: <>.into()
+    }),
 };
 
 MultiplicativeExpression: Expression = {
@@ -610,7 +614,7 @@ AssignmentStatement: AssignmentStatement = {
         operator, lhs, rhs
     },
     "_" "=" <rhs: Expression> => {
-        let lhs = Expression::Identifier("_".to_string());
+        let lhs = Expression::Identifier("_".to_string().into());
         AssignmentStatement { operator: AssignmentOperator::Equal, lhs, rhs }
     },
 };
@@ -628,12 +632,16 @@ CompoundAssignmentOperator: AssignmentOperator = {
     "<<=" => AssignmentOperator::ShiftLeftAssign,
 };
 
-IncrementStatement: Expression = {
-    <LhsExpression> "++",
+IncrementStatement: IncrementStatement = {
+    <expression: LhsExpression> "++" => IncrementStatement {
+        expression
+    },
 };
 
-DecrementStatement: Expression = {
-    <LhsExpression> "--",
+DecrementStatement: DecrementStatement = {
+    <expression: LhsExpression> "--" => DecrementStatement {
+        expression
+    },
 };
 
 IfStatement: IfStatement = {
@@ -730,8 +738,10 @@ BreakStatement: () = {
     "break",
 };
 
-BreakIfStatement: Expression = {
-    "break" "if" <Expression> ";",
+BreakIfStatement: BreakIfStatement = {
+    "break" "if" <expression: Expression> ";" => BreakIfStatement {
+        expression
+    },
 };
 
 ContinueStatement: () = {
@@ -747,8 +757,10 @@ ContinuingCompoundStatement: ContinuingStatement = {
     },
 };
 
-ReturnStatement: Option<Expression> = {
-    "return" <Expression?>,
+ReturnStatement: ReturnStatement = {
+    "return" <expression: Expression?> => ReturnStatement {
+        expression
+    },
 };
 
 FuncCallStatement = CallPhrase;
