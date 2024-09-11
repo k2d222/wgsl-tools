@@ -100,7 +100,7 @@ pub struct Declaration {
     pub kind: DeclarationKind,
     pub template_args: Option<Vec<TemplateArg>>,
     pub name: String,
-    pub typ: Option<TypeExpression>,
+    pub ty: Option<TypeExpression>,
     pub initializer: Option<Expression>,
 }
 
@@ -115,7 +115,7 @@ pub enum DeclarationKind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeAlias {
     pub name: String,
-    pub typ: TypeExpression,
+    pub ty: TypeExpression,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -128,7 +128,7 @@ pub struct Struct {
 pub struct StructMember {
     pub attributes: Vec<Attribute>,
     pub name: String,
-    pub typ: TypeExpression,
+    pub ty: TypeExpression,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -145,7 +145,7 @@ pub struct Function {
 pub struct FormalParameter {
     pub attributes: Vec<Attribute>,
     pub name: String,
-    pub typ: TypeExpression,
+    pub ty: TypeExpression,
 }
 
 #[derive(Clone, Debug, PartialEq)]

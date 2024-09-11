@@ -94,7 +94,7 @@ impl Display for Declaration {
         let tplt = fmt_template(&self.template_args);
         let name = &self.name;
         let typ = self
-            .typ
+            .ty
             .as_ref()
             .map(|typ| format!(": {}", typ))
             .unwrap_or_default();
@@ -121,7 +121,7 @@ impl Display for DeclarationKind {
 impl Display for TypeAlias {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = &self.name;
-        let typ = &self.typ;
+        let typ = &self.ty;
         write!(f, "alias {name} = {typ};")
     }
 }
@@ -138,7 +138,7 @@ impl Display for StructMember {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, false);
         let name = &self.name;
-        let typ = &self.typ;
+        let typ = &self.ty;
         write!(f, "{attrs}{name}: {typ}")
     }
 }
@@ -163,7 +163,7 @@ impl Display for FormalParameter {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, true);
         let name = &self.name;
-        let typ = &self.typ;
+        let typ = &self.ty;
         write!(f, "{attrs}{name}: {typ}")
     }
 }

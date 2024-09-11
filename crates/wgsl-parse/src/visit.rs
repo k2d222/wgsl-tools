@@ -200,13 +200,13 @@ impl_visit! { TranslationUnit => TypeExpression,
     {
         global_declarations.[].{
             GlobalDeclaration::Declaration.{
-                typ.[],
+                ty.[],
                 initializer.[].(x => Visit::<TypeExpression>::visit(x)),
             },
-            GlobalDeclaration::TypeAlias.typ,
-            GlobalDeclaration::Struct.members.[].typ,
+            GlobalDeclaration::TypeAlias.ty,
+            GlobalDeclaration::Struct.members.[].ty,
             GlobalDeclaration::Function.{
-                parameters.[].typ,
+                parameters.[].ty,
                 return_type.[],
                 body.statements.[].(x => Visit::<Expression>::visit(x)).(x => Visit::<TypeExpression>::visit(x)),
             }
@@ -218,13 +218,13 @@ impl_visit_mut! { TranslationUnit => TypeExpression,
     {
         global_declarations.[].{
             GlobalDeclaration::Declaration.{
-                typ.[],
+                ty.[],
                 initializer.[].(x => VisitMut::<TypeExpression>::visit_mut(x)),
             },
-            GlobalDeclaration::TypeAlias.typ,
-            GlobalDeclaration::Struct.members.[].typ,
+            GlobalDeclaration::TypeAlias.ty,
+            GlobalDeclaration::Struct.members.[].ty,
             GlobalDeclaration::Function.{
-                parameters.[].typ,
+                parameters.[].ty,
                 return_type.[],
                 body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)).(x => VisitMut::<TypeExpression>::visit_mut(x)),
             }

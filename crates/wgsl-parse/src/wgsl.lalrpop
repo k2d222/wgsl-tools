@@ -275,14 +275,14 @@ StructBodyDecl: Vec<StructMember> = {
 };
 
 StructMember: StructMember = {
-    <attributes: Attribute*> <name: MemberIdent> ":" <typ: TypeSpecifier> => StructMember {
-        attributes, name, typ
+    <attributes: Attribute*> <name: MemberIdent> ":" <ty: TypeSpecifier> => StructMember {
+        attributes, name, ty
     },
 };
 
 TypeAliasDecl: TypeAlias = {
-    "alias" <name: Ident> "=" <typ: TypeSpecifier> => TypeAlias {
-        name, typ
+    "alias" <name: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
+        name, ty
     },
 };
 
@@ -305,24 +305,24 @@ VariableOrValueStatement: Declaration = {
         decl
     },
     "let" <ident: OptionallyTypedIdent> "=" <initializer: Expression> => {
-        let (name, typ) = ident;
+        let (name, ty) = ident;
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Let,
             template_args: None,
             name,
-            typ,
+            ty,
             initializer: Some(initializer),
         }
     },
     "const" <ident: OptionallyTypedIdent> "=" <initializer: Expression> => {
-        let (name, typ) = ident;
+        let (name, ty) = ident;
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Let,
             template_args: None,
             name,
-            typ,
+            ty,
             initializer: Some(initializer),
         }
     },
@@ -330,13 +330,13 @@ VariableOrValueStatement: Declaration = {
 
 VariableDecl: Declaration = {
     "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
-        let (name, typ) = ident;
+        let (name, ty) = ident;
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Var,
             template_args,
             name,
-            typ,
+            ty,
             initializer: None,
         }
     },
@@ -356,24 +356,24 @@ GlobalVariableDecl: Declaration = {
 
 GlobalValueDecl: Declaration = {
     "const" <ident: OptionallyTypedIdent> "=" <initializer: Expression> => {
-        let (name, typ) = ident;
+        let (name, ty) = ident;
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Const,
             template_args: None,
             name,
-            typ,
+            ty,
             initializer: Some(initializer),
         }
     },
     <attributes: Attribute*> "override" <ident: OptionallyTypedIdent> <initializer: ("=" <Expression>)?> => {
-        let (name, typ) = ident;
+        let (name, ty) = ident;
         Declaration {
             attributes,
             kind: DeclarationKind::Override,
             template_args: None,
             name,
-            typ,
+            ty,
             initializer: initializer.map(Into::into),
         }
     },
@@ -819,8 +819,8 @@ ParamList: Vec<FormalParameter> = {
 };
 
 Param: FormalParameter = {
-    <attributes: Attribute*> <name: Ident> ":" <typ: TypeSpecifier> => FormalParameter {
-        attributes, name, typ
+    <attributes: Attribute*> <name: Ident> ":" <ty: TypeSpecifier> => FormalParameter {
+        attributes, name, ty
     },
 };
 
