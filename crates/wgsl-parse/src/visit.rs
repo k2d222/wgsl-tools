@@ -196,6 +196,86 @@ impl_visit_mut! { Statement => Expression,
     }
 }
 
+impl_visit! { Statement => Statement,
+    {
+        Statement::Compound.statements.[],
+        Statement::If.{
+            if_clause.1.statements.[],
+            else_if_clauses.[].1.statements.[],
+        },
+        Statement::Switch.clauses.[].body.statements.[],
+        Statement::Loop.{
+            body.statements.[],
+            continuing.[].body.statements.[],
+        },
+        Statement::For.{
+            initializer.[].(x => std::iter::once(&**x)),
+            update.[].(x => std::iter::once(&**x)),
+            body.statements.[],
+        },
+        Statement::While.body.statements.[],
+    }
+}
+
+impl_visit_mut! { Statement => Statement,
+    {
+        Statement::Compound.statements.[],
+        Statement::If.{
+            if_clause.1.statements.[],
+            else_if_clauses.[].1.statements.[],
+        },
+        Statement::Switch.clauses.[].body.statements.[],
+        Statement::Loop.{
+            body.statements.[],
+            continuing.[].body.statements.[],
+        },
+        Statement::For.{
+            initializer.[].(x => std::iter::once(&mut **x)),
+            update.[].(x => std::iter::once(&mut **x)),
+            body.statements.[],
+        },
+        Statement::While.body.statements.[],
+    }
+}
+
+impl_visit! { TranslationUnit => Expression,
+    {
+        global_declarations.[].{
+            GlobalDeclaration::Declaration.{
+                initializer.[],
+            },
+            GlobalDeclaration::Function.{
+                body.statements.[].(x => Visit::<Expression>::visit(x)),
+            }
+        }
+    }
+}
+
+impl_visit_mut! { TranslationUnit => Expression,
+    {
+        global_declarations.[].{
+            GlobalDeclaration::Declaration.{
+                initializer.[],
+            },
+            GlobalDeclaration::Function.{
+                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            }
+        }
+    }
+}
+
+impl_visit! { TranslationUnit => Statement,
+    {
+        global_declarations.[].GlobalDeclaration::Function.body.statements.[]
+    }
+}
+
+impl_visit_mut! { TranslationUnit => Statement,
+    {
+        global_declarations.[].GlobalDeclaration::Function.body.statements.[]
+    }
+}
+
 impl_visit! { TranslationUnit => TypeExpression,
     {
         global_declarations.[].{

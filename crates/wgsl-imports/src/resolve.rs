@@ -106,14 +106,20 @@ fn resolve_import_paths<R: Resolver>(
 
 pub struct Module<R: Resolver> {
     pub(crate) source: TranslationUnit,
+    pub(crate) resource: R::Resource,
     pub(crate) imports: Imports<R>,
     pub(crate) resolutions: Modules<R>,
 }
 
 impl<R: Resolver> Module<R> {
-    pub fn new(source: syntax::TranslationUnit, imports: Imports<R>) -> Result<Self, ImportError> {
+    pub fn new(
+        source: syntax::TranslationUnit,
+        resource: R::Resource,
+        imports: Imports<R>,
+    ) -> Result<Self, ImportError> {
         Ok(Self {
             source,
+            resource,
             imports,
             resolutions: HashMap::new(),
         })
@@ -219,7 +225,7 @@ fn resolve_rec<R: Resolver>(
 ) -> Result<Module<R>, ImportError> {
     let source = resolver.resolve_file(resource)?;
     let imports = resolve_import_paths(&source.imports, resource, resolver)?;
-    let mut module = Module::new(source, imports.clone())?;
+    let mut module = Module::new(source, resource.clone(), imports.clone())?;
 
     for child in imports.keys() {
         if let Some(submodule) = visited.get(child) {

@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
@@ -37,6 +37,9 @@ impl Parse for QueryComponent {
         } else if input.peek(Ident) {
             let member = input.parse()?;
             Ok(QueryComponent::Member(member))
+        // } else if input.peek(Token![self]) {
+        //     input.parse::<Token![self]>()?;
+        //     Ok(QueryComponent::Member(format_ident!("self")))
         } else if input.peek(LitInt) {
             let index = input.parse()?;
             Ok(QueryComponent::Index(index))
