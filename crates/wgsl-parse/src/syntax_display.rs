@@ -362,11 +362,11 @@ impl Display for Statement {
             Statement::Loop(print) => write!(f, "{print}"),
             Statement::For(print) => write!(f, "{print}"),
             Statement::While(print) => write!(f, "{print}"),
-            Statement::Break => write!(f, "break;"),
-            Statement::Continue => write!(f, "continue;"),
+            Statement::Break(print) => write!(f, "{print}"),
+            Statement::Continue(print) => write!(f, "{print}"),
             Statement::Return(print) => write!(f, "{print}"),
-            Statement::Discard => write!(f, "discard;"),
-            Statement::FunctionCall(print) => write!(f, "{print};"),
+            Statement::Discard(print) => write!(f, "{print}"),
+            Statement::FunctionCall(print) => write!(f, "{print}"),
             Statement::ConstAssert(print) => write!(f, "{print}"),
             Statement::Declaration(print) => write!(f, "{print}"),
         }
@@ -578,6 +578,18 @@ impl Display for WhileStatement {
     }
 }
 
+impl Display for BreakStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "break;")
+    }
+}
+
+impl Display for ContinueStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "continue;")
+    }
+}
+
 impl Display for ReturnStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let expr = self
@@ -586,5 +598,18 @@ impl Display for ReturnStatement {
             .map(|expr| format!(" {expr}"))
             .unwrap_or_default();
         write!(f, "return{expr};")
+    }
+}
+
+impl Display for DiscardStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "discard;")
+    }
+}
+
+impl Display for FunctionCallStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let call = &self.call;
+        write!(f, "{call};")
     }
 }

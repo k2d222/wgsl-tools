@@ -8,4 +8,4 @@ license.workspace = true
 
 [dependencies]
 thiserror = "1.0.63"
-wgsl-parse = { path = "../wgsl-parse" }
+wgsl-parse = { path = "../wgsl-parse", default-features = false }

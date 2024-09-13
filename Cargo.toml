@@ -20,7 +20,7 @@ license.workspace = true
 
 [dependencies]
 clap = { version = "4.5.11", features = ["derive"] }
-wgsl-parse = { path = "crates/wgsl-parse" }
+wgsl-parse = { path = "crates/wgsl-parse", default-features = false, features = ["imports", "cond-comp"] }
 wesl-imports = { path = "crates/wesl-imports" }
 wesl-cond-comp = { path = "crates/wesl-cond-comp"}
 thiserror = "1.0.63"

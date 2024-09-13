@@ -217,15 +217,15 @@ fn iter_replaceable_names(module: &mut TranslationUnit) -> impl Iterator<Item = 
                         });
                         names.extend(it.filter(|name| !scope.contains(*name)));
                     }
-                    Statement::Break => (),
-                    Statement::Continue => (),
+                    Statement::Break(_) => (),
+                    Statement::Continue(_) => (),
                     Statement::Return(stat) => {
                         let it = query_mut!(stat.expression.[].(expr_names));
                         names.extend(it.filter(|name| !scope.contains(*name)));
                     }
-                    Statement::Discard => (),
+                    Statement::Discard(_) => (),
                     Statement::FunctionCall(stat) => {
-                        let it = query_mut!(stat.{
+                        let it = query_mut!(stat.call.{
                             name,
                             template_args.[].[].(expr_names),
                             arguments.[].(expr_names),
