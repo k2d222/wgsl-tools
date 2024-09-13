@@ -4,6 +4,7 @@ use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+use itertools::Itertools;
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
@@ -14,6 +15,8 @@ pub trait Mangler<R: Resolver> {
     fn mangle(&self, resource: &R::Resource, item: &str) -> String;
 }
 
+/// A mangler for the filesystem resources hashes the resource identifier.
+/// e.g. `foo/bar/baz.wgsl item => item_32938483840293402930392`
 #[derive(Default, Clone, Debug)]
 pub struct FileManglerHash;
 
@@ -24,6 +27,24 @@ impl Mangler<FileResolver> for FileManglerHash {
         item.hash(&mut hasher);
         let hash = hasher.finish();
         format!("{item}_{hash}")
+    }
+}
+
+/// A mangler for the filesystem resources that gives the escaped path to the resource.
+/// e.g. `foo/bar/baz.wgsl item => foo_bar_bazwgsl_item`
+///
+/// Warning: the file path segments must be valid wgsl identifiers.
+#[derive(Default, Clone, Debug)]
+pub struct FileManglerEscape;
+
+impl Mangler<FileResolver> for FileManglerEscape {
+    fn mangle(&self, resource: &FileResource, item: &str) -> String {
+        let path = resource.path().with_extension("");
+        let path = path
+            .iter()
+            .map(|p| p.to_string_lossy().replace('_', "__"))
+            .format("_");
+        format!("{path}_{item}")
     }
 }
 

@@ -5,7 +5,14 @@ use wgsl_parse::{
     Parser,
 };
 
-use std::{collections::HashMap, fmt::Display, fs, hash::Hash, path::PathBuf, rc::Rc};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    fs,
+    hash::Hash,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use crate::mangle::Mangler;
 
@@ -165,6 +172,12 @@ pub struct FileResolver {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FileResource(PathBuf);
 
+impl FileResource {
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
 impl Display for FileResource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.display())
@@ -197,12 +210,12 @@ impl Resolver for FileResolver {
         rel_path.set_extension("wgsl");
 
         let mut base_path = if rel_path.is_absolute() {
-            self.base.clone()
+            PathBuf::new()
         } else if let Some(parent_path) = parent_path {
             // SAFETY: parent_path must be a file, therefore must have a contaning directory
-            PathBuf::from_iter(parent_path.0.parent().unwrap().iter())
+            parent_path.0.parent().unwrap().to_path_buf()
         } else {
-            self.base.clone()
+            PathBuf::new()
         };
 
         base_path.extend(&rel_path);
@@ -211,7 +224,9 @@ impl Resolver for FileResolver {
     }
 
     fn resolve_file(&self, path: &FileResource) -> Result<syntax::TranslationUnit, ImportError> {
-        let source = fs::read_to_string(&path.0)
+        let mut with_base = self.base.to_path_buf();
+        with_base.extend(&path.0);
+        let source = fs::read_to_string(&with_base)
             .map_err(|_| ImportError::FileNotFound(path.0.to_string_lossy().to_string()))?;
         Parser::parse_str(&source).map_err(|e| ImportError::ParseError(e.into_owned()))
     }
