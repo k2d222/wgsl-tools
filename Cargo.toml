@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/wgsl-parse", "crates/wgsl-imports", "crates/wgsl-test", "crates/wgsl-parse-macros"]
+members = ["crates/wgsl-parse", "crates/wesl-imports", "crates/wgsl-test", "crates/wgsl-parse-macros", "crates/wesl-cond-comp"]
 
 [workspace.package]
 version = "0.0.2"
@@ -20,8 +20,14 @@ license.workspace = true
 
 [dependencies]
 clap = { version = "4.5.11", features = ["derive"] }
-wgsl-parse = { path = "crates/wgsl-parse" }
-wgsl-imports = { path = "crates/wgsl-imports" } # TODO: behind feature flag
+wgsl-parse = { path = "crates/wgsl-parse", default-features = false }
+wesl-imports = { path = "crates/wesl-imports", optional = true }
+wesl-cond-comp = { path = "crates/wesl-cond-comp", optional = true }
+
+[features]
+default = ["imports", "cond-comp"]
+imports = ["dep:wesl-imports", "wgsl-parse/imports"]
+cond-comp = ["dep:wesl-cond-comp", "wgsl-parse/cond-comp"]
 
 [patch.crates-io]
 lalrpop = { path = "../lalrpop/lalrpop" }

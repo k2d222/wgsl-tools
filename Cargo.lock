@@ -817,7 +817,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
-name = "wgsl-imports"
+name = "wesl-cond-comp"
+version = "0.0.2"
+
+[[package]]
+name = "wesl-imports"
 version = "0.0.2"
 dependencies = [
  "itertools",
@@ -845,6 +849,7 @@ dependencies = [
 name = "wgsl-parse-macros"
 version = "0.0.2"
 dependencies = [
+ "itertools",
  "paste",
  "proc-macro2",
  "quote",
@@ -863,7 +868,8 @@ name = "wgsl-tools"
 version = "0.0.2"
 dependencies = [
  "clap",
- "wgsl-imports",
+ "wesl-cond-comp",
+ "wesl-imports",
  "wgsl-parse",
 ]
 

@@ -66,7 +66,7 @@ fn main() {
             }
         }
         Command::Compile(args) => {
-            match wgsl_imports::compile(&args.input) {
+            match wesl_imports::compile(&args.input) {
                 Ok(module) => println!("{module}"),
                 Err(err) => eprintln!("{err}"),
             };
