@@ -284,6 +284,7 @@ StructMember: StructMember = {
     },
 };
 
+#[cfg(not(feature = "cond-comp"))]
 TypeAliasDecl: TypeAlias = {
     "alias" <name: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
         name, ty
@@ -352,6 +353,7 @@ OptionallyTypedIdent: (String, Option<TypeExpression>) = {
     <Ident> <(":" <TypeSpecifier>)?>,
 };
 
+#[cfg(not(feature = "cond-comp"))]
 GlobalVariableDecl: Declaration = {
     <attributes: Attribute*> <mut decl: VariableDecl> <initializer: ("=" <Expression>)?> => {
         decl.attributes = attributes;
@@ -774,6 +776,7 @@ ContinueStatement: ContinueStatement = {
 #[cfg(not(feature = "cond-comp"))]
 ContinuingStatement = "continuing" <ContinuingCompoundStatement>;
 
+#[cfg(not(feature = "cond-comp"))]
 ContinuingCompoundStatement: ContinuingStatement = {
     <attributes: Attribute*> "{" <statements: Statement*> <break_if: BreakIfStatement?> "}" => {
         let body = CompoundStatement { attributes, statements };
@@ -885,7 +888,7 @@ pub TranslationUnit: TranslationUnit = {
     },
 };
 
-#[cfg(feature = "imports")]
+#[cfg(all(feature = "imports", not(feature = "cond-comp")))]
 Import: Import = {
     "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => match relative {
         Some(mut relative) => {
@@ -894,6 +897,22 @@ Import: Import = {
             import
         },
         None => import,
+    }
+};
+
+#[cfg(all(feature = "imports", feature = "cond-comp"))]
+Import: Import = {
+    <attributes: Attribute*> "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => {
+        let mut import = match relative {
+            Some(mut relative) => {
+                relative.extend(import.path);
+                import.path = relative;
+                import
+            },
+            None => import,
+        };
+        import.attributes = attributes;
+        import
     }
 };
 
@@ -910,12 +929,15 @@ ImportRelative: Vec<String> = {
 #[cfg(feature = "imports")]
 ImportPath: Import = {
     <path: (<Ident> "/")+> <content: ImportContent> => Import {
+        #[cfg(feature = "cond-comp")] attributes: Vec::new(),
         path, content
     },
     ItemImport => Import {
+        #[cfg(feature = "cond-comp")] attributes: Vec::new(),
         path: Vec::new(), content: ImportContent::Item(<>)
     },
     StarImport => Import {
+        #[cfg(feature = "cond-comp")] attributes: Vec::new(),
         path: Vec::new(), content: ImportContent::Star(<>)
     },
 };
@@ -967,7 +989,7 @@ RequiresDirective: RequiresDirective = {
 #[cfg(feature = "cond-comp")]
 DiagnosticDirective: DiagnosticDirective = {
     <Attribute*> "diagnostic" <DiagnosticControl> ";" => {
-        let (attributes, (severity, rule_name)) = <>;
+        let (attributes, (severity, rule_name)) = (<>);
         DiagnosticDirective { attributes, severity, rule_name }
     },
 };
@@ -976,6 +998,13 @@ DiagnosticDirective: DiagnosticDirective = {
 StructDecl: Struct = {
     <attributes: Attribute*> "struct" <name: Ident> <members: StructBodyDecl> => Struct {
         attributes, name, members
+    },
+};
+
+#[cfg(feature = "cond-comp")]
+TypeAliasDecl: TypeAlias = {
+    <attributes: Attribute*> "alias" <name: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
+        attributes, name, ty
     },
 };
 
@@ -1026,6 +1055,14 @@ VariableDecl: Declaration = {
 };
 
 #[cfg(feature = "cond-comp")]
+GlobalVariableDecl: Declaration = {
+    <mut decl: VariableDecl> <initializer: ("=" <Expression>)?> => {
+        decl.initializer = initializer.map(Into::into);
+        decl
+    },
+};
+
+#[cfg(feature = "cond-comp")]
 GlobalValueDecl: Declaration = {
     <attributes: Attribute*> "const" <ident: OptionallyTypedIdent> "=" <initializer: Expression> => {
         let (name, ty) = ident;
@@ -1053,40 +1090,40 @@ GlobalValueDecl: Declaration = {
 
 #[cfg(feature = "cond-comp")]
 AssignmentStatement: AssignmentStatement = {
-    <attributes: Attribute*> <lhs: LhsExpression> "=" <rhs: Expression> => AssignmentStatement {
-        attributes, operator: AssignmentOperator::Equal, lhs, rhs
+    <lhs: LhsExpression> "=" <rhs: Expression> => AssignmentStatement {
+        attributes: vec![], operator: AssignmentOperator::Equal, lhs, rhs
     },
-    <attributes: Attribute*> <lhs: LhsExpression> <operator: CompoundAssignmentOperator> <rhs: Expression> => AssignmentStatement {
-        attributes, operator, lhs, rhs
+    <lhs: LhsExpression> <operator: CompoundAssignmentOperator> <rhs: Expression> => AssignmentStatement {
+        attributes: vec![], operator, lhs, rhs
     },
-    <attributes: Attribute*> "_" "=" <rhs: Expression> => {
+    "_" "=" <rhs: Expression> => {
         let lhs = Expression::Identifier("_".to_string().into());
-        AssignmentStatement { attributes, operator: AssignmentOperator::Equal, lhs, rhs }
+        AssignmentStatement { attributes: vec![], operator: AssignmentOperator::Equal, lhs, rhs }
     },
 };
 
 #[cfg(feature = "cond-comp")]
 IncrementStatement: IncrementStatement = {
-    <attributes: Attribute*> <expression: LhsExpression> "++" => IncrementStatement {
-        attributes, expression
+    <expression: LhsExpression> "++" => IncrementStatement {
+        attributes: vec![], expression
     },
 };
 
 #[cfg(feature = "cond-comp")]
 DecrementStatement: DecrementStatement = {
-    <attributes: Attribute*> <expression: LhsExpression> "--" => DecrementStatement {
-        attributes, expression
+    <expression: LhsExpression> "--" => DecrementStatement {
+        attributes: vec![], expression
     },
 };
 
 #[cfg(feature = "cond-comp")]
-ElseIfClause: ElseIfClause = <attributes: Attribute*> "else" "if" <expression: Expression> <body: CompoundStatement> => ElseIfClause {
-    attributes, expression, body
+ElseIfClause: ElseIfClause = "else" "if" <expression: Expression> <body: CompoundStatement> => ElseIfClause {
+    attributes: vec![], expression, body
 };
 
 #[cfg(feature = "cond-comp")]
-ElseClause: ElseClause = <attributes: Attribute*> "else" <body: CompoundStatement> => ElseClause {
-    attributes, body
+ElseClause: ElseClause = "else" <body: CompoundStatement> => ElseClause {
+    attributes: vec![], body
 };
 
 #[cfg(feature = "cond-comp")]
@@ -1105,7 +1142,9 @@ DefaultAloneClause: SwitchClause = {
 
 #[cfg(feature = "cond-comp")]
 BreakStatement: BreakStatement = {
-    <attributes: Attribute*> "break" => BreakStatement { attributes },
+    <attributes: Attribute*> "break" => BreakStatement {
+        attributes
+    },
 };
 
 #[cfg(feature = "cond-comp")]
@@ -1117,11 +1156,25 @@ BreakIfStatement: BreakIfStatement = {
 
 #[cfg(feature = "cond-comp")]
 ContinueStatement: ContinueStatement = {
-    <attributes: Attribute*> "continue" => ContinueStatement { attributes },
+    <attributes: Attribute*> "continue" => ContinueStatement {
+        attributes
+    },
 };
 
 #[cfg(feature = "cond-comp")]
-ContinuingStatement = <Attribute*> "continuing" <ContinuingCompoundStatement>;
+ContinuingStatement: ContinuingStatement = <Attribute*> "continuing" <ContinuingCompoundStatement> => {
+    let (attributes, mut statement) = (<>);
+    statement.attributes = attributes;
+    statement
+};
+
+#[cfg(feature = "cond-comp")]
+ContinuingCompoundStatement: ContinuingStatement = {
+    <attributes: Attribute*> "{" <statements: Statement*> <break_if: BreakIfStatement?> "}" => {
+        let body = CompoundStatement { attributes, statements };
+        ContinuingStatement { attributes: Vec::new(), body, break_if }
+    },
+};
 
 #[cfg(feature = "cond-comp")]
 ReturnStatement: ReturnStatement = {
