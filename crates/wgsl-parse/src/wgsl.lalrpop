@@ -650,11 +650,17 @@ IfStatement: IfStatement = {
     },
 };
 
-IfClause = "if" <Expression> <CompoundStatement>;
+IfClause: IfClause = "if" <expression: Expression> <body: CompoundStatement> => IfClause {
+    expression, body
+};
 
-ElseIfClause = "else" "if" <Expression> <CompoundStatement>;
+ElseIfClause: ElseIfClause = "else" "if" <expression: Expression> <body: CompoundStatement> => ElseIfClause {
+    expression, body
+};
 
-ElseClause = "else" <CompoundStatement>;
+ElseClause: ElseClause = "else" <body: CompoundStatement> => ElseClause {
+    body
+};
 
 SwitchStatement: SwitchStatement = {
     <attributes: Attribute*> "switch" <expression: Expression> <body: SwitchBody> => {

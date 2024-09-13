@@ -430,18 +430,38 @@ impl Display for DecrementStatement {
 impl Display for IfStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let attrs = fmt_attrs(&self.attributes, false);
-        let expr = &self.if_clause.0;
-        let stmt = &self.if_clause.1;
-        write!(f, "{attrs}if {expr} {stmt}")?;
+        let if_clause = &self.if_clause;
+        write!(f, "{attrs}{if_clause}")?;
         for else_if_clause in self.else_if_clauses.iter() {
-            let expr = &else_if_clause.0;
-            let stmt = &else_if_clause.1;
-            write!(f, "\nelse if {expr} {stmt}")?;
+            write!(f, "\n{else_if_clause}")?;
         }
-        if let Some(ref else_stmt) = self.else_clause {
-            write!(f, "\nelse {else_stmt}")?;
+        if let Some(else_clause) = &self.else_clause {
+            write!(f, "\n{else_clause}")?;
         }
         Ok(())
+    }
+}
+
+impl Display for IfClause {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = &self.expression;
+        let stmt = &self.body;
+        write!(f, "if {expr} {stmt}")
+    }
+}
+
+impl Display for ElseIfClause {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = &self.expression;
+        let stmt = &self.body;
+        write!(f, "else if {expr} {stmt}")
+    }
+}
+
+impl Display for ElseClause {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let stmt = &self.body;
+        write!(f, "else {stmt}")
     }
 }
 

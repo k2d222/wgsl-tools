@@ -330,9 +330,26 @@ pub struct DecrementStatement {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfStatement {
     pub attributes: Vec<Attribute>,
-    pub if_clause: (Expression, CompoundStatement),
-    pub else_if_clauses: Vec<(Expression, CompoundStatement)>,
-    pub else_clause: Option<CompoundStatement>,
+    pub if_clause: IfClause,
+    pub else_if_clauses: Vec<ElseIfClause>,
+    pub else_clause: Option<ElseClause>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfClause {
+    pub expression: Expression,
+    pub body: CompoundStatement,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElseIfClause {
+    pub expression: Expression,
+    pub body: CompoundStatement,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElseClause {
+    pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]

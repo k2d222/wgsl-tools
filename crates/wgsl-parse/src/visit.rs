@@ -110,12 +110,12 @@ impl_visit! { Statement => Expression,
         Statement::Decrement.expression,
         Statement::If.{
             if_clause.{
-                0,
-                1.statements.[].(x => Visit::<Expression>::visit(x)),
+                expression,
+                body.statements.[].(x => Visit::<Expression>::visit(x)),
             },
             else_if_clauses.[].{
-                0,
-                1.statements.[].(x => Visit::<Expression>::visit(x)),
+                expression,
+                body.statements.[].(x => Visit::<Expression>::visit(x)),
             }
         },
         Statement::Switch.{
@@ -157,12 +157,12 @@ impl_visit_mut! { Statement => Expression,
         Statement::Decrement.expression,
         Statement::If.{
             if_clause.{
-                0,
-                1.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                expression,
+                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
             },
             else_if_clauses.[].{
-                0,
-                1.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                expression,
+                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
             }
         },
         Statement::Switch.{
@@ -200,8 +200,8 @@ impl_visit! { Statement => Statement,
     {
         Statement::Compound.statements.[],
         Statement::If.{
-            if_clause.1.statements.[],
-            else_if_clauses.[].1.statements.[],
+            if_clause.body.statements.[],
+            else_if_clauses.[].body.statements.[],
         },
         Statement::Switch.clauses.[].body.statements.[],
         Statement::Loop.{
@@ -221,8 +221,8 @@ impl_visit_mut! { Statement => Statement,
     {
         Statement::Compound.statements.[],
         Statement::If.{
-            if_clause.1.statements.[],
-            else_if_clauses.[].1.statements.[],
+            if_clause.body.statements.[],
+            else_if_clauses.[].body.statements.[],
         },
         Statement::Switch.clauses.[].body.statements.[],
         Statement::Loop.{
