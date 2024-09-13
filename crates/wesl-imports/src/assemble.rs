@@ -2,19 +2,19 @@ use std::collections::HashSet;
 
 use wgsl_parse::syntax::TranslationUnit;
 
-use crate::resolve::Resolver;
+use crate::resolve::Resource;
 
 use super::resolve::Module;
 
-impl<R: Resolver> Module<R> {
+impl<R: Resource> Module<R> {
     pub fn assemble(&self) -> TranslationUnit {
         let mut visited = HashSet::new();
 
-        fn rec_insert<'s, R: Resolver>(
+        fn rec_insert<'s, R: Resource>(
             module: &'s Module<R>,
-            resource: &'s R::Resource,
+            resource: &'s R,
             wgsl: &mut TranslationUnit,
-            visited: &mut HashSet<&'s R::Resource>,
+            visited: &mut HashSet<&'s R>,
         ) {
             if !visited.contains(resource) {
                 visited.insert(resource);

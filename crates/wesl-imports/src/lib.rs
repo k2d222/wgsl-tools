@@ -1,22 +1,24 @@
 use std::path::{Path, PathBuf};
-
-use mangle::FileManglerEscape;
-use resolve::{FileResolver, FileResource, ImportError, Module};
 use wgsl_parse::syntax::TranslationUnit;
+
+pub use mangle::{
+    FileManglerEscape, FileManglerHash, Mangler, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH,
+};
+pub use resolve::{Error, FileResolver, FileResource, Module, Resolver};
 
 mod assemble;
 mod mangle;
 mod resolve;
 
-pub fn compile(entry_point: &Path) -> Result<TranslationUnit, ImportError> {
+pub fn run(entry_point: &Path) -> Result<TranslationUnit, Error> {
     let base = entry_point
         .parent()
-        .ok_or_else(|| ImportError::FileNotFound(entry_point.to_string_lossy().to_string()))?
+        .ok_or_else(|| Error::FileNotFound(entry_point.to_string_lossy().to_string()))?
         .to_path_buf();
     let name = PathBuf::from(
         entry_point
             .file_name()
-            .ok_or_else(|| ImportError::FileNotFound(entry_point.to_string_lossy().to_string()))?,
+            .ok_or_else(|| Error::FileNotFound(entry_point.to_string_lossy().to_string()))?,
     );
 
     let resolver = FileResolver::new(base);

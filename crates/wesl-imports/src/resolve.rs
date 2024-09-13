@@ -33,16 +33,16 @@ impl Display for ImportPath {
     }
 }
 
-// XXX: are imports are supposed to order-independent?
+// XXX: are imports supposed to be order-independent?
 #[allow(type_alias_bounds)]
-type Imports<R: Resolver> = HashMap<R::Resource, Vec<syntax::ImportItem>>;
+type Imports<R: Resource> = HashMap<R, Vec<syntax::ImportItem>>;
 #[allow(type_alias_bounds)]
-type Modules<R: Resolver> = HashMap<R::Resource, Rc<Module<R>>>;
+type Modules<R: Resource> = HashMap<R, Rc<Module<R>>>;
 
 #[derive(Clone, Debug, Error)]
-pub enum ImportError {
+pub enum Error {
     #[error("parse error: `{0}`")]
-    ParseError(wgsl_parse::error::Error),
+    ParseError(wgsl_parse::Error),
     #[error("duplicate imported item `{0}`")]
     DuplicateSymbol(String),
     #[error("failed to resolve import path `{0}`")]
@@ -60,8 +60,8 @@ fn resolve_import_paths<R: Resolver>(
     imports: &[syntax::Import],
     parent: &R::Resource,
     resolver: &R,
-) -> Result<Imports<R>, ImportError> {
-    let mut res = Imports::<R>::new();
+) -> Result<Imports<R::Resource>, Error> {
+    let mut res = Imports::<R::Resource>::new();
 
     for import in imports {
         match &import.content {
@@ -111,19 +111,19 @@ fn resolve_import_paths<R: Resolver>(
     Ok(res)
 }
 
-pub struct Module<R: Resolver> {
+pub struct Module<R: Resource> {
     pub(crate) source: TranslationUnit,
-    pub(crate) resource: R::Resource,
+    pub(crate) resource: R,
     pub(crate) imports: Imports<R>,
     pub(crate) resolutions: Modules<R>,
 }
 
-impl<R: Resolver> Module<R> {
+impl<R: Resource> Module<R> {
     pub fn new(
         source: syntax::TranslationUnit,
-        resource: R::Resource,
+        resource: R,
         imports: Imports<R>,
-    ) -> Result<Self, ImportError> {
+    ) -> Result<Self, Error> {
         Ok(Self {
             source,
             resource,
@@ -132,7 +132,7 @@ impl<R: Resolver> Module<R> {
         })
     }
 
-    fn resolve_import(&mut self, resource: &R::Resource, module: Rc<Module<R>>) {
+    fn resolve_import(&mut self, resource: &R, module: Rc<Module<R>>) {
         self.resolutions.insert(resource.clone(), module);
     }
 
@@ -144,23 +144,23 @@ impl<R: Resolver> Module<R> {
     }
 }
 
+pub trait Resource: Display + Clone + Eq + Hash {}
+impl<T: Display + Clone + Eq + Hash> Resource for T {}
+
 /// a Resolver is responsible for turning a import path into a unique resource identifer (`Resource`),
 /// and providing the source file.
 pub trait Resolver {
-    type Resource: Display + Clone + Eq + Hash;
+    type Resource: Resource;
     /// Tries to resolve the `import_path` to a source file.
     /// `parent_resource` is the resource identifier of the importer module.
     fn resolve_path(
         &self,
         import_path: &[String],
         parent_resource: Option<&Self::Resource>,
-    ) -> Result<Self::Resource, ImportError>;
+    ) -> Result<Self::Resource, Error>;
 
     /// Tries to resolve a source file identified by a resource.
-    fn resolve_file(
-        &self,
-        resource: &Self::Resource,
-    ) -> Result<syntax::TranslationUnit, ImportError>;
+    fn resolve_file(&self, resource: &Self::Resource) -> Result<syntax::TranslationUnit, Error>;
 }
 
 #[derive(Default)]
@@ -205,7 +205,7 @@ impl Resolver for FileResolver {
         &self,
         import_path: &[String],
         parent_path: Option<&FileResource>,
-    ) -> Result<FileResource, ImportError> {
+    ) -> Result<FileResource, Error> {
         let mut rel_path = PathBuf::from_iter(import_path.iter());
         rel_path.set_extension("wgsl");
 
@@ -223,21 +223,41 @@ impl Resolver for FileResolver {
         Ok(FileResource(base_path))
     }
 
-    fn resolve_file(&self, path: &FileResource) -> Result<syntax::TranslationUnit, ImportError> {
+    fn resolve_file(&self, path: &FileResource) -> Result<TranslationUnit, Error> {
         let mut with_base = self.base.to_path_buf();
         with_base.extend(&path.0);
         let source = fs::read_to_string(&with_base)
-            .map_err(|_| ImportError::FileNotFound(path.0.to_string_lossy().to_string()))?;
-        Parser::parse_str(&source).map_err(|e| ImportError::ParseError(e.into_owned()))
+            .map_err(|_| Error::FileNotFound(path.0.to_string_lossy().to_string()))?;
+        Parser::parse_str(&source).map_err(|e| Error::ParseError(e.into_owned()))
     }
 }
 
-fn resolve_rec<R: Resolver>(
-    resource: &R::Resource,
-    resolver: &R,
-    mangler: &impl Mangler<R>,
+pub struct PreprocessResolver<R: Resolver, F: Fn(&mut TranslationUnit)>(pub R, pub F);
+
+impl<R: Resolver, F: Fn(&mut TranslationUnit)> Resolver for PreprocessResolver<R, F> {
+    type Resource = R::Resource;
+
+    fn resolve_path(
+        &self,
+        import_path: &[String],
+        parent_resource: Option<&Self::Resource>,
+    ) -> Result<Self::Resource, Error> {
+        self.0.resolve_path(import_path, parent_resource)
+    }
+
+    fn resolve_file(&self, resource: &Self::Resource) -> Result<TranslationUnit, Error> {
+        let mut res = self.0.resolve_file(resource)?;
+        self.1(&mut res);
+        Ok(res)
+    }
+}
+
+fn resolve_rec<R: Resource>(
+    resource: &R,
+    resolver: &impl Resolver<Resource = R>,
+    mangler: &(impl Mangler<R> + ?Sized),
     visited: &mut Modules<R>,
-) -> Result<Module<R>, ImportError> {
+) -> Result<Module<R>, Error> {
     let source = resolver.resolve_file(resource)?;
     let imports = resolve_import_paths(&source.imports, resource, resolver)?;
     let mut module = Module::new(source, resource.clone(), imports.clone())?;
@@ -260,12 +280,12 @@ fn resolve_rec<R: Resolver>(
     Ok(module)
 }
 
-impl<R: Resolver> Module<R> {
+impl<R: Resource> Module<R> {
     pub fn resolve(
-        resource: &R::Resource,
-        resolver: &R,
-        mangler: &impl Mangler<R>,
-    ) -> Result<Module<R>, ImportError> {
+        resource: &R,
+        resolver: &impl Resolver<Resource = R>,
+        mangler: &(impl Mangler<R> + ?Sized),
+    ) -> Result<Module<R>, Error> {
         let mut submodules = Modules::new();
         let module = resolve_rec(resource, resolver, mangler, &mut submodules)?;
         Ok(module)

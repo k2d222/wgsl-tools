@@ -9,18 +9,27 @@ use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
 use crate::resolve::FileResource;
-use crate::resolve::{FileResolver, ImportError, Module, Resolver};
+use crate::resolve::Resource;
+use crate::resolve::{Error, Module};
 
-pub trait Mangler<R: Resolver> {
-    fn mangle(&self, resource: &R::Resource, item: &str) -> String;
+pub trait Mangler<R: Resource> {
+    fn mangle(&self, resource: &R, item: &str) -> String;
 }
+
+// impl<R: Resolver, T: Mangler + ?Sized> Mangler<R> for Box<T> {
+//     fn mangle(&self, resource: &R::Resource, item: &str) -> String {
+//         self.mangle(ressource)
+//     }
+// }
 
 /// A mangler for the filesystem resources hashes the resource identifier.
 /// e.g. `foo/bar/baz.wgsl item => item_32938483840293402930392`
 #[derive(Default, Clone, Debug)]
 pub struct FileManglerHash;
 
-impl Mangler<FileResolver> for FileManglerHash {
+pub const FILE_MANGLER_HASH: FileManglerHash = FileManglerHash;
+
+impl Mangler<FileResource> for FileManglerHash {
     fn mangle(&self, resource: &FileResource, item: &str) -> String {
         let mut hasher = DefaultHasher::new();
         resource.hash(&mut hasher);
@@ -37,7 +46,9 @@ impl Mangler<FileResolver> for FileManglerHash {
 #[derive(Default, Clone, Debug)]
 pub struct FileManglerEscape;
 
-impl Mangler<FileResolver> for FileManglerEscape {
+pub const FILE_MANGLER_ESCAPE: FileManglerEscape = FileManglerEscape;
+
+impl Mangler<FileResource> for FileManglerEscape {
     fn mangle(&self, resource: &FileResource, item: &str) -> String {
         let path = resource.path().with_extension("");
         let path = path
@@ -274,8 +285,8 @@ fn iter_replaceable_names(module: &mut TranslationUnit) -> impl Iterator<Item = 
     replaceable_names
 }
 
-impl<R: Resolver> Module<R> {
-    pub fn mangle(&mut self, mangler: &impl Mangler<R>) -> Result<(), ImportError> {
+impl<R: Resource> Module<R> {
+    pub fn mangle(&mut self, mangler: &(impl Mangler<R> + ?Sized)) -> Result<(), Error> {
         // delared idents
         let mut replace: HashMap<String, String> = query_mut!(self.source.global_declarations.[].{
             GlobalDeclaration::Declaration.name,
