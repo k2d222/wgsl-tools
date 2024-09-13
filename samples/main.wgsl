@@ -1,5 +1,6 @@
-import imp1/f1;
+import imp1/{f1, c1};
 
 fn main() -> vec4f {
-    return f1();
+    let c1 = 2u;
+    return f1(c1);
 }

@@ -18,6 +18,6 @@ impl FromStr for DiagnosticSeverity {
 
 impl From<String> for IdentifierExpression {
     fn from(identifier: String) -> Self {
-        Self { identifier }
+        Self { name: identifier }
     }
 }

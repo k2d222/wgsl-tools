@@ -256,7 +256,7 @@ pub type FunctionCallExpression = FunctionCall;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IdentifierExpression {
-    pub identifier: String,
+    pub name: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -377,7 +377,7 @@ pub struct LoopStatement {
     pub attributes: Vec<Attribute>,
     pub body: CompoundStatement,
     // a ContinuingStatement can only appear inside a LoopStatement body, therefore it is
-    // not part of the Statement enum. it appear shere instead, but consider it part of
+    // not part of the Statement enum. it appears here instead, but consider it part of
     // body as the last statement of the CompoundStatement.
     pub continuing: Option<ContinuingStatement>,
 }
@@ -386,7 +386,7 @@ pub struct LoopStatement {
 pub struct ContinuingStatement {
     pub body: CompoundStatement,
     // a BreakIfStatement can only appear inside a ContinuingStatement body, therefore it
-    // not part of the Statement enum. it appear shere instead, but consider it part of
+    // not part of the Statement enum. it appears here instead, but consider it part of
     // body as the last statement of the CompoundStatement.
     pub break_if: Option<BreakIfStatement>,
 }

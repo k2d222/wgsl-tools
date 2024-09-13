@@ -1,4 +1,5 @@
-use proc_macro::TokenStream;
+use itertools::{Itertools, PeekingNext};
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
     braced, parenthesized,
@@ -37,9 +38,9 @@ impl Parse for QueryComponent {
         } else if input.peek(Ident) {
             let member = input.parse()?;
             Ok(QueryComponent::Member(member))
-        // } else if input.peek(Token![self]) {
-        //     input.parse::<Token![self]>()?;
-        //     Ok(QueryComponent::Member(format_ident!("self")))
+        } else if input.peek(Token![self]) {
+            input.parse::<Token![self]>()?;
+            Ok(QueryComponent::Member(format_ident!("self")))
         } else if input.peek(LitInt) {
             let index = input.parse()?;
             Ok(QueryComponent::Index(index))
@@ -85,17 +86,9 @@ impl Parse for QueryInput {
     }
 }
 
-fn query_impl(input: QueryInput, mutable: bool) -> TokenStream {
-    fn quote_components(
-        iter: impl Iterator<Item = QueryComponent>,
-        mutable: bool,
-    ) -> impl Iterator<Item = proc_macro2::TokenStream> {
-        let ref_ = if mutable {
-            quote! { &mut }
-        } else {
-            quote! { & }
-        };
-        iter.map(move |component| match component {
+fn query_impl(input: QueryInput, mutable: bool) -> proc_macro::TokenStream {
+    fn quote_component(component: QueryComponent, ref_: TokenStream) -> TokenStream {
+        match component {
             QueryComponent::Variant(enum_name, variant) => quote! {
                 filter_map(|x| match x {
                     #enum_name :: #variant(x) => Some(x),
@@ -118,7 +111,7 @@ fn query_impl(input: QueryInput, mutable: bool) -> TokenStream {
                             }
                             _ => return None,
                         };
-                        let rest = quote_components(iter, mutable);
+                        let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
                         Some(quote! { #first => Box::new(std::iter::once(x) #(.#rest)*) })
                     });
                     quote! {
@@ -139,7 +132,7 @@ fn query_impl(input: QueryInput, mutable: bool) -> TokenStream {
                             }
                             _ => return None,
                         };
-                        let rest = quote_components(iter, mutable);
+                        let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
                         Some(quote! { #first #(.#rest)* })
                     });
                     quote! {
@@ -160,17 +153,53 @@ fn query_impl(input: QueryInput, mutable: bool) -> TokenStream {
                 }
             }
             QueryComponent::Void => quote! {},
-        })
+        }
     }
 
-    let mut iter = input.components.into_iter();
+    let iter = input.components.into_iter().peekable();
 
-    let first = match iter.next() {
-        Some(QueryComponent::Member(member)) => quote! { std::iter::once(#member) },
-        _ => return quote! {}.into(),
+    let ref_ = if mutable {
+        quote! { &mut }
+    } else {
+        quote! { & }
     };
 
-    let rest = quote_components(iter, mutable);
+    fn prefix(
+        ref_: TokenStream,
+        it: impl Iterator<Item = QueryComponent>,
+    ) -> (TokenStream, impl Iterator<Item = QueryComponent>) {
+        let mut it = it.peekable();
+        let members = it
+            .peeking_take_while(|comp| matches!(comp, QueryComponent::Member(_)))
+            .map(|comp| match comp {
+                QueryComponent::Member(mem) => mem,
+                _ => unreachable!(),
+            })
+            .collect::<Vec<_>>();
+        // let prefix = match it.peek() {
+        //     Some(QueryComponent::Branch(BranchKind::Members, branch)) => {
+        //         // it.next();
+        //         let it = branch.into_iter().flat_map(|b| {
+        //             let it = b.components.into_iter().peekable();
+        //             prefixes(it).map(|(pre, suf)| (quote! { #(#members).* . #pre }, suf))
+        //         });
+        //         Box::new(it)
+        //     }
+        //     _ => Box::new(std::iter::once((
+        //         quote! { #(#members).* },
+        //         std::iter::empty(),
+        //     ))),
+        // };
+        match members.len() {
+            0 => (quote! { std::iter::empty() }, it),
+            1 => (quote! { std::iter::once( #(#members).* ) }, it),
+            _ => (quote! { std::iter::once( #ref_ #(#members).* ) }, it),
+        }
+    }
+
+    let (first, iter) = prefix(ref_.clone(), iter);
+
+    let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
 
     let expanded = quote! {
         #first #(.#rest)*
@@ -180,13 +209,13 @@ fn query_impl(input: QueryInput, mutable: bool) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn query(input: TokenStream) -> TokenStream {
+pub fn query(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as QueryInput);
     query_impl(input, false)
 }
 
 #[proc_macro]
-pub fn query_mut(input: TokenStream) -> TokenStream {
+pub fn query_mut(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as QueryInput);
     query_impl(input, true)
 }

@@ -320,7 +320,7 @@ impl Display for FunctionCall {
 
 impl Display for IdentifierExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let ident = &self.identifier;
+        let ident = &self.name;
         write!(f, "{ident}")
     }
 }
