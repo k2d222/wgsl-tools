@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{syntax::*, Decorated};
+use wgsl_parse_macros::query_mut;
 
 #[derive(Clone, Debug, Error)]
 pub enum CondcompError {
@@ -69,6 +70,29 @@ pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, C
     }
 }
 
+fn eval_if_attr(
+    opt_node: &mut Option<impl Decorated>,
+    features: &Features,
+) -> Result<(), CondcompError> {
+    if let Some(node) = opt_node {
+        let if_attr = node
+            .attributes_mut()
+            .iter_mut()
+            .find_map(|attr| (attr.name == "if").then_some(attr.arguments.as_mut()?.first_mut()?));
+
+        if let Some(if_attr) = if_attr {
+            let expr = eval_attr(if_attr, features)?;
+            let keep = !(expr == EXPR_FALSE);
+            if keep {
+                *if_attr = expr;
+            } else {
+                *opt_node = None;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn eval_if_attributes(
     nodes: &mut Vec<impl Decorated>,
     features: &Features,
@@ -133,7 +157,15 @@ fn statement_eval_if_attributes(
                     rec(&mut clause.body.statements, feats)?;
                 }
             }
-            Statement::Loop(stat) => rec(&mut stat.body.statements, feats)?,
+            Statement::Loop(stat) => {
+                rec(&mut stat.body.statements, feats)?;
+                eval_if_attr(&mut stat.continuing, feats)?;
+                if let Some(cont) = &mut stat.continuing {
+                    rec(&mut cont.body.statements, feats)?;
+                    eval_if_attr(&mut cont.break_if, feats)?;
+                }
+                rec(&mut stat.body.statements, feats)?;
+            }
             Statement::For(stat) => {
                 if let Some(init) = &mut stat.initializer {
                     rec_one(&mut *init, feats)?
@@ -158,7 +190,73 @@ fn statement_eval_if_attributes(
     rec(statements, features)
 }
 
+fn query_attributes(wesl: &mut TranslationUnit) -> impl Iterator<Item = &mut Vec<Attribute>> {
+    query_mut!(wesl.{
+        imports.[].attributes,
+        global_directives.[].{
+            GlobalDirective::Diagnostic.attributes,
+            GlobalDirective::Enable.attributes,
+            GlobalDirective::Requires.attributes,
+        },
+        global_declarations.[].{
+            GlobalDeclaration::Declaration.attributes,
+            GlobalDeclaration::TypeAlias.attributes,
+            GlobalDeclaration::Struct.{
+                attributes,
+                members.[].attributes,
+            },
+            GlobalDeclaration::Function.{
+                attributes,
+                parameters.[].attributes,
+                body.{ attributes, statements.[].(statement_query_attributes) }
+            },
+            GlobalDeclaration::ConstAssert.attributes,
+        }
+    })
+}
+
+fn statement_query_attributes(stat: &mut Statement) -> impl Iterator<Item = &mut Vec<Attribute>> {
+    query_mut!(stat.{
+        Statement::Compound.{ attributes, statements.[].(statement_query_attributes) },
+        Statement::If.{
+            attributes,
+            else_if_clauses.[].body.statements.[].(statement_query_attributes),
+            else_clause.[].body.statements.[].(statement_query_attributes),
+        },
+        Statement::Switch.{
+            attributes,
+            clauses.[].{ attributes, body.statements.[].(statement_query_attributes) },
+        },
+        Statement::Loop.{
+            attributes,
+            body.statements.[].(statement_query_attributes),
+            continuing.[].{
+                attributes,
+                body.statements.[].(statement_query_attributes),
+                break_if.[].{ attributes }
+            },
+        },
+        Statement::For.{
+            attributes,
+            body.statements.[].(statement_query_attributes),
+        },
+        Statement::While.{
+            attributes,
+            body.statements.[].(statement_query_attributes),
+        },
+        Statement::Break.attributes,
+        Statement::Continue.attributes,
+        Statement::Return.attributes,
+        Statement::Discard.attributes,
+        Statement::FunctionCall.attributes,
+        Statement::ConstAssert.attributes,
+        Statement::Declaration.attributes,
+    })
+}
+
 pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondcompError> {
+    // 1. evaluate all if attributes
+
     if cfg!(feature = "imports") {
         eval_if_attributes(&mut wesl.imports, features)?;
     }
@@ -189,5 +287,18 @@ pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), Condco
         statement_eval_if_attributes(&mut func.body.statements, features)?;
     }
 
+    // 2. remove attributes that evaluate to true
+
+    for attrs in query_attributes(wesl) {
+        attrs.retain(|attr| {
+            attr.name != "if" || {
+                attr.arguments
+                    .as_ref()
+                    .and_then(|args| args.first())
+                    .map(|expr| *expr != EXPR_TRUE)
+                    .unwrap_or(true)
+            }
+        })
+    }
     Ok(())
 }
