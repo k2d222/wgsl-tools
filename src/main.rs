@@ -4,8 +4,8 @@
 
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
-use wesl_imports::{
-    FileResolver, FileResource, Mangler, Resolver, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH,
+use weslc::{
+    condcomp::{}, imports::{FileResolver, FileResource, Mangler, Resolver, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH, FILE_MANGLER_NONE}, CompileOptions
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 
@@ -64,6 +64,8 @@ enum ManglerKind {
     Escape,
     /// hash mangler          foo/bar/{item} -> item_1985638328947
     Hash,
+    /// disable mangling (warning: will break if case of name conflicts!)
+    None,
 }
 
 impl Display for ManglerKind {
@@ -71,6 +73,7 @@ impl Display for ManglerKind {
         match self {
             ManglerKind::Escape => f.write_str("escape"),
             ManglerKind::Hash => f.write_str("hash"),
+            ManglerKind::None => f.write_str("none"),
         }
     }
 }
@@ -79,26 +82,29 @@ impl Display for ManglerKind {
 enum CliError {
     #[error("input file not found")]
     FileNotFound,
+    #[error("{0}")]
+    CompileError(#[from] weslc::Error),
 }
 
-#[derive(Clone, Debug, thiserror::Error)]
-enum Error {
-    #[error("command-line error: `{0}`")]
-    CliError(#[from] CliError),
-    #[error("import error: `{0}`")]
-    ImportError(#[from] wesl_imports::Error),
-    #[error("conditional compilation error: `{0}`")]
-    CondCompError(#[from] wesl_cond_comp::Error),
-}
+// #[derive(Clone, Debug, thiserror::Error)]
+// enum Error {
+//     #[error("command-line error: `{0}`")]
+//     CliError(#[from] CliError),
+//     #[error("import error: `{0}`")]
+//     ImportError(#[from] wesl::Error),
+//     #[error("conditional compilation error: `{0}`")]
+//     CondCompError(#[from] wesl_cond_comp::Error),
+// }
 
 fn make_mangler(kind: ManglerKind) -> &'static dyn Mangler<FileResource> {
     match kind {
         ManglerKind::Escape => &FILE_MANGLER_ESCAPE,
         ManglerKind::Hash => &FILE_MANGLER_HASH,
+        ManglerKind::None => &FILE_MANGLER_NONE,
     }
 }
 
-fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, Error> {
+fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
     let base = args
         .common
         .input
@@ -113,23 +119,21 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, Error> {
     );
 
     let resolver = FileResolver::new(base);
-    let entry_point = FileResource::from(name);
+    let entrypoint = FileResource::from(name);
 
-    let wgsl = if args.no_imports {
-        let mut module = resolver.resolve_file(&entry_point)?;
-        if !args.no_cond_comp {
-            let mut features = HashMap::new();
-            features.extend(args.enable_features.iter().map(|f| (f.clone(), true)));
-            features.extend(args.disable_features.iter().map(|f| (f.clone(), false)));
-            wesl_cond_comp::run(&mut module, &features)?;
-        }
-        module
-    } else {
-        let mangler = make_mangler(args.mangler);
-        let module = wesl_imports::Module::resolve(&entry_point, &resolver, mangler)?;
-        module.assemble()
+    let mangler = make_mangler(args.mangler);
+
+    let mut features = HashMap::new();
+    features.extend(args.enable_features.iter().map(|f| (f.clone(), true)));
+    features.extend(args.disable_features.iter().map(|f| (f.clone(), false)));
+
+    let compile_options = CompileOptions {
+        use_imports: !args.no_imports,
+        use_condcomp: !args.no_cond_comp,
+        features,
     };
 
+    let wgsl = weslc::compile(&entrypoint, resolver, mangler, &compile_options)?;
     Ok(wgsl)
 }
 

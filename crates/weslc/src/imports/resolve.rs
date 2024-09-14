@@ -1,3 +1,4 @@
+use crate::Error;
 use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{
@@ -14,7 +15,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::mangle::Mangler;
+use super::mangle::Mangler;
 
 /// convenience functions to build a module resolver
 
@@ -40,7 +41,7 @@ type Imports<R: Resource> = HashMap<R, Vec<syntax::ImportItem>>;
 type Modules<R: Resource> = HashMap<R, Rc<Module<R>>>;
 
 #[derive(Clone, Debug, Error)]
-pub enum Error {
+pub enum ImportError {
     #[error("parse error: `{0}`")]
     ParseError(wgsl_parse::Error),
     #[error("duplicate imported item `{0}`")]
@@ -227,14 +228,21 @@ impl Resolver for FileResolver {
         let mut with_base = self.base.to_path_buf();
         with_base.extend(&path.0);
         let source = fs::read_to_string(&with_base)
-            .map_err(|_| Error::FileNotFound(path.0.to_string_lossy().to_string()))?;
-        Parser::parse_str(&source).map_err(|e| Error::ParseError(e.into_owned()))
+            .map_err(|_| ImportError::FileNotFound(path.0.to_string_lossy().to_string()))?;
+        let wesl =
+            Parser::parse_str(&source).map_err(|e| ImportError::ParseError(e.into_owned()))?;
+        Ok(wesl)
     }
 }
 
-pub struct PreprocessResolver<R: Resolver, F: Fn(&mut TranslationUnit)>(pub R, pub F);
+pub struct PreprocessResolver<R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>>(
+    pub R,
+    pub F,
+);
 
-impl<R: Resolver, F: Fn(&mut TranslationUnit)> Resolver for PreprocessResolver<R, F> {
+impl<R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>> Resolver
+    for PreprocessResolver<R, F>
+{
     type Resource = R::Resource;
 
     fn resolve_path(
@@ -247,7 +255,7 @@ impl<R: Resolver, F: Fn(&mut TranslationUnit)> Resolver for PreprocessResolver<R
 
     fn resolve_file(&self, resource: &Self::Resource) -> Result<TranslationUnit, Error> {
         let mut res = self.0.resolve_file(resource)?;
-        self.1(&mut res);
+        self.1(&mut res)?;
         Ok(res)
     }
 }
@@ -280,14 +288,12 @@ fn resolve_rec<R: Resource>(
     Ok(module)
 }
 
-impl<R: Resource> Module<R> {
-    pub fn resolve(
-        resource: &R,
-        resolver: &impl Resolver<Resource = R>,
-        mangler: &(impl Mangler<R> + ?Sized),
-    ) -> Result<Module<R>, Error> {
-        let mut submodules = Modules::new();
-        let module = resolve_rec(resource, resolver, mangler, &mut submodules)?;
-        Ok(module)
-    }
+pub fn resolve<R: Resource, M: Mangler<R> + ?Sized>(
+    resource: &R,
+    resolver: &impl Resolver<Resource = R>,
+    mangler: &M,
+) -> Result<Module<R>, crate::Error> {
+    let mut submodules = Modules::new();
+    let module = resolve_rec(resource, resolver, mangler, &mut submodules)?;
+    Ok(module)
 }

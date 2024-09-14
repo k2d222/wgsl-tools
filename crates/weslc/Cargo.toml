@@ -1,5 +1,5 @@
 [package]
-name = "wesl-cond-comp"
+name = "weslc"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,5 +7,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+itertools = "0.13.0"
 thiserror = "1.0.63"
-wgsl-parse = { path = "../wgsl-parse", default-features = false }
+wgsl-parse = { path = "../wgsl-parse" }
+wgsl-parse-macros = { version = "0.0.2", path = "../wgsl-parse-macros" }

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/wgsl-parse", "crates/wesl-imports", "crates/wgsl-test", "crates/wgsl-parse-macros", "crates/wesl-cond-comp"]
+members = ["crates/wgsl-parse", "crates/wgsl-parse-macros", "crates/weslc", "crates/wesl-test"]
 
 [workspace.package]
 version = "0.0.2"
@@ -21,8 +21,7 @@ license.workspace = true
 [dependencies]
 clap = { version = "4.5.11", features = ["derive"] }
 wgsl-parse = { path = "crates/wgsl-parse", default-features = false, features = ["imports", "cond-comp"] }
-wesl-imports = { path = "crates/wesl-imports" }
-wesl-cond-comp = { path = "crates/wesl-cond-comp"}
+weslc = { path = "crates/weslc" }
 thiserror = "1.0.63"
 
 [patch.crates-io]

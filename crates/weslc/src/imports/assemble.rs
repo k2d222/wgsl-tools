@@ -2,9 +2,8 @@ use std::collections::HashSet;
 
 use wgsl_parse::syntax::TranslationUnit;
 
-use crate::resolve::Resource;
-
 use super::resolve::Module;
+use super::resolve::Resource;
 
 impl<R: Resource> Module<R> {
     pub fn assemble(&self) -> TranslationUnit {

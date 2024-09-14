@@ -3,24 +3,19 @@ use std::collections::HashSet;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::marker::PhantomData;
 
 use itertools::Itertools;
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
-use crate::resolve::FileResource;
-use crate::resolve::Resource;
-use crate::resolve::{Error, Module};
+use super::resolve::FileResource;
+use super::resolve::Resource;
+use super::resolve::{ImportError, Module};
 
 pub trait Mangler<R: Resource> {
     fn mangle(&self, resource: &R, item: &str) -> String;
 }
-
-// impl<R: Resolver, T: Mangler + ?Sized> Mangler<R> for Box<T> {
-//     fn mangle(&self, resource: &R::Resource, item: &str) -> String {
-//         self.mangle(ressource)
-//     }
-// }
 
 /// A mangler for the filesystem resources hashes the resource identifier.
 /// e.g. `foo/bar/baz.wgsl item => item_32938483840293402930392`
@@ -56,6 +51,21 @@ impl Mangler<FileResource> for FileManglerEscape {
             .map(|p| p.to_string_lossy().replace('_', "__"))
             .format("_");
         format!("{path}_{item}")
+    }
+}
+
+/// A mangler that just returns the identifer as-is (no mangling).
+/// e.g. `foo/bar/baz.wgsl item => item`
+///
+/// Warning: will break the program in case of name conflicts.
+#[derive(Default, Clone, Debug)]
+pub struct NoMangler<R: Resource>(PhantomData<R>);
+
+pub const FILE_MANGLER_NONE: NoMangler<FileResource> = NoMangler(PhantomData);
+
+impl<R: Resource> Mangler<R> for NoMangler<R> {
+    fn mangle(&self, _resource: &R, item: &str) -> String {
+        item.to_string()
     }
 }
 
@@ -286,7 +296,7 @@ fn iter_replaceable_names(module: &mut TranslationUnit) -> impl Iterator<Item = 
 }
 
 impl<R: Resource> Module<R> {
-    pub fn mangle(&mut self, mangler: &(impl Mangler<R> + ?Sized)) -> Result<(), Error> {
+    pub fn mangle(&mut self, mangler: &(impl Mangler<R> + ?Sized)) -> Result<(), ImportError> {
         // delared idents
         let mut replace: HashMap<String, String> = query_mut!(self.source.global_declarations.[].{
             GlobalDeclaration::Declaration.name,
