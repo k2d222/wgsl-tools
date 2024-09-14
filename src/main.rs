@@ -5,7 +5,8 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use weslc::{
-    condcomp::{}, imports::{FileResolver, FileResource, Mangler, Resolver, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH, FILE_MANGLER_NONE}, CompileOptions
+    CompileOptions, FileResolver, FileResource, Mangler, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH,
+    FILE_MANGLER_NONE,
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 

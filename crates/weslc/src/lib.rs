@@ -1,17 +1,29 @@
-use std::collections::HashMap;
-
-use imports::{Mangler, PreprocessResolver, Resolver, Resource};
-use wgsl_parse::syntax::TranslationUnit;
-
+#[cfg(feature = "cond-comp")]
 pub mod condcomp;
+#[cfg(feature = "imports")]
 pub mod imports;
+
+mod mangle;
+mod resolve;
+
+pub use mangle::{
+    FileManglerEscape, FileManglerHash, Mangler, NoMangler, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH,
+    FILE_MANGLER_NONE,
+};
+
+pub use resolve::{FileResolver, FileResource, PreprocessResolver, Resolver, Resource};
+
+use std::collections::HashMap;
+use wgsl_parse::syntax::TranslationUnit;
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
-    // #[error("command-line error: `{0}`")]
-    // CliError(#[from] CliError),
+    #[error("import resolution failure: `{0}`")]
+    ResolveError(#[from] resolve::ResolveError),
+    #[cfg(feature = "imports")]
     #[error("import error: `{0}`")]
     ImportError(#[from] imports::ImportError),
+    #[cfg(feature = "cond-comp")]
     #[error("conditional compilation error: `{0}`")]
     CondCompError(#[from] condcomp::CondcompError),
 }
@@ -38,8 +50,8 @@ pub fn compile<R: Resource, M: Mangler<R> + ?Sized>(
     mangler: &M,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Error> {
-    let wgsl = if options.use_imports {
-        let module = if options.use_condcomp {
+    let wgsl = if cfg!(feature = "imports") && options.use_imports {
+        let module = if cfg!(feature = "cond-comp") && options.use_condcomp {
             let resolver = PreprocessResolver(resolver, |wesl| {
                 condcomp::run(wesl, &options.features)?;
                 Ok(())

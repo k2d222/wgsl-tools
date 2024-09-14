@@ -163,6 +163,7 @@ pub enum Token {
     SymAndAnd,
     #[token("->")]
     SymArrow,
+    #[cfg(not(feature = "cond-comp"))]
     #[token("@")]
     SymAttr,
     #[token("/")]
@@ -353,6 +354,16 @@ pub enum Token {
     #[cfg(feature = "imports")]
     #[token("import")]
     KwImport,
+
+    // extension: wesl-conditional-translation
+    // https://github.com/wgsl-tooling-wg/wesl-spec/pull/19
+    // date: 2024-09-14, hash: b1446356ff206e5826a58812895bc6d3d64a2220
+    #[cfg(feature = "cond-comp")]
+    #[regex(r#"@\s*(([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}]))"#, |lex| lex.slice()[1..].trim().to_string())]
+    Attr(String),
+    // unreachable token to keep compatibility
+    #[cfg(feature = "cond-comp")]
+    SymAttr,
 }
 
 impl Token {
@@ -546,6 +557,8 @@ impl Display for Token {
             Token::KwAs => write!(f, "as"),
             #[cfg(feature = "imports")]
             Token::KwImport => write!(f, "import"),
+            #[cfg(feature = "cond-comp")]
+            Token::Attr(attr) => write!(f, "@{attr}"),
         }
     }
 }
