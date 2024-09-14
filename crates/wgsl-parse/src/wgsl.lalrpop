@@ -109,12 +109,6 @@ extern {
         "as" => Token::KwAs,
         #[cfg(feature = "imports")]
         "import" => Token::KwImport,
-
-        // extension: wesl-conditional-translation
-        // https://github.com/wgsl-tooling-wg/wesl-spec/pull/19
-        // date: 2024-09-14, hash: b1446356ff206e5826a58812895bc6d3d64a2220
-        #[cfg(feature = "cond-comp")]
-        TokAttr => Token::Attr(<String>),
     }
 }
 
@@ -981,11 +975,13 @@ ImportCollection: Vec<Import> = {
 
 #[cfg(feature = "cond-comp")]
 Attribute: Attribute = {
-    <name: TokAttr> <arguments: ArgumentExpressionList?> => Attribute {
+    "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> => Attribute {
         name, arguments
-    }
+    },
+    "@" "if" <arguments: ArgumentExpressionList?> => Attribute {
+        name: "if".to_string(), arguments
+    },
 };
-
 
 #[cfg(feature = "cond-comp")]
 EnableDirective: EnableDirective = {
