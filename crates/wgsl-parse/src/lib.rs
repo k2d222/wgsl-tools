@@ -95,3 +95,4 @@ pub mod visit;
 pub use error::Error;
 pub use lexer::Lexer;
 pub use parser::Parser;
+pub use syntax_impl::Decorated;
