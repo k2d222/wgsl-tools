@@ -25,5 +25,6 @@ weslc = { path = "crates/weslc" }
 thiserror = "1.0.63"
 
 [patch.crates-io]
-lalrpop = { path = "../lalrpop/lalrpop" }
+# lalrpop = { path = "../lalrpop/lalrpop" }
+lalrpop = { git = "https://github.com/k2d222/lalrpop.git", branch = "more-cfg-attributes" }
 
