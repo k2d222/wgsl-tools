@@ -36,7 +36,7 @@ pub struct TranslationUnit {
 pub struct Import {
     #[cfg(feature = "cond-comp")]
     pub attributes: Vec<Attribute>,
-    pub path: Vec<String>,
+    pub path: std::path::PathBuf,
     pub content: ImportContent,
 }
 

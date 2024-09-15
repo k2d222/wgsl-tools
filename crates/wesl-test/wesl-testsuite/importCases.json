@@ -1,0 +1,131 @@
+[
+  {
+    "name": "import ./bar/foo",
+    "src": {
+      "./main.wgsl": "\n          import ./bar/foo; \n          fn main() {\n            foo();\n          }\n       ",
+      "./bar.wgsl": "\n          export fn foo() { }\n       "
+    }
+  },
+  {
+    "name": "main has other root elements",
+    "src": {
+      "./main.wgsl": "\n          struct Uniforms {\n            a: u32\n          }\n\n          @group(0) @binding(0) var<uniform> u: Uniforms;\n\n          fn main() { }\n      "
+    }
+  },
+  {
+    "name": "import foo as bar",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/foo as bar;\n\n        fn main() {\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        export fn foo() { /* fooImpl */ }\n      "
+    }
+  },
+  {
+    "name": "import twice doesn't get two copies",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/foo;\n        import ./file2/bar;\n\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        export fn foo() { /* fooImpl */ }\n      ",
+      "./file2.wgsl": "\n        import ./file1/foo;\n        export fn bar() { foo(); }\n      "
+    }
+  },
+  {
+    "name": "imported fn calls support fn with root conflict",
+    "src": {
+      "./main.wgsl": "\n        import foo from ./file1;\n\n        fn main() { foo(); }\n        fn conflicted() { }\n      ",
+      "./file1.wgsl": "\n        export fn foo() {\n          conflicted(0);\n          conflicted(1);\n        }\n        fn conflicted(a:i32) {}\n      "
+    }
+  },
+  {
+    "name": "import twice with two as names",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/foo as bar;\n        import ./file1/foo as zap;\n\n        fn main() { bar(); zap(); }\n      ",
+      "./file1.wgsl": "\n        export fn foo() { }\n      "
+    }
+  },
+  {
+    "name": "import transitive conflicts with main",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/mid;\n\n        fn main() {\n          mid();\n        }\n\n        fn grand() {\n          /* main impl */\n        }\n      ",
+      "./file1.wgsl": "\n        import ./file2/grand;\n        \n        export fn mid() { grand(); }\n      ",
+      "./file2.wgsl": "\n        export fn grand() { /* grandImpl */ }\n      "
+    }
+  },
+  {
+    "name": "multiple exports from the same module",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/{foo, bar};\n\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        export fn foo() { }\n        export fn bar() { }\n      "
+    }
+  },
+  {
+    "name": "import and resolve conflicting support function",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/foo as bar;\n\n        fn support() { \n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        export\n        fn foo() {\n          support();\n        }\n\n        fn support() { }\n      "
+    }
+  },
+  {
+    "name": "import support fn that references another import",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/foo;\n\n        fn support() { \n          foo();\n        }\n      ",
+      "./file1.wgsl": "\n        import ./file2/bar;\n\n        export fn foo() {\n          support();\n          bar();\n        }\n\n        fn support() { }\n      ",
+      "./file2.wgsl": "\n        export fn bar() {\n          support();\n        }\n\n        fn support() { }\n      "
+    }
+  },
+  {
+    "name": "import support fn from two exports",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/foo;\n        import ./file1/bar;\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        export fn foo() {\n          support();\n        }\n\n        export fn bar() {\n          support();\n        }\n\n        fn support() { }\n      "
+    }
+  },
+  {
+    "name": "import a struct",
+    "src": {
+      "./main.wgsl": "\n          import ./file1/AStruct;\n\n          fn main() {\n            let a = AStruct(1u); \n          }\n      ",
+      "./file1.wgsl": "\n        export struct AStruct {\n          x: u32,\n        }\n      ",
+      "./file2.wgsl": "\n      "
+    }
+  },
+  {
+    "name": "import fn with support struct constructor",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/elemOne;\n\n        fn main() {\n          let ze = elemOne();\n        }\n      ",
+      "./file1.wgsl": "\n        struct Elem {\n          sum: u32\n        }\n\n        export fn elemOne() -> Elem {\n          return Elem(1u);\n        }\n      ",
+      "./file2.wgsl": "\n      "
+    }
+  },
+  {
+    "name": "import a transitive struct",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/AStruct;\n\n        struct SrcStruct {\n          a: AStruct,\n        }\n      ",
+      "./file1.wgsl": "\n        import ./file2/BStruct;\n\n        export struct AStruct {\n          s: BStruct,\n        }\n      ",
+      "./file2.wgsl": "\n        export struct BStruct {\n          x: u32,\n        }\n      "
+    }
+  },
+  {
+    "name": "'import as' a struct",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/AStruct as AA;\n\n        fn foo (a: AA) { }\n      ",
+      "./file1.wgsl": "\n        export struct AStruct { x: u32 }\n      "
+    }
+  },
+  {
+    "name": "import a struct with name conflicting support struct",
+    "src": {
+      "./main.wgsl": "\n        import ./file1/AStruct;\n\n        struct Base {\n          b: i32\n        }\n\n        fn foo() -> AStruct {let a:AStruct; return a;}\n      ",
+      "./file1.wgsl": "\n        struct Base {\n          x: u32\n        }\n\n        export struct AStruct {\n          x: Base\n        }\n      "
+    }
+  },
+  {
+    "name": "copy alias to output",
+    "src": {
+      "./main.wgsl": "\n        alias MyType = u32;\n      "
+    }
+  },
+  {
+    "name": "copy diagnostics to output",
+    "src": {
+      "./main.wgsl": "\n        diagnostic(off,derivative_uniformity);\n      "
+    }
+  }
+]

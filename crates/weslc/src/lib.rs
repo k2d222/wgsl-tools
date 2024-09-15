@@ -11,7 +11,9 @@ pub use mangle::{
     FILE_MANGLER_NONE,
 };
 
-pub use resolve::{FileResolver, FileResource, PreprocessResolver, Resolver, Resource};
+pub use resolve::{
+    FileResolver, FileResource, PreprocessResolver, Resolver, Resource, VirtualFileResolver,
+};
 
 use std::collections::HashMap;
 use wgsl_parse::syntax::TranslationUnit;
@@ -25,7 +27,7 @@ pub enum Error {
     ImportError(#[from] imports::ImportError),
     #[cfg(feature = "cond-comp")]
     #[error("conditional compilation error: `{0}`")]
-    CondCompError(#[from] condcomp::CondcompError),
+    CondCompError(#[from] condcomp::CondCompError),
 }
 
 pub struct CompileOptions {

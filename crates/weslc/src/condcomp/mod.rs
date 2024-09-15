@@ -6,7 +6,7 @@ use wgsl_parse::{syntax::*, Decorated};
 use wgsl_parse_macros::query_mut;
 
 #[derive(Clone, Debug, Error)]
-pub enum CondcompError {
+pub enum CondCompError {
     #[error("invalid feature flag: `{0}`")]
     InvalidFeatureFlag(String),
     #[error("missing feature flag: `{0}`")]
@@ -20,12 +20,12 @@ type Features = HashMap<String, bool>;
 const EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::True);
 const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::False);
 
-pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, CondcompError> {
+pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, CondCompError> {
     match expr {
         Expression::Literal(lit) => match lit {
             LiteralExpression::True => Ok(expr.clone()),
             LiteralExpression::False => Ok(expr.clone()),
-            _ => Err(CondcompError::InvalidExpression(expr.clone())),
+            _ => Err(CondCompError::InvalidExpression(expr.clone())),
         },
         Expression::Parenthesized(paren) => eval_attr(&paren.expression, features),
         Expression::Binary(binary) => {
@@ -54,7 +54,7 @@ pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, C
                     };
                     Ok(expr)
                 }
-                _ => Err(CondcompError::InvalidExpression(expr.clone())),
+                _ => Err(CondCompError::InvalidExpression(expr.clone())),
             }
         }
         Expression::Identifier(ident) => {
@@ -66,14 +66,14 @@ pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, C
             };
             Ok(expr)
         }
-        _ => Err(CondcompError::InvalidExpression(expr.clone())),
+        _ => Err(CondCompError::InvalidExpression(expr.clone())),
     }
 }
 
 fn eval_if_attr(
     opt_node: &mut Option<impl Decorated>,
     features: &Features,
-) -> Result<(), CondcompError> {
+) -> Result<(), CondCompError> {
     if let Some(node) = opt_node {
         let if_attr = node
             .attributes_mut()
@@ -96,7 +96,7 @@ fn eval_if_attr(
 fn eval_if_attributes(
     nodes: &mut Vec<impl Decorated>,
     features: &Features,
-) -> Result<(), CondcompError> {
+) -> Result<(), CondCompError> {
     let retains = nodes
         .iter()
         .map(|node| {
@@ -111,7 +111,7 @@ fn eval_if_attributes(
                 Ok(EXPR_TRUE.clone())
             }
         })
-        .collect::<Result<Vec<Expression>, CondcompError>>()?;
+        .collect::<Result<Vec<Expression>, CondCompError>>()?;
 
     let retains = nodes
         .iter_mut()
@@ -138,8 +138,8 @@ fn eval_if_attributes(
 fn statement_eval_if_attributes(
     statements: &mut Vec<Statement>,
     features: &HashMap<String, bool>,
-) -> Result<(), CondcompError> {
-    fn rec_one(stat: &mut Statement, feats: &HashMap<String, bool>) -> Result<(), CondcompError> {
+) -> Result<(), CondCompError> {
+    fn rec_one(stat: &mut Statement, feats: &HashMap<String, bool>) -> Result<(), CondCompError> {
         match stat {
             Statement::Compound(stat) => rec(&mut stat.statements, feats)?,
             Statement::If(stat) => {
@@ -180,7 +180,7 @@ fn statement_eval_if_attributes(
         };
         Ok(())
     }
-    fn rec(stats: &mut Vec<Statement>, feats: &HashMap<String, bool>) -> Result<(), CondcompError> {
+    fn rec(stats: &mut Vec<Statement>, feats: &HashMap<String, bool>) -> Result<(), CondCompError> {
         eval_if_attributes(stats, feats)?;
         for stat in stats {
             rec_one(stat, feats)?;
@@ -254,7 +254,7 @@ fn statement_query_attributes(stat: &mut Statement) -> impl Iterator<Item = &mut
     })
 }
 
-pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondcompError> {
+pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondCompError> {
     // 1. evaluate all if attributes
 
     if cfg!(feature = "imports") {

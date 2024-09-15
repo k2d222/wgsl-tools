@@ -5,8 +5,8 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use weslc::{
-    CompileOptions, FileResolver, FileResource, Mangler, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH,
-    FILE_MANGLER_NONE,
+    CompileOptions, FileResolver, FileResource, Mangler, Resolver, FILE_MANGLER_ESCAPE,
+    FILE_MANGLER_HASH, FILE_MANGLER_NONE,
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 
@@ -87,16 +87,6 @@ enum CliError {
     CompileError(#[from] weslc::Error),
 }
 
-// #[derive(Clone, Debug, thiserror::Error)]
-// enum Error {
-//     #[error("command-line error: `{0}`")]
-//     CliError(#[from] CliError),
-//     #[error("import error: `{0}`")]
-//     ImportError(#[from] wesl::Error),
-//     #[error("conditional compilation error: `{0}`")]
-//     CondCompError(#[from] wesl_cond_comp::Error),
-// }
-
 fn make_mangler(kind: ManglerKind) -> &'static dyn Mangler<FileResource> {
     match kind {
         ManglerKind::Escape => &FILE_MANGLER_ESCAPE,
@@ -120,7 +110,7 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
     );
 
     let resolver = FileResolver::new(base);
-    let entrypoint = FileResource::from(name);
+    let entrypoint = resolver.resolve_path(&name, None);
 
     let mangler = make_mangler(args.mangler);
 

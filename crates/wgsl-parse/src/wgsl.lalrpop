@@ -906,7 +906,7 @@ Import: Import = {
     <attributes: Attribute*> "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => {
         let mut import = match relative {
             Some(mut relative) => {
-                relative.extend(import.path);
+                relative.extend(&import.path);
                 import.path = relative;
                 import
             },
@@ -918,7 +918,7 @@ Import: Import = {
 };
 
 #[cfg(feature = "imports")]
-ImportRelative: Vec<String> = {
+ImportRelative: std::path::PathBuf = {
     "." "/" <parents: (".." "/")*> => {
         std::iter::once(".").chain(parents.iter().map(|_| "..")).map(str::to_string).collect()
     },
@@ -931,15 +931,15 @@ ImportRelative: Vec<String> = {
 ImportPath: Import = {
     <path: (<Ident> "/")+> <content: ImportContent> => Import {
         #[cfg(feature = "cond-comp")] attributes: Vec::new(),
-        path, content
+        path: std::path::PathBuf::from_iter(path.iter()), content
     },
     ItemImport => Import {
         #[cfg(feature = "cond-comp")] attributes: Vec::new(),
-        path: Vec::new(), content: ImportContent::Item(<>)
+        path: Default::default(), content: ImportContent::Item(<>)
     },
     StarImport => Import {
         #[cfg(feature = "cond-comp")] attributes: Vec::new(),
-        path: Vec::new(), content: ImportContent::Star(<>)
+        path: Default::default(), content: ImportContent::Star(<>)
     },
 };
 
