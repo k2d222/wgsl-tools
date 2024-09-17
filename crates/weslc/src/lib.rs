@@ -1,7 +1,7 @@
 #[cfg(feature = "cond-comp")]
 pub mod condcomp;
 #[cfg(feature = "imports")]
-pub mod imports;
+pub mod import;
 
 mod mangle;
 mod resolve;
@@ -24,7 +24,7 @@ use syntax_util::{entry_points, rename_decl};
 use std::collections::HashMap;
 use wgsl_parse::syntax::TranslationUnit;
 
-use crate::imports::Module;
+use crate::import::Module;
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
@@ -32,7 +32,7 @@ pub enum Error {
     ResolveError(#[from] resolve::ResolveError),
     #[cfg(feature = "imports")]
     #[error("import error: {0}")]
-    ImportError(#[from] imports::ImportError),
+    ImportError(#[from] import::ImportError),
     #[cfg(feature = "cond-comp")]
     #[error("conditional compilation error: {0}")]
     CondCompError(#[from] condcomp::CondCompError),

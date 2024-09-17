@@ -23,8 +23,3 @@ clap = { version = "4.5.11", features = ["derive"] }
 wgsl-parse = { path = "crates/wgsl-parse" }
 weslc = { path = "crates/weslc" }
 thiserror = "1.0.63"
-
-[patch.crates-io]
-# lalrpop = { path = "../lalrpop/lalrpop" }
-lalrpop = { git = "https://github.com/k2d222/lalrpop.git", branch = "more-cfg-attributes" }
-
