@@ -1,43 +1,57 @@
 use std::collections::HashMap;
 
-use super::{ImportError, Module};
+use super::module::imports_to_resources;
+use super::Module;
 use crate::syntax_util::IterUses;
-use crate::Mangler;
+use crate::{Error, Mangler, Resource};
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
+fn mangle_file(
+    wesl: &mut TranslationUnit,
+    resource: Resource,
+    mangler: &impl Mangler,
+) -> Result<(), Error> {
+    // delared idents
+    let mut replace: HashMap<String, String> = query_mut!(wesl.global_declarations.[].{
+        GlobalDeclaration::Declaration.name,
+        GlobalDeclaration::TypeAlias.name,
+        GlobalDeclaration::Struct.name,
+        GlobalDeclaration::Function.name,
+    })
+    .map(|decl_ident| {
+        let old_ident = decl_ident.to_string();
+        let new_ident = mangler.mangle(&resource, &old_ident);
+        *decl_ident = new_ident.clone();
+        (old_ident, new_ident)
+    })
+    .collect();
+
+    // imported idents
+    let imports = imports_to_resources(&wesl.imports, &resource)?;
+    for (resource, items) in imports.iter() {
+        for item in items {
+            let old_ident = item.rename.as_ref().unwrap_or(&item.name).clone();
+            let new_ident = mangler.mangle(&resource, &item.name);
+            replace.insert(old_ident, new_ident);
+        }
+    }
+
+    for name in wesl.uses_mut() {
+        if let Some(new_ident) = replace.get(name) {
+            *name = new_ident.clone();
+        }
+    }
+
+    Ok(())
+}
+
 impl Module {
-    pub fn mangle(&mut self, mangler: &(impl Mangler + ?Sized)) -> Result<(), ImportError> {
-        // delared idents
-        let mut replace: HashMap<String, String> = query_mut!(self.source.global_declarations.[].{
-            GlobalDeclaration::Declaration.name,
-            GlobalDeclaration::TypeAlias.name,
-            GlobalDeclaration::Struct.name,
-            GlobalDeclaration::Function.name,
-        })
-        .map(|decl_ident| {
-            let old_ident = decl_ident.to_string();
-            let new_ident = mangler.mangle(&self.resource, &old_ident);
-            *decl_ident = new_ident.clone();
-            (old_ident, new_ident)
-        })
-        .collect();
-
-        // imported idents
-        for (resource, items) in &self.imports {
-            for item in items {
-                let old_ident = item.rename.as_ref().unwrap_or(&item.name).clone();
-                let new_ident = mangler.mangle(&resource, &item.name);
-                replace.insert(old_ident, new_ident);
-            }
+    pub fn mangle(&mut self, mangler: &impl Mangler) -> Result<(), Error> {
+        mangle_file(&mut self.source, self.resource.clone(), mangler)?;
+        for (resource, source) in &mut self.resolutions {
+            mangle_file(source, resource.clone(), mangler)?;
         }
-
-        for name in self.source.uses_mut() {
-            if let Some(new_ident) = replace.get(name) {
-                *name = new_ident.clone();
-            }
-        }
-
         Ok(())
     }
 }

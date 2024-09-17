@@ -8,6 +8,7 @@ mod resolve;
 mod strip;
 mod syntax_util;
 
+use itertools::Itertools;
 pub use mangle::{
     FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE, MANGLER_HASH,
     MANGLER_NONE,
@@ -18,9 +19,12 @@ pub use resolve::{
 };
 
 pub use strip::strip;
+use syntax_util::{entry_points, rename_decl};
 
 use std::collections::HashMap;
 use wgsl_parse::syntax::TranslationUnit;
+
+use crate::imports::Module;
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
@@ -38,7 +42,7 @@ pub struct CompileOptions {
     pub use_imports: bool,
     pub use_condcomp: bool,
     pub strip: bool,
-    pub entry_points: Vec<String>,
+    pub entry_points: Option<Vec<String>>,
     pub features: HashMap<String, bool>,
 }
 
@@ -54,34 +58,60 @@ impl Default for CompileOptions {
     }
 }
 
-pub fn compile<M: Mangler + ?Sized>(
+pub fn compile(
     entrypoint: &Resource,
     resolver: impl Resolver,
-    mangler: &M,
+    mangler: &impl Mangler,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Error> {
-    let mut wgsl = if cfg!(feature = "imports") && options.use_imports {
-        let module = if cfg!(feature = "cond-comp") && options.use_condcomp {
-            let resolver = PreprocessResolver(resolver, |wesl| {
-                condcomp::run(wesl, &options.features)?;
-                Ok(())
-            });
-            imports::resolve(entrypoint, &resolver, mangler)?
-        } else {
-            imports::resolve(entrypoint, &resolver, mangler)?
-        };
-        module.assemble()
+    let resolver: Box<dyn Resolver> = if cfg!(feature = "cond-comp") && options.use_condcomp {
+        Box::new(PreprocessResolver(resolver, |wesl| {
+            condcomp::run(wesl, &options.features)?;
+            Ok(())
+        }))
     } else {
-        let mut wesl = resolver.resolve_file(entrypoint)?;
-        if options.use_condcomp {
-            condcomp::run(&mut wesl, &options.features)?;
-        }
+        Box::new(resolver)
+    };
+
+    let wesl = resolver.resolve_file(entrypoint)?;
+
+    let entry_names = entry_points(&wesl)
+        .map(|name| name.to_string())
+        .collect_vec();
+
+    let mut wesl = if cfg!(feature = "imports") && options.use_imports {
+        let mut module = Module::new(wesl, entrypoint.clone());
+        module.resolve(&resolver)?;
+        module.mangle(mangler)?;
+        let wesl = module.assemble();
+        wesl
+    } else {
         wesl
     };
 
     if options.strip {
-        strip(&mut wgsl, &options.entry_points);
+        if let Some(entry_names) = &options.entry_points {
+            let mangled_names = entry_names
+                .iter()
+                .map(|name| mangler.mangle(entrypoint, name))
+                .collect_vec();
+            strip(&mut wesl, &mangled_names);
+        } else {
+            let mangled_names = entry_names
+                .iter()
+                .map(|name| mangler.mangle(entrypoint, name))
+                .collect_vec();
+            strip(&mut wesl, &mangled_names);
+        }
     }
 
-    Ok(wgsl)
+    for entry_name in &entry_names {
+        rename_decl(
+            &mut wesl,
+            &mangler.mangle(entrypoint, &entry_name),
+            entry_name,
+        );
+    }
+
+    Ok(wesl)
 }

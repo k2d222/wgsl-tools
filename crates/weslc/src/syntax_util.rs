@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use itertools::Itertools;
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
@@ -244,4 +245,47 @@ impl IterUses for Vec<Statement> {
         }
         rec(self).0.into_iter()
     }
+}
+
+fn decl_name_mut(decl: &mut GlobalDeclaration) -> Option<&mut String> {
+    match decl {
+        wgsl_parse::syntax::GlobalDeclaration::Void => None,
+        wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&mut d.name),
+        wgsl_parse::syntax::GlobalDeclaration::TypeAlias(d) => Some(&mut d.name),
+        wgsl_parse::syntax::GlobalDeclaration::Struct(d) => Some(&mut d.name),
+        wgsl_parse::syntax::GlobalDeclaration::Function(d) => Some(&mut d.name),
+        wgsl_parse::syntax::GlobalDeclaration::ConstAssert(_) => None,
+    }
+}
+
+pub fn rename_decl(wesl: &mut TranslationUnit, old_name: &str, new_name: &str) {
+    for name in wesl.uses_mut() {
+        if name == old_name {
+            *name = new_name.to_string();
+        }
+    }
+
+    for decl in &mut wesl.global_declarations {
+        if let Some(name) = decl_name_mut(decl) {
+            if name == old_name {
+                *name = new_name.to_string();
+            }
+        }
+    }
+}
+
+pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &str> {
+    wesl.global_declarations
+        .iter()
+        .filter_map(|decl| match decl {
+            GlobalDeclaration::Function(decl) => decl
+                .attributes
+                .iter()
+                .find(|attr| {
+                    attr.name == "vertex" || attr.name == "fragment" || attr.name == "compute"
+                })
+                .is_some()
+                .then_some(decl.name.as_str()),
+            _ => None,
+        })
 }

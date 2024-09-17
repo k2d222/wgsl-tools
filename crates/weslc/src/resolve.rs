@@ -54,6 +54,12 @@ pub trait Resolver {
     fn resolve_file(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Error>;
 }
 
+impl<T: Resolver + ?Sized> Resolver for Box<T> {
+    fn resolve_file(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Error> {
+        (**self).resolve_file(resource)
+    }
+}
+
 #[derive(Default)]
 pub struct FileResolver {
     base: PathBuf,

@@ -10,6 +10,12 @@ pub trait Mangler {
     fn mangle(&self, resource: &Resource, item: &str) -> String;
 }
 
+impl<T: Mangler + ?Sized> Mangler for Box<T> {
+    fn mangle(&self, resource: &Resource, item: &str) -> String {
+        (**self).mangle(resource, item)
+    }
+}
+
 /// A mangler for the filesystem resources hashes the resource identifier.
 /// e.g. `foo/bar/baz.wgsl item => item_32938483840293402930392`
 #[derive(Default, Clone, Debug)]

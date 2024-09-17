@@ -54,7 +54,7 @@ struct CompileArgs {
     no_strip: bool,
     /// exposed shader entry-points
     #[arg(long)]
-    entry_points: Vec<String>,
+    entry_points: Option<Vec<String>>,
     /// conditional compilation features to enable
     #[arg(long)]
     enable_features: Vec<String>,
@@ -92,11 +92,11 @@ enum CliError {
     CompileError(#[from] weslc::Error),
 }
 
-fn make_mangler(kind: ManglerKind) -> &'static dyn Mangler {
+fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
     match kind {
-        ManglerKind::Escape => &MANGLER_ESCAPE,
-        ManglerKind::Hash => &MANGLER_HASH,
-        ManglerKind::None => &MANGLER_NONE,
+        ManglerKind::Escape => Box::new(MANGLER_ESCAPE),
+        ManglerKind::Hash => Box::new(MANGLER_HASH),
+        ManglerKind::None => Box::new(MANGLER_NONE),
     }
 }
 
@@ -131,7 +131,7 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
         features,
     };
 
-    let wgsl = weslc::compile(&entrypoint, resolver, mangler, &compile_options)?;
+    let wgsl = weslc::compile(&entrypoint, resolver, &mangler, &compile_options)?;
     Ok(wgsl)
 }
 

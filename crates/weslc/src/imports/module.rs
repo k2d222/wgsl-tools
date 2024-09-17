@@ -1,48 +1,68 @@
-use std::{collections::HashMap, path::Path, rc::Rc};
+use std::{collections::HashMap, path::Path};
 
-use wgsl_parse::syntax;
+use wgsl_parse::syntax::{self, TranslationUnit};
 
 use crate::{Error, Mangler, Resolver, Resource};
-
-pub struct Module {
-    pub(crate) source: syntax::TranslationUnit,
-    pub(crate) resource: Resource,
-    pub(crate) imports: Imports,
-    pub(crate) resolutions: Modules,
-}
-
-impl Module {
-    pub fn new(
-        source: syntax::TranslationUnit,
-        resource: Resource,
-        imports: Imports,
-    ) -> Result<Self, Error> {
-        Ok(Self {
-            source,
-            resource,
-            imports,
-            resolutions: HashMap::new(),
-        })
-    }
-
-    fn resolve_import(&mut self, resource: &Resource, module: Rc<Module>) {
-        self.resolutions.insert(resource.clone(), module);
-    }
-
-    #[allow(unused)]
-    fn is_resolved(&self) -> bool {
-        self.imports
-            .keys()
-            .all(|path| self.resolutions.contains_key(path))
-    }
-}
 
 // XXX: are imports supposed to be order-independent?
 type Imports = HashMap<Resource, Vec<syntax::ImportItem>>;
 #[allow(type_alias_bounds)]
-type Modules = HashMap<Resource, Rc<Module>>;
+type Modules = HashMap<Resource, syntax::TranslationUnit>;
 
-pub fn resolve_path(
+pub struct Module {
+    pub(crate) source: syntax::TranslationUnit,
+    pub(crate) resource: Resource,
+    pub(crate) resolutions: Modules,
+}
+
+impl Module {
+    pub fn new(source: syntax::TranslationUnit, resource: Resource) -> Self {
+        Self {
+            source,
+            resource,
+            resolutions: HashMap::new(),
+        }
+    }
+
+    pub fn resolve_import(&mut self, resource: &Resource, module: syntax::TranslationUnit) {
+        self.resolutions.insert(resource.clone(), module);
+    }
+
+    pub fn is_resolved(&self) -> bool {
+        let Ok(imports) = imports_to_resources(&self.source.imports, &self.resource) else {
+            return false;
+        };
+        imports
+            .keys()
+            .all(|path| self.resolutions.contains_key(path))
+    }
+
+    pub fn resolve(&mut self, resolver: &impl Resolver) -> Result<(), Error> {
+        fn rec(
+            module: &mut Module,
+            resolver: &impl Resolver,
+            parent_res: Resource,
+            imports: &Imports,
+        ) -> Result<(), Error> {
+            for child_res in imports.keys() {
+                if !module.resolutions.contains_key(child_res) {
+                    let source = resolver.resolve_file(&child_res)?;
+                    let imports = imports_to_resources(&source.imports, &parent_res)?;
+                    module.resolve_import(child_res, source);
+                    rec(module, resolver, child_res.clone(), &imports)?;
+                }
+            }
+            Ok(())
+        }
+
+        let imports = imports_to_resources(&self.source.imports, &self.resource)?;
+        rec(self, resolver, self.resource.clone(), &imports)?;
+        debug_assert!(self.is_resolved());
+        Ok(())
+    }
+}
+
+pub(crate) fn import_to_resource(
     import_path: &Path,
     parent_resource: Option<&Resource>,
 ) -> Result<Resource, Error> {
@@ -61,10 +81,9 @@ pub fn resolve_path(
 }
 
 /// Flatten imports to a list of resources and items to import.
-fn resolve_import_paths<R: Resolver>(
+pub(crate) fn imports_to_resources(
     imports: &[syntax::Import],
-    parent: &Resource,
-    resolver: &R,
+    resource: &Resource,
 ) -> Result<Imports, Error> {
     let mut res = Imports::new();
 
@@ -73,7 +92,7 @@ fn resolve_import_paths<R: Resolver>(
             syntax::ImportContent::Star(item) => {
                 let mut path = import.path.clone();
                 path.push(item.name.clone());
-                let resource = resolve_path(&path, Some(parent))?;
+                let resource = import_to_resource(&path, Some(resource))?;
                 if let Some(entry) = res.get_mut(&resource) {
                     entry.push(item.clone());
                 } else {
@@ -81,7 +100,7 @@ fn resolve_import_paths<R: Resolver>(
                 }
             }
             syntax::ImportContent::Item(item) => {
-                let resource = resolve_path(&import.path, Some(parent))?;
+                let resource = import_to_resource(&import.path, Some(resource))?;
                 if let Some(entry) = res.get_mut(&resource) {
                     entry.push(item.clone());
                 } else {
@@ -101,7 +120,7 @@ fn resolve_import_paths<R: Resolver>(
                     })
                     .collect::<Vec<_>>();
 
-                let resolved = resolve_import_paths(&imports, parent, resolver)?;
+                let resolved = imports_to_resources(&imports, resource)?;
                 for (resource, items) in resolved {
                     if let Some(entry) = res.get_mut(&resource) {
                         entry.extend_from_slice(items.as_slice());
@@ -116,40 +135,12 @@ fn resolve_import_paths<R: Resolver>(
     Ok(res)
 }
 
-fn resolve_rec(
-    resource: &Resource,
-    resolver: &impl Resolver,
-    mangler: &(impl Mangler + ?Sized),
-    visited: &mut Modules,
-) -> Result<Module, Error> {
-    let source = resolver.resolve_file(resource)?;
-    let imports = resolve_import_paths(&source.imports, resource, resolver)?;
-    let mut module = Module::new(source, resource.clone(), imports.clone())?;
-
-    for child in imports.keys() {
-        if let Some(submodule) = visited.get(child) {
-            module.resolve_import(child, submodule.clone());
-        } else {
-            let submodule = resolve_rec(child, resolver, mangler, visited)?;
-            let submodule = Rc::new(submodule);
-            module.resolve_import(child, submodule.clone());
-            visited.insert(child.clone(), submodule);
-        }
-    }
-
-    // mangle only after imports have been resolved.
-    assert!(module.is_resolved());
-    module.mangle(mangler)?;
-
-    Ok(module)
-}
-
 pub fn resolve<M: Mangler + ?Sized>(
-    resource: &Resource,
+    source: TranslationUnit,
+    resource: Resource,
     resolver: &impl Resolver,
-    mangler: &M,
 ) -> Result<Module, crate::Error> {
-    let mut submodules = Modules::new();
-    let module = resolve_rec(resource, resolver, mangler, &mut submodules)?;
+    let mut module = Module::new(source, resource);
+    module.resolve(resolver)?;
     Ok(module)
 }

@@ -4,7 +4,7 @@ use wgsl_parse::syntax::{GlobalDeclaration, TranslationUnit};
 
 use crate::syntax_util::IterUses;
 
-fn decl_name(decl: &GlobalDeclaration) -> Option<&str> {
+pub fn decl_name(decl: &GlobalDeclaration) -> Option<&str> {
     match decl {
         wgsl_parse::syntax::GlobalDeclaration::Void => None,
         wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&d.name),
@@ -40,8 +40,6 @@ pub fn strip(wgsl: &mut TranslationUnit, keep: &[String]) {
             break;
         }
     }
-
-    println!("{keep:?}");
 
     wgsl.global_declarations.retain(|decl| {
         if let Some(name) = decl_name(decl) {
