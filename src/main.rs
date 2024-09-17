@@ -46,9 +46,15 @@ struct CompileArgs {
     #[arg(long)]
     /// disable imports
     no_imports: bool,
-    #[arg(long)]
     /// disable conditional compilation
+    #[arg(long)]
     no_cond_comp: bool,
+    /// disable stripping unused declarations
+    #[arg(long)]
+    no_strip: bool,
+    /// exposed shader entry-points
+    #[arg(long)]
+    entry_points: Vec<String>,
     /// conditional compilation features to enable
     #[arg(long)]
     enable_features: Vec<String>,
@@ -120,6 +126,8 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
     let compile_options = CompileOptions {
         use_imports: !args.no_imports,
         use_condcomp: !args.no_cond_comp,
+        strip: !args.no_strip,
+        entry_points: args.entry_points.clone(),
         features,
     };
 
