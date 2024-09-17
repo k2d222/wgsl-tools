@@ -3,7 +3,6 @@ use std::collections::HashSet;
 
 use super::{ImportError, Module};
 use crate::Mangler;
-use crate::Resource;
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
@@ -233,8 +232,8 @@ fn iter_replaceable_names(module: &mut TranslationUnit) -> impl Iterator<Item = 
     replaceable_names
 }
 
-impl<R: Resource> Module<R> {
-    pub fn mangle(&mut self, mangler: &(impl Mangler<R> + ?Sized)) -> Result<(), ImportError> {
+impl Module {
+    pub fn mangle(&mut self, mangler: &(impl Mangler + ?Sized)) -> Result<(), ImportError> {
         // delared idents
         let mut replace: HashMap<String, String> = query_mut!(self.source.global_declarations.[].{
             GlobalDeclaration::Declaration.name,

@@ -1,14 +1,13 @@
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::marker::PhantomData;
 
 use itertools::Itertools;
 
-use super::{FileResource, Resource};
+use super::Resource;
 
-pub trait Mangler<R: Resource> {
-    fn mangle(&self, resource: &R, item: &str) -> String;
+pub trait Mangler {
+    fn mangle(&self, resource: &Resource, item: &str) -> String;
 }
 
 /// A mangler for the filesystem resources hashes the resource identifier.
@@ -16,10 +15,10 @@ pub trait Mangler<R: Resource> {
 #[derive(Default, Clone, Debug)]
 pub struct FileManglerHash;
 
-pub const FILE_MANGLER_HASH: FileManglerHash = FileManglerHash;
+pub const MANGLER_HASH: FileManglerHash = FileManglerHash;
 
-impl Mangler<FileResource> for FileManglerHash {
-    fn mangle(&self, resource: &FileResource, item: &str) -> String {
+impl Mangler for FileManglerHash {
+    fn mangle(&self, resource: &Resource, item: &str) -> String {
         let mut hasher = DefaultHasher::new();
         resource.hash(&mut hasher);
         item.hash(&mut hasher);
@@ -35,10 +34,10 @@ impl Mangler<FileResource> for FileManglerHash {
 #[derive(Default, Clone, Debug)]
 pub struct FileManglerEscape;
 
-pub const FILE_MANGLER_ESCAPE: FileManglerEscape = FileManglerEscape;
+pub const MANGLER_ESCAPE: FileManglerEscape = FileManglerEscape;
 
-impl Mangler<FileResource> for FileManglerEscape {
-    fn mangle(&self, resource: &FileResource, item: &str) -> String {
+impl Mangler for FileManglerEscape {
+    fn mangle(&self, resource: &Resource, item: &str) -> String {
         let path = resource.path().with_extension("");
         let path = path
             .iter()
@@ -53,12 +52,12 @@ impl Mangler<FileResource> for FileManglerEscape {
 ///
 /// Warning: will break the program in case of name conflicts.
 #[derive(Default, Clone, Debug)]
-pub struct NoMangler<R: Resource>(PhantomData<R>);
+pub struct NoMangler;
 
-pub const FILE_MANGLER_NONE: NoMangler<FileResource> = NoMangler(PhantomData);
+pub const MANGLER_NONE: NoMangler = NoMangler;
 
-impl<R: Resource> Mangler<R> for NoMangler<R> {
-    fn mangle(&self, _resource: &R, item: &str) -> String {
+impl Mangler for NoMangler {
+    fn mangle(&self, _resource: &Resource, item: &str) -> String {
         item.to_string()
     }
 }

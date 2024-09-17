@@ -5,15 +5,15 @@ use wgsl_parse::syntax::TranslationUnit;
 use super::Module;
 use crate::Resource;
 
-impl<R: Resource> Module<R> {
+impl Module {
     pub fn assemble(&self) -> TranslationUnit {
         let mut visited = HashSet::new();
 
-        fn rec_insert<'s, R: Resource>(
-            module: &'s Module<R>,
-            resource: &'s R,
+        fn rec_insert<'s>(
+            module: &'s Module,
+            resource: &'s Resource,
             wgsl: &mut TranslationUnit,
-            visited: &mut HashSet<&'s R>,
+            visited: &mut HashSet<&'s Resource>,
         ) {
             if !visited.contains(resource) {
                 visited.insert(resource);

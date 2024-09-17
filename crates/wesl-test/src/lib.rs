@@ -8,7 +8,7 @@ use std::{
 };
 
 use serde::Deserialize;
-use weslc::{CompileOptions, FileResource, Resolver, VirtualFileResolver, FILE_MANGLER_HASH};
+use weslc::{CompileOptions, Resource, VirtualFileResolver, MANGLER_HASH};
 
 #[test]
 fn webgpu_samples() {
@@ -98,16 +98,13 @@ fn wesl_testsuite_test(path: &Path) {
         for (path, file) in test.src {
             let path = PathBuf::from(path);
             resolver
-                .add_file(&path, file)
+                .add_file(path.into(), file)
                 .inspect_err(|err| eprintln!("{err}"))
                 .expect("failed to add virtual file");
         }
 
-        let entrypoint_path = PathBuf::from("./main.wgsl");
-        let entrypoint = resolver
-            .resolve_path(&entrypoint_path, None)
-            .expect("failed to resolve path `./main.wgsl`");
-        let mangler = &FILE_MANGLER_HASH;
+        let entrypoint: Resource = PathBuf::from("./main.wgsl").into();
+        let mangler = &MANGLER_HASH;
         let compile_options = CompileOptions::default();
 
         weslc::compile(&entrypoint, resolver, mangler, &compile_options)

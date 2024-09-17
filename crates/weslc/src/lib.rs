@@ -7,12 +7,12 @@ mod mangle;
 mod resolve;
 
 pub use mangle::{
-    FileManglerEscape, FileManglerHash, Mangler, NoMangler, FILE_MANGLER_ESCAPE, FILE_MANGLER_HASH,
-    FILE_MANGLER_NONE,
+    FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE, MANGLER_HASH,
+    MANGLER_NONE,
 };
 
 pub use resolve::{
-    FileResolver, FileResource, PreprocessResolver, Resolver, Resource, VirtualFileResolver,
+    DispatchResolver, FileResolver, PreprocessResolver, Resolver, Resource, VirtualFileResolver,
 };
 
 use std::collections::HashMap;
@@ -20,13 +20,13 @@ use wgsl_parse::syntax::TranslationUnit;
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
-    #[error("import resolution failure: `{0}`")]
+    #[error("import resolution failure: {0}")]
     ResolveError(#[from] resolve::ResolveError),
     #[cfg(feature = "imports")]
-    #[error("import error: `{0}`")]
+    #[error("import error: {0}")]
     ImportError(#[from] imports::ImportError),
     #[cfg(feature = "cond-comp")]
-    #[error("conditional compilation error: `{0}`")]
+    #[error("conditional compilation error: {0}")]
     CondCompError(#[from] condcomp::CondCompError),
 }
 
@@ -46,9 +46,9 @@ impl Default for CompileOptions {
     }
 }
 
-pub fn compile<R: Resource, M: Mangler<R> + ?Sized>(
-    entrypoint: &R,
-    resolver: impl Resolver<Resource = R>,
+pub fn compile<M: Mangler + ?Sized>(
+    entrypoint: &Resource,
+    resolver: impl Resolver,
     mangler: &M,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Error> {
