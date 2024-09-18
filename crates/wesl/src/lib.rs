@@ -1,4 +1,4 @@
-#[cfg(feature = "cond-comp")]
+#[cfg(feature = "condcomp")]
 pub mod condcomp;
 #[cfg(feature = "imports")]
 pub mod import;
@@ -37,7 +37,7 @@ pub enum Error {
     #[cfg(feature = "imports")]
     #[error("import error: {0}")]
     ImportError(#[from] ImportError),
-    #[cfg(feature = "cond-comp")]
+    #[cfg(feature = "condcomp")]
     #[error("conditional compilation error: {0}")]
     CondCompError(#[from] CondCompError),
 }
@@ -68,7 +68,7 @@ pub fn compile(
     mangler: &impl Mangler,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Error> {
-    let resolver: Box<dyn Resolver> = if cfg!(feature = "cond-comp") && options.use_condcomp {
+    let resolver: Box<dyn Resolver> = if cfg!(feature = "condcomp") && options.use_condcomp {
         Box::new(PreprocessResolver(resolver, |wesl| {
             condcomp::run(wesl, &options.features)?;
             Ok(())

@@ -9,10 +9,10 @@ license.workspace = true
 [dependencies]
 itertools = "0.13.0"
 thiserror = "1.0.63"
-wgsl-parse = { path = "../wgsl-parse", features = ["imports", "cond-comp"] }
+wgsl-parse = { path = "../wgsl-parse", features = ["imports", "condcomp"] }
 wgsl-parse-macros = { version = "0.0.2", path = "../wgsl-parse-macros" }
 
 [features]
-default = ["imports", "cond-comp"]
+default = ["imports", "condcomp"]
 imports = ["wgsl-parse/imports"]
-cond-comp = ["wgsl-parse/cond-comp"]
+condcomp = ["wgsl-parse/condcomp"]
