@@ -76,7 +76,6 @@ pub(crate) fn import_to_resource(
         import_path.to_path_buf()
     };
 
-    println!("{} {:?} => {}", import_path.display(), parent_resource, resource.display());
     Ok(resource.into())
 }
 

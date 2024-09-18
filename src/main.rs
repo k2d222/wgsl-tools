@@ -4,7 +4,7 @@
 
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
-use weslc::{
+use wesl::{
     CompileOptions, FileResolver, Mangler, Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
@@ -89,7 +89,7 @@ enum CliError {
     #[error("input file not found")]
     FileNotFound,
     #[error("{0}")]
-    CompileError(#[from] weslc::Error),
+    CompileError(#[from] wesl::Error),
 }
 
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
@@ -131,7 +131,7 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
         features,
     };
 
-    let wgsl = weslc::compile(&entrypoint, resolver, &mangler, &compile_options)?;
+    let wgsl = wesl::compile(&entrypoint, resolver, &mangler, &compile_options)?;
     Ok(wgsl)
 }
 

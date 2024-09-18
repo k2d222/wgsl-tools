@@ -857,7 +857,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
-name = "weslc"
+name = "wesl"
 version = "0.0.2"
 dependencies = [
  "itertools",
@@ -897,7 +897,7 @@ version = "0.0.2"
 dependencies = [
  "serde",
  "serde_json",
- "weslc",
+ "wesl",
  "wgsl-parse",
 ]
 
@@ -907,7 +907,7 @@ version = "0.0.2"
 dependencies = [
  "clap",
  "thiserror",
- "weslc",
+ "wesl",
  "wgsl-parse",
 ]
 
