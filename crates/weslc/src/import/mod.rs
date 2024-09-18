@@ -1,7 +1,7 @@
 use std::{fmt::Display, path::PathBuf};
 
 mod assemble;
-pub mod mangle;
+mod mangle;
 mod module;
 
 use itertools::Itertools;

@@ -14,7 +14,7 @@ use std::{
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("parse error: `{0}`")]
+    #[error("{0}")]
     ParseError(wgsl_parse::Error),
     #[error("failed to read file `{0}`")]
     FileNotFound(String),
@@ -74,11 +74,12 @@ impl FileResolver {
 
 impl Resolver for FileResolver {
     fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
-        let mut with_base = self.base.to_path_buf();
-        with_base.extend(resource.path());
-        with_base.set_extension("wgsl");
-        let source = fs::read_to_string(&with_base)
-            .map_err(|_| ResolveError::FileNotFound(format!("{resource} (virtual file)")))?;
+        let mut path = self.base.to_path_buf();
+        path.extend(resource.path());
+        path.set_extension("wgsl");
+        let source = fs::read_to_string(&path).map_err(|_| {
+            ResolveError::FileNotFound(format!("{} (physical file)", path.display()))
+        })?;
         let wesl =
             Parser::parse_str(&source).map_err(|e| ResolveError::ParseError(e.into_owned()))?;
         Ok(wesl)
@@ -107,10 +108,9 @@ impl VirtualFileResolver {
 impl Resolver for VirtualFileResolver {
     fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
         let path = resource.path().with_extension("wgsl");
-        let source = self
-            .files
-            .get(&path)
-            .ok_or_else(|| ResolveError::FileNotFound(path.display().to_string()))?;
+        let source = self.files.get(&path).ok_or_else(|| {
+            ResolveError::FileNotFound(format!("{} (virtual file)", path.display()))
+        })?;
         let wesl =
             Parser::parse_str(&source).map_err(|e| ResolveError::ParseError(e.into_owned()))?;
         Ok(wesl)
@@ -135,6 +135,7 @@ impl<R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>> Resolver
 
 pub struct DispatchResolver {
     mount_points: Vec<(PathBuf, Box<dyn Resolver>)>,
+    fallback: Option<(PathBuf, Box<dyn Resolver>)>,
 }
 
 /// Dispatches resolution of a resource to sub-resolvers.
@@ -142,15 +143,20 @@ impl DispatchResolver {
     pub fn new() -> Self {
         Self {
             mount_points: Vec::new(),
+            fallback: None,
         }
     }
 
     pub fn mount_resolver(&mut self, path: PathBuf, resolver: Box<dyn Resolver>) {
-        self.mount_points.push((path, resolver));
+        if path.iter().count() == 0 {
+            self.fallback = Some((path, resolver));
+        } else {
+            self.mount_points.push((path, resolver));
+        }
     }
 
     pub fn mount_fallback_resolver(&mut self, resolver: Box<dyn Resolver>) {
-        self.mount_points.push((PathBuf::new(), resolver));
+        self.mount_resolver(PathBuf::new(), resolver);
     }
 }
 
@@ -161,6 +167,7 @@ impl Resolver for DispatchResolver {
             .iter()
             .filter(|(path, _)| resource.path().starts_with(path))
             .max_by_key(|(path, _)| path.iter().count())
+            .or(self.fallback.as_ref())
             .ok_or_else(|| ResolveError::FileNotFound(format!("{resource} (no mount point)")))?;
 
         // SAFETY: we just checked that resource.path() starts with mount_path

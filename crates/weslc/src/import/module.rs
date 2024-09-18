@@ -41,22 +41,21 @@ impl Module {
         fn rec(
             module: &mut Module,
             resolver: &impl Resolver,
-            parent_res: Resource,
             imports: &Imports,
         ) -> Result<(), Error> {
             for child_res in imports.keys() {
                 if !module.resolutions.contains_key(child_res) {
                     let source = resolver.resolve_file(&child_res)?;
-                    let imports = imports_to_resources(&source.imports, &parent_res)?;
+                    let imports = imports_to_resources(&source.imports, &child_res)?;
                     module.resolve_import(child_res, source);
-                    rec(module, resolver, child_res.clone(), &imports)?;
+                    rec(module, resolver, &imports)?;
                 }
             }
             Ok(())
         }
 
         let imports = imports_to_resources(&self.source.imports, &self.resource)?;
-        rec(self, resolver, self.resource.clone(), &imports)?;
+        rec(self, resolver, &imports)?;
         debug_assert!(self.is_resolved());
         Ok(())
     }
@@ -77,6 +76,7 @@ pub(crate) fn import_to_resource(
         import_path.to_path_buf()
     };
 
+    println!("{} {:?} => {}", import_path.display(), parent_resource, resource.display());
     Ok(resource.into())
 }
 

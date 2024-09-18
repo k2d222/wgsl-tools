@@ -8,19 +8,23 @@ mod resolve;
 mod strip;
 mod syntax_util;
 
-use itertools::Itertools;
+pub use condcomp::CondCompError;
+pub use import::ImportError;
 pub use mangle::{
     FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE, MANGLER_HASH,
     MANGLER_NONE,
 };
-
 pub use resolve::{
-    DispatchResolver, FileResolver, PreprocessResolver, Resolver, Resource, VirtualFileResolver,
+    DispatchResolver, FileResolver, PreprocessResolver, ResolveError, Resolver, Resource,
+    VirtualFileResolver,
 };
-
 pub use strip::strip;
+
+pub use wgsl_parse::syntax;
+
 use syntax_util::{entry_points, rename_decl};
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use wgsl_parse::syntax::TranslationUnit;
 
@@ -29,13 +33,13 @@ use crate::import::Module;
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
     #[error("import resolution failure: {0}")]
-    ResolveError(#[from] resolve::ResolveError),
+    ResolveError(#[from] ResolveError),
     #[cfg(feature = "imports")]
     #[error("import error: {0}")]
-    ImportError(#[from] import::ImportError),
+    ImportError(#[from] ImportError),
     #[cfg(feature = "cond-comp")]
     #[error("conditional compilation error: {0}")]
-    CondCompError(#[from] condcomp::CondCompError),
+    CondCompError(#[from] CondCompError),
 }
 
 pub struct CompileOptions {
