@@ -23,6 +23,8 @@
 //! It is made with the ultimate goal to implement spec-compliant language extensions.
 //! This is why this parser doesn't borrow strings.
 
+use derive_more::From;
+
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct TranslationUnit {
     #[cfg(feature = "imports")]
@@ -55,7 +57,7 @@ pub struct ImportItem {
     pub rename: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, From)]
 pub enum GlobalDirective {
     Diagnostic(DiagnosticDirective),
     Enable(EnableDirective),
@@ -92,7 +94,7 @@ pub struct RequiresDirective {
     pub extensions: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, From)]
 pub enum GlobalDeclaration {
     Void,
     Declaration(Declaration),
@@ -173,7 +175,7 @@ pub struct Attribute {
     pub arguments: Option<Vec<Expression>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, From)]
 pub enum Expression {
     Literal(LiteralExpression),
     Parenthesized(ParenthesizedExpression),
@@ -186,7 +188,7 @@ pub enum Expression {
     Type(TypeExpression),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, From)]
 pub enum LiteralExpression {
     True,
     False,
@@ -221,7 +223,7 @@ pub struct UnaryExpression {
     pub operand: Box<Expression>, // TODO maybe rename rhs
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum UnaryOperator {
     LogicalNegation,
     Negation,
@@ -237,7 +239,7 @@ pub struct BinaryExpression {
     pub right: Box<Expression>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinaryOperator {
     ShortCircuitOr,
     ShortCircuitAnd,
@@ -282,7 +284,7 @@ pub struct TypeExpression {
 // TODO
 pub type TemplateArg = Expression;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, From)]
 pub enum Statement {
     Void,
     Compound(CompoundStatement),
@@ -392,7 +394,7 @@ pub struct SwitchClause {
     pub body: CompoundStatement,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, From)]
 pub enum CaseSelector {
     Default,
     Expression(Expression),
