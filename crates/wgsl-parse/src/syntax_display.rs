@@ -220,8 +220,8 @@ impl Display for Expression {
 impl Display for LiteralExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            LiteralExpression::True => write!(f, "true"),
-            LiteralExpression::False => write!(f, "false"),
+            LiteralExpression::Bool(true) => write!(f, "true"),
+            LiteralExpression::Bool(false) => write!(f, "false"),
             LiteralExpression::AbstractInt(num) => write!(f, "{num}"),
             LiteralExpression::AbstractFloat(num) => write!(f, "{num:?}"), // using the Debug formatter to print the trailing .0 in floats representing integers. because format!("{}", 3.0f32) == "3"
             LiteralExpression::I32(num) => write!(f, "{num}i"),

@@ -166,8 +166,8 @@ Literal: LiteralExpression = {
 };
 
 BoolLiteral: LiteralExpression = {
-    "true"  => LiteralExpression::True,
-    "false" => LiteralExpression::False,
+    "true"  => LiteralExpression::Bool(true),
+    "false" => LiteralExpression::Bool(false),
 };
 
 Ident: String = {

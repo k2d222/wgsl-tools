@@ -188,15 +188,15 @@ pub enum Expression {
     Type(TypeExpression),
 }
 
-#[derive(Clone, Debug, PartialEq, From)]
+#[derive(Clone, Copy, Debug, PartialEq, From)]
 pub enum LiteralExpression {
-    True,
-    False,
+    Bool(bool),
     AbstractInt(i64),
     AbstractFloat(f64),
     I32(i32),
     U32(u32),
     F32(f32),
+    #[from(skip)]
     F16(f32),
 }
 
