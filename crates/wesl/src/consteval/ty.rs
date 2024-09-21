@@ -2,10 +2,26 @@ use crate::syntax_util::struct_decl;
 
 use super::{
     ArrayInstance, ConstEvalError, Context, Eval, Instance, LiteralInstance, MatInner, MatInstance,
-    PtrInstance, RefInstance, StructInstance, Type, VecInner, VecInstance, PREDECLARED_ALIASES,
+    PtrInstance, RefInstance, StructInstance, VecInner, VecInstance, PREDECLARED_ALIASES,
 };
 
 use wgsl_parse::syntax::*;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Type {
+    Bool,
+    AbstractInt,
+    AbstractFloat,
+    I32,
+    U32,
+    F32,
+    F16,
+    Struct(String),
+    Array(Box<Type>),
+    Vec(u8, Box<Type>),
+    Mat(u8, u8, Box<Type>),
+    Ptr(Box<Type>),
+}
 
 pub trait Ty {
     fn ty(&self) -> Type;
@@ -43,7 +59,7 @@ impl Ty for LiteralInstance {
 }
 impl Ty for StructInstance {
     fn ty(&self) -> Type {
-        Type::Struct(self.name.clone())
+        Type::Struct(self.name().to_string())
     }
 }
 
