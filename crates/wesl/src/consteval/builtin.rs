@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::ConstEvalError;
 
-use super::{ops::Compwise, LiteralInstance, MatInner, MatInstance, Ty, VecInner, VecInstance};
+use super::{LiteralInstance, MatInner, MatInstance, Ty, VecInner, VecInstance};
 
 impl<const N: usize> VecInner<N> {
     pub fn dot(&self, rhs: &VecInner<N>) -> Result<LiteralInstance, ConstEvalError> {

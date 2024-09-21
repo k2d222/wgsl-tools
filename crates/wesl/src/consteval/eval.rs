@@ -1,5 +1,5 @@
 use super::{
-    ConstEvalError, Context, Instance, LiteralInstance, RefInstance, Ty, Type, VecInstance,
+    Address, ConstEvalError, Context, Instance, LiteralInstance, RefInstance, Ty, Type, VecInstance,
 };
 
 use itertools::Itertools;
@@ -35,7 +35,7 @@ impl Eval for Expression {
 }
 
 impl Eval for LiteralExpression {
-    fn eval(&self, ctx: &Context) -> Result<Instance, ConstEvalError> {
+    fn eval(&self, _ctx: &Context) -> Result<Instance, ConstEvalError> {
         match self {
             LiteralExpression::Bool(l) => Ok(LiteralInstance::Bool(*l).into()),
             LiteralExpression::AbstractInt(l) => Ok(LiteralInstance::AbstractInt(*l).into()),
@@ -56,7 +56,11 @@ impl Eval for ParenthesizedExpression {
 
 impl Eval for NamedComponentExpression {
     fn eval(&self, ctx: &Context) -> Result<Instance, ConstEvalError> {
-        fn vec_eval(v: &VecInstance, comp: &String) -> Result<Instance, ConstEvalError> {
+        fn vec_eval(
+            v: &VecInstance,
+            comp: &String,
+            addr: Option<Address>,
+        ) -> Result<Instance, ConstEvalError> {
             if !check_swizzle(comp) {
                 return Err(ConstEvalError::InvalidSwizzle(comp.clone()));
             }
@@ -67,13 +71,24 @@ impl Eval for NamedComponentExpression {
                     'y' | 'g' => 1usize,
                     'z' | 'b' => 2usize,
                     'w' | 'a' => 3usize,
-                    _ => unreachable!(), // SAFETY: we checked with the regex above.
+                    _ => unreachable!(), // SAFETY: check_swizzle above checks it.
                 })
                 .collect_vec();
             match indices.as_slice() {
                 [i] => v
                     .get(*i)
-                    .map(|e| Instance::Literal(e.clone()))
+                    .map(|e| {
+                        if let Some(mut address) = addr {
+                            address.view.append_index(*i);
+                            Instance::Ref(RefInstance {
+                                ty: e.ty(),
+                                address,
+                            })
+                            .into()
+                        } else {
+                            e.clone().into()
+                        }
+                    })
                     .ok_or_else(|| ConstEvalError::OutOfBounds(*i, v.ty(), v.n() as usize)),
                 _ => {
                     let components = indices
@@ -101,7 +116,7 @@ impl Eval for NamedComponentExpression {
                     })?;
                     Ok(val.clone())
                 }
-                Instance::Vec(v) => vec_eval(v, comp),
+                Instance::Vec(v) => vec_eval(v, comp, None),
                 Instance::Ref(r) => {
                     let val = r.value(ctx)?;
                     if r.ty != val.ty() {
@@ -122,7 +137,7 @@ impl Eval for NamedComponentExpression {
                                     address,
                                 }))
                             }
-                            Instance::Vec(v) => vec_eval(v, comp),
+                            Instance::Vec(v) => vec_eval(v, comp, Some(r.address.clone())),
                             _ => Err(ConstEvalError::NoComponent(base.ty(), comp.clone())),
                         }
                     }
@@ -164,7 +179,7 @@ impl Eval for IndexingExpression {
                     match val {
                         Instance::Vec(v) => v
                             .get(index)
-                            .map(|e| {
+                            .map(|_| {
                                 let mut address = r.address.clone();
                                 address.view.append_index(index);
                                 Instance::Ref(RefInstance {
@@ -204,9 +219,11 @@ impl Eval for IndexingExpression {
                         _ => Err(ConstEvalError::NotIndexable(r.ty.clone())),
                     }
                 }
-                Instance::Literal(_) | Instance::Struct(_) | Instance::Ptr(_) => {
-                    Err(ConstEvalError::NotIndexable(base.ty()))
-                }
+                Instance::Literal(_)
+                | Instance::Struct(_)
+                | Instance::Ptr(_)
+                | Instance::Type(_)
+                | Instance::Void => Err(ConstEvalError::NotIndexable(base.ty())),
             }
         }
 
@@ -332,7 +349,20 @@ impl Eval for FunctionCallExpression {
 
 impl Eval for IdentifierExpression {
     fn eval(&self, ctx: &Context) -> Result<Instance, ConstEvalError> {
-        todo!()
+        let ptr = *ctx
+            .variables
+            .get(&self.name)
+            .ok_or_else(|| ConstEvalError::NoDecl(self.name.clone()))?;
+        let address = Address::new(ptr);
+        let inst = ctx
+            .memory
+            .get(ptr)
+            .ok_or_else(|| ConstEvalError::InvalidRef(address.clone()))?;
+        Ok(RefInstance {
+            ty: inst.ty(),
+            address,
+        }
+        .into())
     }
 }
 

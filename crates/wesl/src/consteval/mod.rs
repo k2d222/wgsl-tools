@@ -12,15 +12,11 @@ pub use eval::Eval;
 pub use instance::*;
 pub use ty::*;
 
-use core::panic;
-use derive_more::From;
 use std::collections::{HashMap, HashSet};
 
 use lazy_static::lazy_static;
 use thiserror::Error;
 use wgsl_parse::syntax::*;
-
-use crate::syntax_util::struct_decl;
 
 #[derive(Clone, Debug, Error)]
 pub enum ConstEvalError {
@@ -52,6 +48,8 @@ pub enum ConstEvalError {
     UnknownType(TypeExpression),
     #[error("invalid reference to `{0}`, expected `{1}`")]
     InvalidRefType(Type, Type),
+    #[error("no declaration named `{0}` in scope")]
+    NoDecl(String),
     #[error("cannot convert from `{0}` to `{1}`")]
     ConversionFailure(Type, Type),
     #[error("attempt to negate with overflow")]

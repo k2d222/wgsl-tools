@@ -15,6 +15,8 @@ pub enum Instance {
     Mat(MatInstance),
     Ptr(PtrInstance),
     Ref(RefInstance),
+    Type(Type),
+    Void,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, From)]
@@ -364,4 +366,13 @@ impl MemView {
 pub struct Address {
     pub ptr: usize,
     pub view: MemView,
+}
+
+impl Address {
+    pub fn new(ptr: usize) -> Self {
+        Self {
+            ptr,
+            view: MemView::Whole,
+        }
+    }
 }

@@ -17,6 +17,8 @@ impl Display for Instance {
             Instance::Mat(inst) => write!(f, "{inst}"),
             Instance::Ptr(inst) => write!(f, "{inst}"),
             Instance::Ref(inst) => write!(f, "{inst}"),
+            Instance::Type(ty) => write!(f, "{ty}"),
+            Instance::Void => write!(f, ""),
         }
     }
 }
@@ -123,6 +125,7 @@ impl<'a> Display for Type {
             Type::Vec(n, ty) => write!(f, "vec{n}<{ty}>"),
             Type::Mat(m, n, ty) => write!(f, "mat{m}x{n}<{ty}>"),
             Type::Ptr(ty) => write!(f, "ptr<{ty}>"),
+            Type::Void => write!(f, ""),
         }
     }
 }

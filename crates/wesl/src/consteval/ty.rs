@@ -21,6 +21,7 @@ pub enum Type {
     Vec(u8, Box<Type>),
     Mat(u8, u8, Box<Type>),
     Ptr(Box<Type>),
+    Void,
 }
 
 pub trait Ty {
@@ -40,6 +41,8 @@ impl Ty for Instance {
             Instance::Mat(m) => m.ty(),
             Instance::Ptr(p) => p.ty(),
             Instance::Ref(r) => r.ty(),
+            Instance::Type(t) => t.clone(),
+            Instance::Void => Type::Void,
         }
     }
 }

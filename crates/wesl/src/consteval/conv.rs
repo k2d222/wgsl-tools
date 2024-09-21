@@ -137,6 +137,8 @@ impl Convert for Instance {
             Self::Mat(_) => todo!(),
             Self::Ref(_) => todo!(),
             Self::Ptr(_) => todo!(),
+            Self::Type(_) => todo!(),
+            Self::Void => todo!(),
         }
     }
 }
