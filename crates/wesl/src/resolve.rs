@@ -14,8 +14,6 @@ use std::{
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("{0}")]
-    ParseError(wgsl_parse::Error),
     #[error("failed to read file `{0}`")]
     FileNotFound(String),
 }
@@ -80,8 +78,7 @@ impl Resolver for FileResolver {
         let source = fs::read_to_string(&path).map_err(|_| {
             ResolveError::FileNotFound(format!("{} (physical file)", path.display()))
         })?;
-        let wesl =
-            Parser::parse_str(&source).map_err(|e| ResolveError::ParseError(e.into_owned()))?;
+        let wesl = Parser::parse_str(&source).map_err(|e| e.into_owned())?;
         Ok(wesl)
     }
 }
@@ -111,8 +108,7 @@ impl Resolver for VirtualFileResolver {
         let source = self.files.get(&path).ok_or_else(|| {
             ResolveError::FileNotFound(format!("{} (virtual file)", path.display()))
         })?;
-        let wesl =
-            Parser::parse_str(&source).map_err(|e| ResolveError::ParseError(e.into_owned()))?;
+        let wesl = Parser::parse_str(&source).map_err(|e| e.into_owned())?;
         Ok(wesl)
     }
 }
@@ -176,7 +172,6 @@ impl Resolver for DispatchResolver {
         resolver.resolve_file(&resource).map_err(|mut e| {
             if let Error::ResolveError(e) = &mut e {
                 match e {
-                    ResolveError::ParseError(_) => (),
                     ResolveError::FileNotFound(msg) => {
                         *msg = format!("{}/{msg}", mount_path.display())
                     }

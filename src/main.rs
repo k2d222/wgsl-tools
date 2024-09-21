@@ -5,7 +5,8 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use wesl::{
-    CompileOptions, FileResolver, Mangler, Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
+    syntax::Expression, CompileOptions, Context, Eval, FileResolver, Instance, Mangler, Resource,
+    MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 
@@ -28,6 +29,8 @@ enum Command {
     Dump(CommonArgs),
     /// compile a source file and outputs the compiled file to stdout
     Compile(CompileArgs),
+    /// evaluate a const expression
+    Eval(EvalArgs),
 }
 
 #[derive(Args, Clone, Debug)]
@@ -61,6 +64,15 @@ struct CompileArgs {
     /// conditional compilation features to disable
     #[arg(long)]
     disable_features: Vec<String>,
+}
+
+#[derive(Args, Clone, Debug)]
+struct EvalArgs {
+    /// context to evaluate the expression into
+    #[command(flatten)]
+    compile: Option<CompileArgs>,
+    /// the expression to evaluate
+    expr: String,
 }
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -135,6 +147,23 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
     Ok(wgsl)
 }
 
+fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
+    let wgsl = if let Some(args) = &args.compile {
+        run_compile(args)?
+    } else {
+        TranslationUnit::default()
+    };
+
+    let ctx = Context::new(&wgsl);
+    let expr = args
+        .expr
+        .parse::<Expression>()
+        .map_err(wesl::Error::ParseError)?;
+    let instance = expr.eval(&ctx).map_err(wesl::Error::ConstEvalError)?;
+
+    Ok(instance)
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -169,6 +198,12 @@ fn main() {
         }
         Command::Compile(args) => {
             match run_compile(args) {
+                Ok(module) => println!("{module}"),
+                Err(err) => eprintln!("{err}"),
+            };
+        }
+        Command::Eval(args) => {
+            match run_eval(args) {
                 Ok(module) => println!("{module}"),
                 Err(err) => eprintln!("{err}"),
             };

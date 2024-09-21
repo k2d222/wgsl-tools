@@ -247,7 +247,18 @@ impl IterUses for Vec<Statement> {
     }
 }
 
-fn decl_name_mut(decl: &mut GlobalDeclaration) -> Option<&mut String> {
+pub fn decl_name(decl: &GlobalDeclaration) -> Option<&str> {
+    match decl {
+        wgsl_parse::syntax::GlobalDeclaration::Void => None,
+        wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&d.name),
+        wgsl_parse::syntax::GlobalDeclaration::TypeAlias(d) => Some(&d.name),
+        wgsl_parse::syntax::GlobalDeclaration::Struct(d) => Some(&d.name),
+        wgsl_parse::syntax::GlobalDeclaration::Function(d) => Some(&d.name),
+        wgsl_parse::syntax::GlobalDeclaration::ConstAssert(_) => None,
+    }
+}
+
+pub fn decl_name_mut(decl: &mut GlobalDeclaration) -> Option<&mut String> {
     match decl {
         wgsl_parse::syntax::GlobalDeclaration::Void => None,
         wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&mut d.name),
@@ -288,4 +299,12 @@ pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &str> {
                 .then_some(decl.name.as_str()),
             _ => None,
         })
+}
+
+pub fn struct_decl<'s>(name: &str, wesl: &'s TranslationUnit) -> Option<&'s Struct> {
+    wesl.global_declarations.iter().find_map(|decl| match decl {
+        GlobalDeclaration::Struct(s) => (s.name == name).then_some(s),
+        _ => None,
+    })
+    // TODO: find among builtin declarations too.
 }

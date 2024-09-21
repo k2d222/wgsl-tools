@@ -1,23 +1,34 @@
 #[cfg(feature = "condcomp")]
-pub mod condcomp;
+mod condcomp;
+#[cfg(feature = "consteval")]
+mod consteval;
 #[cfg(feature = "imports")]
-pub mod import;
+mod import;
 
 mod mangle;
 mod resolve;
 mod strip;
 mod syntax_util;
 
-pub use condcomp::CondCompError;
-pub use import::ImportError;
+#[cfg(feature = "condcomp")]
+pub use condcomp::{run as run_condcomp, CondCompError};
+
+#[cfg(feature = "imports")]
+pub use import::{resolve, ImportError, Module};
+
+#[cfg(feature = "consteval")]
+pub use consteval::{ConstEvalError, Context, Eval, Instance};
+
 pub use mangle::{
     FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE, MANGLER_HASH,
     MANGLER_NONE,
 };
+
 pub use resolve::{
     DispatchResolver, FileResolver, PreprocessResolver, ResolveError, Resolver, Resource,
     VirtualFileResolver,
 };
+
 pub use strip::strip;
 
 pub use wgsl_parse::syntax;
@@ -28,10 +39,10 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use wgsl_parse::syntax::TranslationUnit;
 
-use crate::import::Module;
-
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
+    #[error("{0}")]
+    ParseError(#[from] wgsl_parse::Error),
     #[error("import resolution failure: {0}")]
     ResolveError(#[from] ResolveError),
     #[cfg(feature = "imports")]
@@ -40,6 +51,9 @@ pub enum Error {
     #[cfg(feature = "condcomp")]
     #[error("conditional compilation error: {0}")]
     CondCompError(#[from] CondCompError),
+    #[cfg(feature = "consteval")]
+    #[error("constant evaluation error: {0}")]
+    ConstEvalError(#[from] ConstEvalError),
 }
 
 pub struct CompileOptions {

@@ -2,18 +2,7 @@ use std::collections::HashSet;
 
 use wgsl_parse::syntax::{GlobalDeclaration, TranslationUnit};
 
-use crate::syntax_util::IterUses;
-
-pub fn decl_name(decl: &GlobalDeclaration) -> Option<&str> {
-    match decl {
-        wgsl_parse::syntax::GlobalDeclaration::Void => None,
-        wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&d.name),
-        wgsl_parse::syntax::GlobalDeclaration::TypeAlias(d) => Some(&d.name),
-        wgsl_parse::syntax::GlobalDeclaration::Struct(d) => Some(&d.name),
-        wgsl_parse::syntax::GlobalDeclaration::Function(d) => Some(&d.name),
-        wgsl_parse::syntax::GlobalDeclaration::ConstAssert(_) => None,
-    }
-}
+use crate::syntax_util::{decl_name, IterUses};
 
 /// removes unused declarations.
 pub fn strip(wgsl: &mut TranslationUnit, keep: &[String]) {

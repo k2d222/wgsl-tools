@@ -193,6 +193,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_more"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a9b99b9cbbe49445b21764dc0625032a89b145a2642e67603e1c936f5458d05"
+dependencies = [
+ "derive_more-impl",
+]
+
+[[package]]
+name = "derive_more-impl"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -860,7 +880,9 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 name = "wesl"
 version = "0.0.2"
 dependencies = [
+ "derive_more",
  "itertools",
+ "lazy_static",
  "thiserror",
  "wgsl-parse",
  "wgsl-parse-macros",
@@ -871,6 +893,7 @@ name = "wgsl-parse"
 version = "0.0.2"
 dependencies = [
  "annotate-snippets",
+ "derive_more",
  "itertools",
  "lalrpop",
  "lalrpop-util 0.20.2 (registry+https://github.com/rust-lang/crates.io-index)",

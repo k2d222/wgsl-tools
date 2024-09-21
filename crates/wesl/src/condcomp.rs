@@ -17,14 +17,13 @@ pub enum CondCompError {
 
 type Features = HashMap<String, bool>;
 
-const EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::True);
-const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::False);
+const EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::Bool(true));
+const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false));
 
 pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, CondCompError> {
     match expr {
         Expression::Literal(lit) => match lit {
-            LiteralExpression::True => Ok(expr.clone()),
-            LiteralExpression::False => Ok(expr.clone()),
+            LiteralExpression::Bool(_) => Ok(expr.clone()),
             _ => Err(CondCompError::InvalidExpression(expr.clone())),
         },
         Expression::Parenthesized(paren) => eval_attr(&paren.expression, features),
