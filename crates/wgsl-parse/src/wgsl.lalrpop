@@ -135,7 +135,7 @@ pub TranslationUnit: TranslationUnit = {
     },
 };
 
-GlobalDecl: GlobalDeclaration = {
+pub GlobalDecl: GlobalDeclaration = {
     ";"                        => GlobalDeclaration::Void,
     <GlobalVariableDecl> ";"   => GlobalDeclaration::Declaration(<>),
     <GlobalValueDecl> ";"      => GlobalDeclaration::Declaration(<>),
@@ -155,7 +155,7 @@ DiagnosticRuleName: String = {
 
 // XXX: non-conformant
 // https://www.w3.org/TR/WGSL/#syntax-literal
-Literal: LiteralExpression = {
+pub Literal: LiteralExpression = {
     TokAbstractInt   => LiteralExpression::AbstractInt(<>),
     TokAbstractFloat => LiteralExpression::AbstractFloat(<>),
     TokI32           => LiteralExpression::I32(<>),
@@ -225,7 +225,7 @@ TemplateArgExpression: Expression = {
 // 4. DIRECTIVES
 // https://www.w3.org/TR/WGSL/#directives
 
-GlobalDirective: GlobalDirective = {
+pub GlobalDirective: GlobalDirective = {
     DiagnosticDirective => GlobalDirective::Diagnostic(<>),
     EnableDirective     => GlobalDirective::Enable(<>),
     RequiresDirective   => GlobalDirective::Requires(<>),
@@ -594,7 +594,7 @@ BitwiseExpression: Expression = {
     }),
 };
 
-Expression: Expression = {
+pub Expression: Expression = {
     RelationalExpression,
     <left: ShortCircuitOrExpression> "||" <right: RelationalExpression> => Expression::Binary(BinaryExpression {
         operator: BinaryOperator::ShortCircuitOr, left: left.into(), right: right.into()
@@ -808,7 +808,7 @@ ConstAssertStatement: ConstAssertStatement = {
     },
 };
 
-Statement: Statement = {
+pub Statement: Statement = {
     ";" => Statement::Void,
     <ReturnStatement> ";" => Statement::Return(<>),
     <IfStatement> => Statement::If(<>),
@@ -890,7 +890,7 @@ pub TranslationUnit: TranslationUnit = {
 };
 
 #[cfg(all(feature = "imports", not(feature = "condcomp")))]
-Import: Import = {
+pub Import: Import = {
     "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => match relative {
         Some(mut relative) => {
             relative.extend(import.path);
@@ -902,7 +902,7 @@ Import: Import = {
 };
 
 #[cfg(all(feature = "imports", feature = "condcomp"))]
-Import: Import = {
+pub Import: Import = {
     <attributes: Attribute*> "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => {
         let mut import = match relative {
             Some(mut relative) => {
