@@ -1,127 +1,136 @@
 use super::{
-    ops::Compwise, ConstEvalError, Instance, LiteralInstance, MatInner, MatInstance, Ty, Type,
-    VecInner, VecInstance, BUILTIN_STRUCTURES,
+    Instance, LiteralInstance, MatInner, MatInstance, Ty, Type, VecInner, VecInstance,
+    BUILTIN_STRUCTURES,
 };
-use wgsl_parse::syntax::*;
 
 pub trait Convert: Sized {
     // reference: https://www.w3.org/TR/WGSL/#conversion-rank
     // TODO: check that the `as` cast conversions are correct.
-    fn convert_to(&self, ty: &Type) -> Result<Self, ConstEvalError>;
-    fn convert_inner_to(&self, ty: &Type) -> Result<Self, ConstEvalError> {
+    fn convert_to(&self, ty: &Type) -> Option<Self>;
+    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         self.convert_to(ty)
     }
 }
 
 impl Convert for LiteralInstance {
-    fn convert_to(&self, ty: &Type) -> Result<LiteralInstance, ConstEvalError> {
+    fn convert_to(&self, ty: &Type) -> Option<Self> {
         if ty == &self.ty() {
-            return Ok(self.clone());
+            return Some(self.clone());
         }
         match (self, ty) {
             (LiteralInstance::AbstractInt(n), Type::AbstractFloat) => {
-                Ok(LiteralInstance::AbstractFloat(*n as f64))
+                Some(LiteralInstance::AbstractFloat(*n as f64))
             }
-            (LiteralInstance::AbstractInt(n), Type::I32) => Ok(LiteralInstance::I32(*n as i32)),
-            (LiteralInstance::AbstractInt(n), Type::U32) => Ok(LiteralInstance::U32(*n as u32)),
-            (LiteralInstance::AbstractInt(n), Type::F32) => Ok(LiteralInstance::F32(*n as f32)),
-            (LiteralInstance::AbstractInt(n), Type::F16) => Ok(LiteralInstance::F16(*n as f32)),
-            (LiteralInstance::AbstractFloat(n), Type::F32) => Ok(LiteralInstance::F32(*n as f32)),
-            (LiteralInstance::AbstractFloat(n), Type::F16) => Ok(LiteralInstance::F16(*n as f32)),
-            _ => Err(ConstEvalError::ConversionFailure(self.ty(), ty.clone())),
+            (LiteralInstance::AbstractInt(n), Type::I32) => Some(LiteralInstance::I32(*n as i32)),
+            (LiteralInstance::AbstractInt(n), Type::U32) => Some(LiteralInstance::U32(*n as u32)),
+            (LiteralInstance::AbstractInt(n), Type::F32) => Some(LiteralInstance::F32(*n as f32)),
+            (LiteralInstance::AbstractInt(n), Type::F16) => Some(LiteralInstance::F16(*n as f32)),
+            (LiteralInstance::AbstractFloat(n), Type::F32) => Some(LiteralInstance::F32(*n as f32)),
+            (LiteralInstance::AbstractFloat(n), Type::F16) => Some(LiteralInstance::F16(*n as f32)),
+            _ => None,
         }
     }
 }
 
 impl<const N: usize> Convert for VecInner<N> {
-    fn convert_to(&self, ty: &Type) -> Result<Self, ConstEvalError> {
+    fn convert_to(&self, ty: &Type) -> Option<Self> {
         if let Type::Vec(n, c_ty) = ty {
             if *n == N as u8 {
-                self.compwise_unary(|c| c.convert_to(c_ty))
+                let components = self
+                    .components
+                    .iter()
+                    .map(|c| c.convert_to(c_ty))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(VecInner::new(components))
             } else {
-                Err(ConstEvalError::ConversionFailure(self.ty(), ty.clone()))
+                None
             }
         } else {
-            Err(ConstEvalError::ConversionFailure(self.ty(), ty.clone()))
+            None
         }
     }
-    fn convert_inner_to(&self, ty: &Type) -> Result<Self, ConstEvalError> {
+    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         let ty = Type::Vec(N as u8, ty.clone().into());
         self.convert_to(&ty)
     }
 }
 
 impl Convert for VecInstance {
-    fn convert_to(&self, ty: &Type) -> Result<VecInstance, ConstEvalError> {
+    fn convert_to(&self, ty: &Type) -> Option<Self> {
         match self {
-            Self::Vec2(v) => Ok(Self::Vec2(v.convert_to(ty)?)),
-            Self::Vec3(v) => Ok(Self::Vec3(v.convert_to(ty)?)),
-            Self::Vec4(v) => Ok(Self::Vec4(v.convert_to(ty)?)),
+            Self::Vec2(v) => Some(Self::Vec2(v.convert_to(ty)?)),
+            Self::Vec3(v) => Some(Self::Vec3(v.convert_to(ty)?)),
+            Self::Vec4(v) => Some(Self::Vec4(v.convert_to(ty)?)),
         }
     }
-    fn convert_inner_to(&self, ty: &Type) -> Result<Self, ConstEvalError> {
+    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         match self {
-            Self::Vec2(v) => Ok(Self::Vec2(v.convert_inner_to(ty)?)),
-            Self::Vec3(v) => Ok(Self::Vec3(v.convert_inner_to(ty)?)),
-            Self::Vec4(v) => Ok(Self::Vec4(v.convert_inner_to(ty)?)),
+            Self::Vec2(v) => Some(Self::Vec2(v.convert_inner_to(ty)?)),
+            Self::Vec3(v) => Some(Self::Vec3(v.convert_inner_to(ty)?)),
+            Self::Vec4(v) => Some(Self::Vec4(v.convert_inner_to(ty)?)),
         }
     }
 }
 
 impl<const C: usize, const R: usize> Convert for MatInner<C, R> {
-    fn convert_to(&self, ty: &Type) -> Result<Self, ConstEvalError> {
+    fn convert_to(&self, ty: &Type) -> Option<Self> {
         if let Type::Mat(c, r, c_ty) = ty {
             if *c == C as u8 && *r == R as u8 {
-                self.compwise_unary(|c| c.convert_to(c_ty))
+                let components = self
+                    .components
+                    .iter()
+                    .map(|c| c.convert_to(c_ty))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(MatInner::new(components))
             } else {
-                Err(ConstEvalError::ConversionFailure(self.ty(), ty.clone()))
+                None
             }
         } else {
-            Err(ConstEvalError::ConversionFailure(self.ty(), ty.clone()))
+            None
         }
     }
-    fn convert_inner_to(&self, ty: &Type) -> Result<Self, ConstEvalError> {
+    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         let ty = Type::Mat(C as u8, R as u8, ty.clone().into());
         self.convert_to(&ty)
     }
 }
 
 impl Convert for MatInstance {
-    fn convert_to(&self, ty: &Type) -> Result<MatInstance, ConstEvalError> {
+    fn convert_to(&self, ty: &Type) -> Option<Self> {
         match self {
-            Self::Mat2x2(m) => Ok(Self::Mat2x2(m.convert_to(ty)?)),
-            Self::Mat2x3(m) => Ok(Self::Mat2x3(m.convert_to(ty)?)),
-            Self::Mat2x4(m) => Ok(Self::Mat2x4(m.convert_to(ty)?)),
-            Self::Mat3x2(m) => Ok(Self::Mat3x2(m.convert_to(ty)?)),
-            Self::Mat3x3(m) => Ok(Self::Mat3x3(m.convert_to(ty)?)),
-            Self::Mat3x4(m) => Ok(Self::Mat3x4(m.convert_to(ty)?)),
-            Self::Mat4x2(m) => Ok(Self::Mat4x2(m.convert_to(ty)?)),
-            Self::Mat4x3(m) => Ok(Self::Mat4x3(m.convert_to(ty)?)),
-            Self::Mat4x4(m) => Ok(Self::Mat4x4(m.convert_to(ty)?)),
+            Self::Mat2x2(m) => Some(Self::Mat2x2(m.convert_to(ty)?)),
+            Self::Mat2x3(m) => Some(Self::Mat2x3(m.convert_to(ty)?)),
+            Self::Mat2x4(m) => Some(Self::Mat2x4(m.convert_to(ty)?)),
+            Self::Mat3x2(m) => Some(Self::Mat3x2(m.convert_to(ty)?)),
+            Self::Mat3x3(m) => Some(Self::Mat3x3(m.convert_to(ty)?)),
+            Self::Mat3x4(m) => Some(Self::Mat3x4(m.convert_to(ty)?)),
+            Self::Mat4x2(m) => Some(Self::Mat4x2(m.convert_to(ty)?)),
+            Self::Mat4x3(m) => Some(Self::Mat4x3(m.convert_to(ty)?)),
+            Self::Mat4x4(m) => Some(Self::Mat4x4(m.convert_to(ty)?)),
         }
     }
-    fn convert_inner_to(&self, ty: &Type) -> Result<MatInstance, ConstEvalError> {
+    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         match self {
-            Self::Mat2x2(m) => Ok(Self::Mat2x2(m.convert_inner_to(ty)?)),
-            Self::Mat2x3(m) => Ok(Self::Mat2x3(m.convert_inner_to(ty)?)),
-            Self::Mat2x4(m) => Ok(Self::Mat2x4(m.convert_inner_to(ty)?)),
-            Self::Mat3x2(m) => Ok(Self::Mat3x2(m.convert_inner_to(ty)?)),
-            Self::Mat3x3(m) => Ok(Self::Mat3x3(m.convert_inner_to(ty)?)),
-            Self::Mat3x4(m) => Ok(Self::Mat3x4(m.convert_inner_to(ty)?)),
-            Self::Mat4x2(m) => Ok(Self::Mat4x2(m.convert_inner_to(ty)?)),
-            Self::Mat4x3(m) => Ok(Self::Mat4x3(m.convert_inner_to(ty)?)),
-            Self::Mat4x4(m) => Ok(Self::Mat4x4(m.convert_inner_to(ty)?)),
+            Self::Mat2x2(m) => Some(Self::Mat2x2(m.convert_inner_to(ty)?)),
+            Self::Mat2x3(m) => Some(Self::Mat2x3(m.convert_inner_to(ty)?)),
+            Self::Mat2x4(m) => Some(Self::Mat2x4(m.convert_inner_to(ty)?)),
+            Self::Mat3x2(m) => Some(Self::Mat3x2(m.convert_inner_to(ty)?)),
+            Self::Mat3x3(m) => Some(Self::Mat3x3(m.convert_inner_to(ty)?)),
+            Self::Mat3x4(m) => Some(Self::Mat3x4(m.convert_inner_to(ty)?)),
+            Self::Mat4x2(m) => Some(Self::Mat4x2(m.convert_inner_to(ty)?)),
+            Self::Mat4x3(m) => Some(Self::Mat4x3(m.convert_inner_to(ty)?)),
+            Self::Mat4x4(m) => Some(Self::Mat4x4(m.convert_inner_to(ty)?)),
         }
     }
 }
 
 impl Convert for Instance {
-    fn convert_to(&self, ty: &Type) -> Result<Instance, ConstEvalError> {
+    fn convert_to(&self, ty: &Type) -> Option<Self> {
         if &self.ty() == ty {
-            return Ok(self.clone());
+            return Some(self.clone());
         }
         match self {
-            Self::Literal(l) => Ok(Self::Literal(l.convert_to(ty)?)),
+            Self::Literal(l) => Some(Self::Literal(l.convert_to(ty)?)),
             Self::Struct(_) => todo!(),
             Self::Array(_) => todo!(),
             Self::Vec(_) => todo!(),
@@ -173,10 +182,10 @@ pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
 // this is sufficient in most cases.
 // TODO: check that it is sufficient
 // TODO: find a better fn name
-pub fn apply_conversion<T: Convert + Ty + Clone>(i1: &T, i2: &T) -> Result<(T, T), ConstEvalError> {
+pub fn convert<T: Convert + Ty + Clone>(i1: &T, i2: &T) -> Option<(T, T)> {
     i1.convert_to(&i2.ty())
         .map(|i1| (i1, i2.clone()))
-        .or_else(|_| i2.convert_to(&i1.ty()).map(|i2| (i1.clone(), i2)))
+        .or_else(|| i2.convert_to(&i1.ty()).map(|i2| (i1.clone(), i2)))
 }
 
 // performs overload resolution when two instances of T are involved (which is the most common).
@@ -184,7 +193,22 @@ pub fn apply_conversion<T: Convert + Ty + Clone>(i1: &T, i2: &T) -> Result<(T, T
 // this is sufficient in most cases.
 // TODO: check that it is sufficient
 // TODO: find a better fn name
-pub fn get_conversion(ty1: &Type, ty2: &Type) -> Option<Type> {
+pub fn convert_inner<T1: Convert + Ty + Clone, T2: Convert + Ty + Clone>(
+    i1: &T1,
+    i2: &T2,
+) -> Option<(T1, T2)> {
+    let ty = convert_ty(&i1.inner_ty(), &i2.inner_ty())?;
+    let i1 = i1.convert_inner_to(&ty)?;
+    let i2 = i2.convert_inner_to(&ty)?;
+    Some((i1, i2))
+}
+
+// performs overload resolution when two instances of T are involved (which is the most common).
+// it just makes sure that the two types are the same.
+// this is sufficient in most cases.
+// TODO: check that it is sufficient
+// TODO: find a better fn name
+pub fn convert_ty(ty1: &Type, ty2: &Type) -> Option<Type> {
     conversion_rank(ty1, ty2)
         .map(|_rank| ty2.clone())
         .or_else(|| conversion_rank(ty2, ty1).map(|_rank| ty1.clone()))

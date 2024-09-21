@@ -225,117 +225,31 @@ impl Eval for IndexingExpression {
 
 impl Eval for UnaryExpression {
     fn eval(&self, ctx: &Context) -> Result<Instance, ConstEvalError> {
-        let operand = self.operand.eval_value(ctx)?;
-        match self.operator {
-            UnaryOperator::LogicalNegation => !&operand,
-            UnaryOperator::Negation => -&operand,
-            UnaryOperator::BitwiseComplement => todo!(),
-            UnaryOperator::AddressOf => todo!(),
-            UnaryOperator::Indirection => todo!(),
+        if self.operator == UnaryOperator::AddressOf {
+            let operand = self.operand.eval(ctx)?;
+            match operand {
+                Instance::Ref(r) => Ok(Instance::Ref(RefInstance {
+                    ty: r.ty.clone(),
+                    address: r.address.clone(),
+                })),
+                operand @ _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
+            }
+        } else {
+            let operand = self.operand.eval_value(ctx)?;
+            match self.operator {
+                UnaryOperator::LogicalNegation => operand.op_not(),
+                UnaryOperator::Negation => operand.op_neg(),
+                UnaryOperator::BitwiseComplement => operand.op_bitnot(),
+                UnaryOperator::AddressOf => unreachable!(),
+                UnaryOperator::Indirection => match operand {
+                    Instance::Ptr(p) => Ok(Instance::Ref(RefInstance {
+                        ty: p.ty.clone(),
+                        address: p.address.clone(),
+                    })),
+                    operand @ _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
+                },
+            }
         }
-        //     match self.operator {
-        //         UnaryOperator::LogicalNegation => match &self.operand.eval_value(ctx)? {
-        //             Instance::Literal(LiteralInstance::Bool(b)) => Ok(LiteralInstance::Bool(!b).into()),
-        //             operand @ Instance::Vec(v) => {
-        //                 let components = v
-        //                     .iter()
-        //                     .map(|e| match e {
-        //                         LiteralInstance::True => Ok(LiteralInstance::False),
-        //                         LiteralInstance::False => Ok(LiteralInstance::True),
-        //                         _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //                     })
-        //                     .collect::<Result<_, _>>()?;
-        //                 Ok(Instance::Vec(VecInstance {
-        //                     ty: Type::Bool,
-        //                     components,
-        //                 }))
-        //             }
-        //             operand @ _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //         },
-        //         UnaryOperator::Negation => match &self.operand.eval_value(ctx)? {
-        //             Instance::Literal(LiteralInstance::AbstractInt(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::AbstractInt(-n)))
-        //             }
-        //             Instance::Literal(LiteralInstance::AbstractFloat(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::AbstractFloat(-n)))
-        //             }
-        //             Instance::Literal(LiteralInstance::I32(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::I32(-n)))
-        //             }
-        //             Instance::Literal(LiteralInstance::F32(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::F32(-n)))
-        //             }
-        //             Instance::Literal(LiteralInstance::F16(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::F16(-n)))
-        //             }
-        //             operand @ Instance::Vec(v) => {
-        //                 let components = v
-        //                     .components
-        //                     .iter()
-        //                     .map(|e| match e {
-        //                         LiteralInstance::AbstractInt(n) => Ok(LiteralInstance::AbstractInt(-n)),
-        //                         LiteralInstance::AbstractFloat(n) => {
-        //                             Ok(LiteralInstance::AbstractFloat(-n))
-        //                         }
-        //                         LiteralInstance::I32(n) => Ok(LiteralInstance::I32(-n)),
-        //                         LiteralInstance::F32(n) => Ok(LiteralInstance::F32(-n)),
-        //                         LiteralInstance::F16(n) => Ok(LiteralInstance::F16(-n)),
-        //                         _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //                     })
-        //                     .collect::<Result<_, _>>()?;
-        //                 Ok(Instance::Vec(VecInstance {
-        //                     ty: v.ty.clone(),
-        //                     components,
-        //                 }))
-        //             }
-        //             operand @ _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //         },
-
-        //         UnaryOperator::BitwiseComplement => match &self.operand.eval_value(ctx)? {
-        //             Instance::Literal(LiteralInstance::AbstractInt(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::AbstractInt(!n)))
-        //             }
-        //             Instance::Literal(LiteralInstance::I32(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::I32(!n)))
-        //             }
-        //             Instance::Literal(LiteralInstance::U32(n)) => {
-        //                 Ok(Instance::Literal(LiteralInstance::U32(!n)))
-        //             }
-        //             operand @ Instance::Vec(v) => {
-        //                 let components = v
-        //                     .components
-        //                     .iter()
-        //                     .map(|e| match e {
-        //                         LiteralInstance::AbstractInt(n) => Ok(LiteralInstance::AbstractInt(-n)),
-        //                         LiteralInstance::I32(n) => Ok(LiteralInstance::I32(!n)),
-        //                         LiteralInstance::U32(n) => Ok(LiteralInstance::U32(!n)),
-        //                         _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //                     })
-        //                     .collect::<Result<_, _>>()?;
-        //                 Ok(Instance::Vec(VecInstance {
-        //                     ty: v.ty.clone(),
-        //                     components,
-        //                 }))
-        //             }
-        //             operand @ _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //         },
-
-        //         UnaryOperator::AddressOf => match self.operand.eval(ctx)? {
-        //             Instance::Ref(r) => Ok(Instance::Ref(RefInstance {
-        //                 ty: r.ty.clone(),
-        //                 address: r.address.clone(),
-        //             })),
-        //             operand @ _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //         },
-        //         UnaryOperator::Indirection => match self.operand.eval_value(ctx)? {
-        //             Instance::Ptr(p) => Ok(Instance::Ref(RefInstance {
-        //                 ty: p.ty.clone(),
-        //                 address: p.address.clone(),
-        //             })),
-        //             operand @ _ => Err(ConstEvalError::InvalidUnary(self.operator, operand.ty())),
-        //         },
-        //     }
-        // }
     }
 }
 
@@ -402,9 +316,9 @@ impl Eval for BinaryExpression {
                 BinaryOperator::GreaterThanEqual => lhs.op_ge(&rhs),
                 BinaryOperator::BitwiseOr => lhs.op_bitor(&rhs),
                 BinaryOperator::BitwiseAnd => lhs.op_bitand(&rhs),
-                BinaryOperator::BitwiseXor => todo!(),
-                BinaryOperator::ShiftLeft => todo!(),
-                BinaryOperator::ShiftRight => todo!(),
+                BinaryOperator::BitwiseXor => lhs.op_bitxor(&rhs),
+                BinaryOperator::ShiftLeft => lhs.op_shl(&rhs),
+                BinaryOperator::ShiftRight => lhs.op_shr(&rhs),
             }
         }
     }

@@ -6,7 +6,7 @@ mod instance;
 mod ops;
 mod ty;
 
-use conv::apply_conversion;
+use conv::convert;
 
 pub use eval::Eval;
 pub use instance::*;
@@ -58,14 +58,18 @@ pub enum ConstEvalError {
     NegOverflow,
     #[error("attempt to add with overflow")]
     AddOverflow,
-    #[error("attempt to subtract with underflow")]
-    SubUnderflow,
+    #[error("attempt to subtract with overflow")]
+    SubOverflow,
     #[error("attempt to multiply with overflow")]
     MulOverflow,
     #[error("attempt to divide by zero")]
     DivByZero,
     #[error("attempt to calculate the remainder with a divisor of zero")]
     RemZeroDiv,
+    #[error("attempt to shift left by `{0}`, which would overflow")]
+    ShlOverflow(u32),
+    #[error("attempt to shift right by `{0}`, which would overflow")]
+    ShrOverflow(u32),
 }
 
 lazy_static! {

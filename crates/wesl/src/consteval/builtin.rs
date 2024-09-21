@@ -9,8 +9,8 @@ use super::{ops::Compwise, LiteralInstance, MatInner, MatInstance, Ty, VecInner,
 impl<const N: usize> VecInner<N> {
     pub fn dot(&self, rhs: &VecInner<N>) -> Result<LiteralInstance, ConstEvalError> {
         zip(self.iter(), rhs.iter())
-            .map(|(a, b)| *a * *b)
-            .reduce(|a, b| a? + b?)
+            .map(|(a, b)| a.op_mul(b))
+            .reduce(|a, b| a?.op_add(&b?))
             .unwrap()
     }
 }
