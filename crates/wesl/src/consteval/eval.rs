@@ -227,8 +227,8 @@ impl Eval for UnaryExpression {
     fn eval(&self, ctx: &Context) -> Result<Instance, ConstEvalError> {
         let operand = self.operand.eval_value(ctx)?;
         match self.operator {
-            UnaryOperator::LogicalNegation => todo!(),
-            UnaryOperator::Negation => -operand,
+            UnaryOperator::LogicalNegation => !&operand,
+            UnaryOperator::Negation => -&operand,
             UnaryOperator::BitwiseComplement => todo!(),
             UnaryOperator::AddressOf => todo!(),
             UnaryOperator::Indirection => todo!(),
@@ -389,19 +389,19 @@ impl Eval for BinaryExpression {
             let rhs = self.right.eval_value(ctx)?;
             match self.operator {
                 BinaryOperator::ShortCircuitOr | BinaryOperator::ShortCircuitAnd => unreachable!(),
-                BinaryOperator::Addition => &lhs + &rhs,
-                BinaryOperator::Subtraction => &lhs - &rhs,
-                BinaryOperator::Multiplication => &lhs * &rhs,
-                BinaryOperator::Division => &lhs / &rhs,
-                BinaryOperator::Remainder => &lhs % &rhs,
+                BinaryOperator::Addition => lhs.op_add(&rhs),
+                BinaryOperator::Subtraction => lhs.op_sub(&rhs),
+                BinaryOperator::Multiplication => lhs.op_mul(&rhs),
+                BinaryOperator::Division => lhs.op_div(&rhs),
+                BinaryOperator::Remainder => lhs.op_rem(&rhs),
                 BinaryOperator::Equality => lhs.op_eq(&rhs),
                 BinaryOperator::Inequality => lhs.op_ne(&rhs),
                 BinaryOperator::LessThan => lhs.op_lt(&rhs),
                 BinaryOperator::LessThanEqual => lhs.op_le(&rhs),
                 BinaryOperator::GreaterThan => lhs.op_gt(&rhs),
                 BinaryOperator::GreaterThanEqual => lhs.op_ge(&rhs),
-                BinaryOperator::BitwiseOr => todo!(),
-                BinaryOperator::BitwiseAnd => todo!(),
+                BinaryOperator::BitwiseOr => lhs.op_bitor(&rhs),
+                BinaryOperator::BitwiseAnd => lhs.op_bitand(&rhs),
                 BinaryOperator::BitwiseXor => todo!(),
                 BinaryOperator::ShiftLeft => todo!(),
                 BinaryOperator::ShiftRight => todo!(),
