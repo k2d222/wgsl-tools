@@ -872,6 +872,9 @@ Attribute: Attribute = {
     "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> => Attribute {
         name, arguments
     }
+    "@" "const" <arguments: ArgumentExpressionList?> => Attribute {
+        name: "const".to_string(), arguments
+    },
 };
 
 DiagnosticControl: (DiagnosticSeverity, String) = {
@@ -977,6 +980,9 @@ ImportCollection: Vec<Import> = {
 Attribute: Attribute = {
     "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> => Attribute {
         name, arguments
+    },
+    "@" "const" <arguments: ArgumentExpressionList?> => Attribute {
+        name: "const".to_string(), arguments
     },
     "@" "if" <arguments: ArgumentExpressionList?> => Attribute {
         name: "if".to_string(), arguments

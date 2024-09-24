@@ -108,13 +108,13 @@ pub enum GlobalDeclaration {
 pub struct Declaration {
     pub attributes: Vec<Attribute>,
     pub kind: DeclarationKind,
-    pub template_args: Option<Vec<TemplateArg>>,
+    pub template_args: TemplateArgs,
     pub name: String,
     pub ty: Option<TypeExpression>,
     pub initializer: Option<Expression>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DeclarationKind {
     Const,
     Override,
@@ -264,7 +264,7 @@ pub enum BinaryOperator {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCall {
     pub name: String,
-    pub template_args: Option<Vec<TemplateArg>>,
+    pub template_args: TemplateArgs,
     pub arguments: Vec<Expression>,
 }
 
@@ -278,11 +278,12 @@ pub struct IdentifierExpression {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeExpression {
     pub name: String,
-    pub template_args: Option<Vec<TemplateArg>>,
+    pub template_args: TemplateArgs,
 }
 
 // TODO
 pub type TemplateArg = Expression;
+pub type TemplateArgs = Option<Vec<TemplateArg>>;
 
 #[derive(Clone, Debug, PartialEq, From)]
 pub enum Statement {
