@@ -300,11 +300,3 @@ pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &str> {
             _ => None,
         })
 }
-
-pub fn struct_decl<'s>(name: &str, wesl: &'s TranslationUnit) -> Option<&'s Struct> {
-    wesl.global_declarations.iter().find_map(|decl| match decl {
-        GlobalDeclaration::Struct(s) => (s.name == name).then_some(s),
-        _ => None,
-    })
-    // TODO: find among builtin declarations too.
-}

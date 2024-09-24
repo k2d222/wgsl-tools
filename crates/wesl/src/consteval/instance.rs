@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use derive_more::derive::From;
-use wgsl_parse::syntax;
+use itertools::Itertools;
+
+use crate::consteval::Ty;
 
 use super::{ConstEvalError, Context, Type};
-use crate::syntax_util::struct_decl;
 
 #[derive(Clone, Debug, From, PartialEq)]
 pub enum Instance {
@@ -41,9 +42,6 @@ impl StructInstance {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn declaration<'s>(&self, wesl: &'s syntax::TranslationUnit) -> Option<&'s syntax::Struct> {
-        struct_decl(&self.name, wesl)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -52,7 +50,8 @@ pub struct ArrayInstance {
 }
 
 impl ArrayInstance {
-    pub fn new(components: Vec<Instance>) -> Self {
+    pub(crate) fn new(components: Vec<Instance>) -> Self {
+        debug_assert!(components.iter().map(|c| c.ty()).all_equal());
         Self { components }
     }
 
@@ -108,7 +107,7 @@ pub enum VecInstance {
 }
 
 impl VecInstance {
-    pub fn new(components: Vec<LiteralInstance>) -> Self {
+    pub(crate) fn new(components: Vec<LiteralInstance>) -> Self {
         match components.len() {
             2 => Self::Vec2(VecInner::new(components)),
             3 => Self::Vec3(VecInner::new(components)),
@@ -334,9 +333,39 @@ impl RefInstance {
         let inst = ctx
             .memory
             .get(self.address.ptr)
-            .ok_or_else(|| ConstEvalError::InvalidRef(self.address.clone()))?;
-        rec_view(inst, &self.address.view)
-            .ok_or_else(|| ConstEvalError::InvalidRef(self.address.clone()))
+            .ok_or_else(|| ConstEvalError::Ref(self.address.clone()))?;
+        rec_view(inst, &self.address.view).ok_or_else(|| ConstEvalError::Ref(self.address.clone()))
+    }
+
+    pub fn value_mut<'a>(
+        &'a self,
+        ctx: &'a mut Context,
+    ) -> Result<&'a mut Instance, ConstEvalError> {
+        fn rec_view<'a>(inst: &'a mut Instance, view: &'a MemView) -> Option<&'a mut Instance> {
+            match view {
+                MemView::Whole => Some(inst),
+                MemView::Member(m, v) => match inst {
+                    Instance::Struct(s) => {
+                        let inst = s.components.get_mut(m)?;
+                        rec_view(inst, v)
+                    }
+                    _ => None,
+                },
+                MemView::Index(i, v) => match inst {
+                    Instance::Array(a) => {
+                        let inst = a.components.get_mut(*i)?;
+                        rec_view(inst, v)
+                    }
+                    _ => None,
+                },
+            }
+        }
+
+        let inst = ctx
+            .memory
+            .get_mut(self.address.ptr)
+            .ok_or_else(|| ConstEvalError::Ref(self.address.clone()))?;
+        rec_view(inst, &self.address.view).ok_or_else(|| ConstEvalError::Ref(self.address.clone()))
     }
 }
 

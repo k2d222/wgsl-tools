@@ -1,14 +1,45 @@
+use itertools::Itertools;
+
 use super::{
-    Instance, LiteralInstance, MatInner, MatInstance, Ty, Type, VecInner, VecInstance,
-    BUILTIN_STRUCTURES,
+    Instance, LiteralInstance, MatInner, MatInstance, SyntaxUtil, Ty, Type, VecInner, VecInstance,
+    PRELUDE,
 };
 
-pub trait Convert: Sized {
-    // reference: https://www.w3.org/TR/WGSL/#conversion-rank
-    // TODO: check that the `as` cast conversions are correct.
+pub trait Convert: Sized + Clone + Ty {
+    /// convert an instance to another type, if a feasible conversion exists.
+    /// reference: https://www.w3.org/TR/WGSL/#conversion-rank
+    /// TODO: check that the `as` cast conversions are correct.
     fn convert_to(&self, ty: &Type) -> Option<Self>;
+
+    /// convert an instance by changing its inner type to another.
+    /// see [`Ty::inner_ty`]
+    /// see [`Convert::convert_to`]
     fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         self.convert_to(ty)
+    }
+
+    /// convert an abstract instance to a concrete type.
+    ///
+    /// e.g. `array<vec<AbstractInt>>` becomes `array<vec<i32>>`
+    fn concretize(&self) -> Option<Self> {
+        self.convert_to(&self.ty().concretize())
+    }
+}
+
+impl Type {
+    pub fn concretize(&self) -> Type {
+        match self {
+            Type::AbstractInt => Type::I32,
+            Type::AbstractFloat => Type::F32,
+            Type::Array(ty) => Type::Array(ty.concretize().into()),
+            Type::Vec(n, ty) => Type::Vec(*n, ty.concretize().into()),
+            Type::Mat(c, r, ty) => Type::Mat(*c, *r, ty.concretize().into()),
+            _ => self.clone(),
+        }
+    }
+
+    pub fn is_convertible_to(&self, ty: &Type) -> bool {
+        conversion_rank(self, ty).is_some()
     }
 }
 
@@ -17,16 +48,29 @@ impl Convert for LiteralInstance {
         if ty == &self.ty() {
             return Some(self.clone());
         }
+        // TODO: check that these conversions are correctly implemented.
+        // I think they are correct.
+        // reference: https://www.w3.org/TR/WGSL/#floating-point-conversion
         match (self, ty) {
-            (LiteralInstance::AbstractInt(n), Type::AbstractFloat) => {
-                Some(LiteralInstance::AbstractFloat(*n as f64))
+            (Self::AbstractInt(n), Type::AbstractFloat) => Some(*n as f64).map(Self::AbstractFloat),
+            (Self::AbstractInt(n), Type::I32) => i32::try_from(*n).ok().map(Self::I32),
+            (Self::AbstractInt(n), Type::U32) => u32::try_from(*n).ok().map(Self::U32),
+            (Self::AbstractInt(n), Type::F32) => Some(*n as f32).map(Self::F32),
+            (Self::AbstractInt(n), Type::F16) => {
+                let n = *n as f32;
+                n.is_finite().then_some(n)
             }
-            (LiteralInstance::AbstractInt(n), Type::I32) => Some(LiteralInstance::I32(*n as i32)),
-            (LiteralInstance::AbstractInt(n), Type::U32) => Some(LiteralInstance::U32(*n as u32)),
-            (LiteralInstance::AbstractInt(n), Type::F32) => Some(LiteralInstance::F32(*n as f32)),
-            (LiteralInstance::AbstractInt(n), Type::F16) => Some(LiteralInstance::F16(*n as f32)),
-            (LiteralInstance::AbstractFloat(n), Type::F32) => Some(LiteralInstance::F32(*n as f32)),
-            (LiteralInstance::AbstractFloat(n), Type::F16) => Some(LiteralInstance::F16(*n as f32)),
+            .map(Self::F16),
+            (Self::AbstractFloat(n), Type::F32) => {
+                let n = *n as f32;
+                n.is_finite().then_some(n)
+            }
+            .map(Self::F32),
+            (Self::AbstractFloat(n), Type::F16) => {
+                let n = *n as f32;
+                n.is_finite().then_some(n)
+            }
+            .map(Self::F16),
             _ => None,
         }
     }
@@ -155,8 +199,8 @@ pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
         (Type::AbstractFloat, Type::F32) => Some(1),
         (Type::AbstractFloat, Type::F16) => Some(2),
         (Type::Struct(s1), Type::Struct(s2)) => {
-            if BUILTIN_STRUCTURES.contains(s1.as_str())
-                && BUILTIN_STRUCTURES.contains(s2.as_str())
+            if PRELUDE.decl_struct(&s1).is_some()
+                && PRELUDE.decl_struct(&s2).is_some()
                 && s1.ends_with("abstract")
             {
                 if s2.ends_with("f32") {
@@ -179,39 +223,58 @@ pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
     }
 }
 
-// performs overload resolution when two instances of T are involved (which is the most common).
-// it just makes sure that the two types are the same.
-// this is sufficient in most cases.
-// TODO: check that it is sufficient
-// TODO: find a better fn name
+/// performs overload resolution when two instances of T are involved (which is the most common).
+/// it just makes sure that the two types are the same, by lowering one of the instances.
+/// this is sufficient in most cases.
+/// TODO: check that it is sufficient
 pub fn convert<T: Convert + Ty + Clone>(i1: &T, i2: &T) -> Option<(T, T)> {
-    i1.convert_to(&i2.ty())
-        .map(|i1| (i1, i2.clone()))
-        .or_else(|| i2.convert_to(&i1.ty()).map(|i2| (i1.clone(), i2)))
+    let (ty1, ty2) = (i1.ty(), i2.ty());
+    let ty = convert_ty(&ty1, &ty2)?;
+    let i1 = i1.convert_to(&ty)?;
+    let i2 = i2.convert_to(&ty)?;
+    Some((i1, i2))
 }
 
-// performs overload resolution when two instances of T are involved (which is the most common).
-// it just makes sure that the two types are the same.
-// this is sufficient in most cases.
-// TODO: check that it is sufficient
-// TODO: find a better fn name
 pub fn convert_inner<T1: Convert + Ty + Clone, T2: Convert + Ty + Clone>(
     i1: &T1,
     i2: &T2,
 ) -> Option<(T1, T2)> {
-    let ty = convert_ty(&i1.inner_ty(), &i2.inner_ty())?;
+    let (ty1, ty2) = (i1.ty(), i2.ty());
+    let ty = convert_ty(&ty1, &ty2)?;
     let i1 = i1.convert_inner_to(&ty)?;
     let i2 = i2.convert_inner_to(&ty)?;
     Some((i1, i2))
 }
 
+/// See [`convert`]
+pub fn convert_all<'a, T: Convert + Ty + Clone + 'a>(insts: &Vec<T>) -> Option<Vec<T>> {
+    let tys = insts.iter().map(|i| i.ty()).collect_vec();
+    let ty = convert_ty_all(&tys)?;
+    insts
+        .into_iter()
+        .map(|inst| inst.convert_to(ty))
+        .collect::<Option<Vec<_>>>()
+}
+
 // performs overload resolution when two instances of T are involved (which is the most common).
 // it just makes sure that the two types are the same.
 // this is sufficient in most cases.
 // TODO: check that it is sufficient
 // TODO: find a better fn name
-pub fn convert_ty(ty1: &Type, ty2: &Type) -> Option<Type> {
+pub fn convert_ty<'a>(ty1: &'a Type, ty2: &'a Type) -> Option<&'a Type> {
     conversion_rank(ty1, ty2)
-        .map(|_rank| ty2.clone())
-        .or_else(|| conversion_rank(ty2, ty1).map(|_rank| ty1.clone()))
+        .map(|_rank| ty2)
+        .or_else(|| conversion_rank(ty2, ty1).map(|_rank| ty1))
+}
+
+// performs overload resolution when two instances of T are involved (which is the most common).
+// it just makes sure that the two types are the same.
+// this is sufficient in most cases.
+// TODO: check that it is sufficient
+// TODO: find a better fn name
+pub fn convert_ty_all<'a>(tys: impl IntoIterator<Item = &'a Type> + 'a) -> Option<&'a Type> {
+    tys.into_iter()
+        .map(Option::Some)
+        .reduce(|ty1, ty2| convert_ty(ty1?, ty2?))
+        .flatten()
 }

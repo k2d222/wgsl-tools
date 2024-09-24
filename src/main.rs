@@ -70,7 +70,7 @@ struct CompileArgs {
 struct EvalArgs {
     /// context to evaluate the expression into
     #[command(flatten)]
-    compile: Option<CompileArgs>,
+    compile: CompileArgs,
     /// the expression to evaluate
     expr: String,
 }
@@ -148,18 +148,14 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
 }
 
 fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
-    let wgsl = if let Some(args) = &args.compile {
-        run_compile(args)?
-    } else {
-        TranslationUnit::default()
-    };
+    let wgsl = run_compile(&args.compile)?;
 
-    let ctx = Context::new(&wgsl);
+    let mut ctx = Context::new(&wgsl);
     let expr = args
         .expr
         .parse::<Expression>()
         .map_err(wesl::Error::ParseError)?;
-    let instance = expr.eval(&ctx).map_err(wesl::Error::ConstEvalError)?;
+    let instance = expr.eval(&mut ctx).map_err(wesl::Error::ConstEvalError)?;
 
     Ok(instance)
 }

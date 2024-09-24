@@ -124,6 +124,7 @@ impl<'a> Display for Type {
             Type::Array(ty) => write!(f, "array<{ty}>"),
             Type::Vec(n, ty) => write!(f, "vec{n}<{ty}>"),
             Type::Mat(m, n, ty) => write!(f, "mat{m}x{n}<{ty}>"),
+            Type::Atomic(ty) => write!(f, "atomic<{ty}>"),
             Type::Ptr(ty) => write!(f, "ptr<{ty}>"),
             Type::Void => write!(f, ""),
         }

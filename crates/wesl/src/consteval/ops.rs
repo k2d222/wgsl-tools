@@ -3,7 +3,7 @@ use std::iter::zip;
 use crate::ConstEvalError;
 
 use super::{
-    conv::convert_inner, convert, Instance, LiteralInstance, MatInner, MatInstance, Ty, VecInner,
+    convert, convert_inner, Instance, LiteralInstance, MatInner, MatInstance, Ty, VecInner,
     VecInstance,
 };
 
@@ -83,7 +83,7 @@ impl Compwise for VecInstance {
             (VecInstance::Vec2(lhs), VecInstance::Vec2(rhs)) => lhs.compwise_binary_mut(rhs, f),
             (VecInstance::Vec3(lhs), VecInstance::Vec3(rhs)) => lhs.compwise_binary_mut(rhs, f),
             (VecInstance::Vec4(lhs), VecInstance::Vec4(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (lhs @ _, _) => Err(E::InvalidCompwiseBinary(lhs.ty(), rhs.ty())),
+            (lhs @ _, _) => Err(E::CompwiseBinary(lhs.ty(), rhs.ty())),
         }
     }
 }
@@ -146,7 +146,7 @@ impl Compwise for MatInstance {
             (MatInstance::Mat4x2(lhs), MatInstance::Mat4x2(rhs)) => lhs.compwise_binary_mut(rhs, f),
             (MatInstance::Mat4x3(lhs), MatInstance::Mat4x3(rhs)) => lhs.compwise_binary_mut(rhs, f),
             (MatInstance::Mat4x4(lhs), MatInstance::Mat4x4(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (lhs @ _, _) => Err(E::InvalidCompwiseBinary(lhs.ty(), rhs.ty())),
+            (lhs @ _, _) => Err(E::CompwiseBinary(lhs.ty(), rhs.ty())),
         }
     }
 }
@@ -172,7 +172,7 @@ impl LiteralInstance {
     pub fn op_not(&self) -> Result<Self, E> {
         match self {
             Self::Bool(b) => Ok(Self::Bool(!b)),
-            _ => Err(E::InvalidUnary(UnaryOperator::LogicalNegation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::LogicalNegation, self.ty())),
         }
     }
 }
@@ -181,7 +181,7 @@ impl Instance {
     pub fn op_not(&self) -> Result<Self, E> {
         match self {
             Self::Literal(lit) => lit.op_not().map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::LogicalNegation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::LogicalNegation, self.ty())),
         }
     }
 }
@@ -199,11 +199,11 @@ impl LiteralInstance {
             Self::I32(lhs) => lhs.checked_neg().ok_or(E::NegOverflow).map(Into::into),
             Self::F32(lhs) => Ok((-lhs).into()),
             Self::F16(lhs) => Ok((-lhs).into()),
-            _ => Err(E::InvalidUnary(UnaryOperator::Negation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::Negation, self.ty())),
         }
     }
     pub fn op_add(&self, rhs: &Self) -> Result<LiteralInstance, E> {
-        let err = || E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::AbstractInt, lhs, rhs) => {
                 lhs.checked_add(rhs).ok_or(E::AddOverflow).map(Into::into)
@@ -239,7 +239,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_sub(&self, rhs: &Self) -> Result<LiteralInstance, E> {
-        let err = || E::InvalidBinary(BinaryOperator::Subtraction, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::AbstractInt, lhs, rhs) => {
                 lhs.checked_sub(rhs).ok_or(E::SubOverflow).map(Into::into)
@@ -275,7 +275,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_mul(&self, rhs: &Self) -> Result<LiteralInstance, E> {
-        let err = || E::InvalidBinary(BinaryOperator::Multiplication, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::AbstractInt, lhs, rhs) => {
                 lhs.checked_mul(rhs).ok_or(E::MulOverflow).map(Into::into)
@@ -311,7 +311,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_div(&self, rhs: &Self) -> Result<LiteralInstance, E> {
-        let err = || E::InvalidBinary(BinaryOperator::Division, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::Division, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::AbstractInt, lhs, rhs) => {
                 lhs.checked_div(rhs).ok_or(E::DivByZero).map(Into::into)
@@ -343,7 +343,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_rem(&self, rhs: &Self) -> Result<LiteralInstance, E> {
-        let err = || E::InvalidBinary(BinaryOperator::Remainder, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::Remainder, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::AbstractInt, lhs, rhs) => {
                 lhs.checked_rem(rhs).ok_or(E::RemZeroDiv).map(Into::into)
@@ -379,7 +379,7 @@ impl LiteralInstance {
     }
     pub fn op_sub_vec(&self, rhs: &VecInstance) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
         rhs.compwise_unary(|r| lhs.op_sub(r)).map(Into::into)
     }
     pub fn op_mul_vec(&self, rhs: &VecInstance) -> Result<VecInstance, E> {
@@ -387,12 +387,12 @@ impl LiteralInstance {
     }
     pub fn op_div_vec(&self, rhs: &VecInstance) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Division, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Division, self.ty(), rhs.ty()))?;
         rhs.compwise_unary(|r| lhs.op_div(r)).map(Into::into)
     }
     pub fn op_rem_vec(&self, rhs: &VecInstance) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Remainder, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Remainder, self.ty(), rhs.ty()))?;
         rhs.compwise_unary(|r| lhs.op_rem(r)).map(Into::into)
     }
     pub fn op_mul_mat(&self, rhs: &MatInstance) -> Result<MatInstance, E> {
@@ -403,18 +403,18 @@ impl LiteralInstance {
 impl<const N: usize> VecInner<N> {
     fn op_add(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_add(&r))
     }
     fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<VecInner<N>, E> {
         let (vec, sca) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         vec.compwise_unary(|k| k.op_mul(&sca))
     }
     fn op_mul_mat<const C: usize>(&self, rhs: &MatInner<C, N>) -> Result<VecInner<C>, E> {
         // TODO must be float
         let (vec, mat) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         let mat = mat.transpose();
 
         Ok(zip(&vec.components, &mat.components)
@@ -430,52 +430,52 @@ impl VecInstance {
     }
     pub fn op_add(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_add(&r))
     }
     pub fn op_sub(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_sub(&r))
     }
     pub fn op_mul(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_mul(&r))
     }
     pub fn op_div(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_div(&r))
     }
     pub fn op_rem(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_rem(&r))
     }
     pub fn op_add_sca(&self, rhs: &LiteralInstance) -> Result<Self, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_unary(|l| l.op_add(&rhs)).map(Into::into)
     }
     pub fn op_sub_sca(&self, rhs: &LiteralInstance) -> Result<Self, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
         lhs.compwise_unary(|l| l.op_sub(&rhs)).map(Into::into)
     }
     pub fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<Self, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         lhs.compwise_unary(|l| l.op_mul(&rhs)).map(Into::into)
     }
     pub fn op_div_sca(&self, rhs: &LiteralInstance) -> Result<Self, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Division, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Division, self.ty(), rhs.ty()))?;
         lhs.compwise_unary(|l| l.op_div(&rhs)).map(Into::into)
     }
     pub fn op_rem_sca(&self, rhs: &LiteralInstance) -> Result<Self, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Division, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Division, self.ty(), rhs.ty()))?;
         lhs.compwise_unary(|l| l.op_rem(&rhs)).map(Into::into)
     }
     pub fn op_mul_mat(&self, rhs: &MatInstance) -> Result<Self, E> {
@@ -489,7 +489,7 @@ impl VecInstance {
             (Self::Vec4(lhs), MatInstance::Mat2x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec2),
             (Self::Vec4(lhs), MatInstance::Mat3x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec3),
             (Self::Vec4(lhs), MatInstance::Mat4x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec4),
-            _ => Err(E::InvalidBinary(
+            _ => Err(E::Binary(
                 BinaryOperator::Multiplication,
                 self.ty(),
                 rhs.ty(),
@@ -501,27 +501,27 @@ impl VecInstance {
 impl<const C: usize, const R: usize> MatInner<C, R> {
     pub fn op_add_mat(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_add(&r))
     }
 
     pub fn op_sub_mat(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_sub(&r))
     }
 
     pub fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<MatInner<C, R>, E> {
         // TODO must be float
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         lhs.compwise_unary(|l| l.op_mul(&rhs))
     }
 
     pub fn op_mul_vec(&self, rhs: &VecInner<C>) -> Result<VecInner<R>, E> {
         // TODO must be float
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
 
         Ok(zip(&lhs.components, &rhs.components)
             .map(|(l, r)| l.op_mul_sca(r))
@@ -532,7 +532,7 @@ impl<const C: usize, const R: usize> MatInner<C, R> {
     pub fn op_mul_mat<const K: usize>(&self, rhs: &MatInner<K, C>) -> Result<MatInner<K, R>, E> {
         // TODO must be float
         let (lhs, rhs) = convert_inner(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         let lhs = lhs.transpose();
 
         Ok(MatInner::new(
@@ -563,11 +563,7 @@ impl MatInstance {
             both!(Self::Mat4x2, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat4x2),
             both!(Self::Mat4x3, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat4x3),
             both!(Self::Mat4x4, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat4x4),
-            (lhs @ _, rhs @ _) => Err(E::InvalidBinary(
-                BinaryOperator::Addition,
-                lhs.ty(),
-                rhs.ty(),
-            )),
+            (lhs @ _, rhs @ _) => Err(E::Binary(BinaryOperator::Addition, lhs.ty(), rhs.ty())),
         }
     }
     pub fn op_sub_mat(&self, rhs: &Self) -> Result<Self, E> {
@@ -581,11 +577,7 @@ impl MatInstance {
             both!(Self::Mat4x2, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat4x2),
             both!(Self::Mat4x3, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat4x3),
             both!(Self::Mat4x4, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat4x4),
-            (lhs @ _, rhs @ _) => Err(E::InvalidBinary(
-                BinaryOperator::Subtraction,
-                lhs.ty(),
-                rhs.ty(),
-            )),
+            (lhs @ _, rhs @ _) => Err(E::Binary(BinaryOperator::Subtraction, lhs.ty(), rhs.ty())),
         }
     }
     pub fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<MatInstance, E> {
@@ -633,7 +625,7 @@ impl MatInstance {
                 lhs.op_mul_vec(rhs).map(VecInstance::Vec4)
             }
 
-            (lhs @ _, rhs @ _) => Err(E::InvalidBinary(
+            (lhs @ _, rhs @ _) => Err(E::Binary(
                 BinaryOperator::Multiplication,
                 lhs.ty(),
                 rhs.ty(),
@@ -672,7 +664,7 @@ impl MatInstance {
             (Self::Mat4x4(lhs), Self::Mat3x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x4),
             (Self::Mat4x4(lhs), Self::Mat4x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x4),
 
-            (lhs @ _, rhs @ _) => Err(E::InvalidBinary(
+            (lhs @ _, rhs @ _) => Err(E::Binary(
                 BinaryOperator::Multiplication,
                 lhs.ty(),
                 rhs.ty(),
@@ -686,7 +678,7 @@ impl Instance {
         match self {
             Self::Literal(lhs) => lhs.op_neg().map(Into::into),
             Self::Vec(lhs) => lhs.op_neg().map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::Negation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::Negation, self.ty())),
         }
     }
     pub fn op_add(&self, rhs: &Self) -> Result<Self, E> {
@@ -696,11 +688,7 @@ impl Instance {
             (Self::Literal(lhs), Self::Vec(rhs)) => lhs.op_add_vec(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_add(rhs).map(Into::into),
             both!(Self::Mat, lhs, rhs) => lhs.op_add(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::Addition,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty())),
         }
     }
     pub fn op_sub(&self, rhs: &Self) -> Result<Self, E> {
@@ -710,11 +698,7 @@ impl Instance {
             (Self::Literal(lhs), Self::Vec(rhs)) => lhs.op_sub_vec(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_sub(rhs).map(Into::into),
             both!(Self::Mat, lhs, rhs) => lhs.op_sub_mat(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::Subtraction,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty())),
         }
     }
     pub fn op_mul(&self, rhs: &Self) -> Result<Self, E> {
@@ -728,11 +712,7 @@ impl Instance {
             (Self::Mat(lhs), Self::Vec(rhs)) => lhs.op_mul_vec(rhs).map(Into::into),
             (Self::Vec(lhs), Self::Mat(rhs)) => lhs.op_mul_mat(rhs).map(Into::into),
             both!(Self::Mat, lhs, rhs) => lhs.op_mul(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::Subtraction,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty())),
         }
     }
     pub fn op_div(&self, rhs: &Self) -> Result<Self, E> {
@@ -741,11 +721,7 @@ impl Instance {
             (Self::Literal(s), Self::Vec(v)) => v.compwise_unary(|k| s.op_div(&k)).map(Into::into),
             (Self::Vec(v), Self::Literal(s)) => v.compwise_unary(|k| k.op_div(s)).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_div(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::Subtraction,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty())),
         }
     }
     pub fn op_rem(&self, rhs: &Self) -> Result<Self, E> {
@@ -754,11 +730,7 @@ impl Instance {
             (Self::Literal(s), Self::Vec(v)) => v.compwise_unary(|k| s.op_rem(k)).map(Into::into),
             (Self::Vec(v), Self::Literal(s)) => v.compwise_unary(|k| k.op_rem(s)).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_rem(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::Subtraction,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty())),
         }
     }
 }
@@ -770,7 +742,7 @@ impl Instance {
 
 impl LiteralInstance {
     pub fn op_eq(&self, rhs: &Self) -> Result<bool, E> {
-        let err = || E::InvalidBinary(BinaryOperator::Equality, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::Equality, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::Bool, lhs, rhs) => Ok(lhs == rhs),
             both!(Self::AbstractInt, lhs, rhs) => Ok(lhs == rhs),
@@ -783,7 +755,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_ne(&self, rhs: &Self) -> Result<bool, E> {
-        let err = || E::InvalidBinary(BinaryOperator::Inequality, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::Inequality, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::Bool, lhs, rhs) => Ok(lhs != rhs),
             both!(Self::AbstractInt, lhs, rhs) => Ok(lhs != rhs),
@@ -796,7 +768,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_lt(&self, rhs: &Self) -> Result<bool, E> {
-        let err = || E::InvalidBinary(BinaryOperator::LessThan, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::LessThan, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::Bool, lhs, rhs) => Ok(lhs < rhs),
             both!(Self::AbstractInt, lhs, rhs) => Ok(lhs < rhs),
@@ -809,7 +781,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_le(&self, rhs: &Self) -> Result<bool, E> {
-        let err = || E::InvalidBinary(BinaryOperator::LessThanEqual, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::LessThanEqual, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::Bool, lhs, rhs) => Ok(lhs <= rhs),
             both!(Self::AbstractInt, lhs, rhs) => Ok(lhs <= rhs),
@@ -822,7 +794,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_gt(&self, rhs: &Self) -> Result<bool, E> {
-        let err = || E::InvalidBinary(BinaryOperator::GreaterThan, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::GreaterThan, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::Bool, lhs, rhs) => Ok(lhs > rhs),
             both!(Self::AbstractInt, lhs, rhs) => Ok(lhs > rhs),
@@ -835,7 +807,7 @@ impl LiteralInstance {
         }
     }
     pub fn op_ge(&self, rhs: &Self) -> Result<bool, E> {
-        let err = || E::InvalidBinary(BinaryOperator::GreaterThanEqual, self.ty(), rhs.ty());
+        let err = || E::Binary(BinaryOperator::GreaterThanEqual, self.ty(), rhs.ty());
         match convert(self, rhs).ok_or_else(err)? {
             both!(Self::Bool, lhs, rhs) => Ok(lhs >= rhs),
             both!(Self::AbstractInt, lhs, rhs) => Ok(lhs >= rhs),
@@ -852,33 +824,32 @@ impl LiteralInstance {
 impl VecInstance {
     pub fn op_eq(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Equality, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Equality, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_eq(&r).map(Into::into))
     }
     pub fn op_ne(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::Inequality, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::Inequality, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_ne(&r).map(Into::into))
     }
     pub fn op_lt(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::LessThan, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::LessThan, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_lt(&r).map(Into::into))
     }
     pub fn op_le(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::LessThanEqual, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::LessThanEqual, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_le(&r).map(Into::into))
     }
     pub fn op_gt(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::InvalidBinary(BinaryOperator::GreaterThan, self.ty(), rhs.ty()))?;
+            .ok_or_else(|| E::Binary(BinaryOperator::GreaterThan, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_gt(&r).map(Into::into))
     }
     pub fn op_ge(&self, rhs: &Self) -> Result<VecInstance, E> {
-        let (lhs, rhs) = convert(self, rhs).ok_or_else(|| {
-            E::InvalidBinary(BinaryOperator::GreaterThanEqual, self.ty(), rhs.ty())
-        })?;
+        let (lhs, rhs) = convert(self, rhs)
+            .ok_or_else(|| E::Binary(BinaryOperator::GreaterThanEqual, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_ge(&r).map(Into::into))
     }
 }
@@ -890,11 +861,7 @@ impl Instance {
                 .op_eq(rhs)
                 .map(|b| Self::Literal(LiteralInstance::Bool(b))),
             both!(Self::Vec, lhs, rhs) => lhs.op_eq(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::Equality,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::Equality, self.ty(), rhs.ty())),
         }
     }
     pub fn op_ne(&self, rhs: &Self) -> Result<Instance, E> {
@@ -903,11 +870,7 @@ impl Instance {
                 .op_ne(rhs)
                 .map(|b| Self::Literal(LiteralInstance::Bool(b))),
             both!(Self::Vec, lhs, rhs) => lhs.op_ne(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::Inequality,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::Inequality, self.ty(), rhs.ty())),
         }
     }
     pub fn op_lt(&self, rhs: &Self) -> Result<Instance, E> {
@@ -916,11 +879,7 @@ impl Instance {
                 .op_lt(rhs)
                 .map(|b| Self::Literal(LiteralInstance::Bool(b))),
             both!(Self::Vec, lhs, rhs) => lhs.op_lt(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::LessThan,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::LessThan, self.ty(), rhs.ty())),
         }
     }
     pub fn op_le(&self, rhs: &Self) -> Result<Instance, E> {
@@ -929,7 +888,7 @@ impl Instance {
                 .op_le(rhs)
                 .map(|b| Self::Literal(LiteralInstance::Bool(b))),
             both!(Self::Vec, lhs, rhs) => lhs.op_le(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
+            _ => Err(E::Binary(
                 BinaryOperator::LessThanEqual,
                 self.ty(),
                 rhs.ty(),
@@ -942,11 +901,7 @@ impl Instance {
                 .op_gt(rhs)
                 .map(|b| Self::Literal(LiteralInstance::Bool(b))),
             both!(Self::Vec, lhs, rhs) => lhs.op_gt(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::GreaterThan,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::GreaterThan, self.ty(), rhs.ty())),
         }
     }
     pub fn op_ge(&self, rhs: &Self) -> Result<Instance, E> {
@@ -955,7 +910,7 @@ impl Instance {
                 .op_ge(rhs)
                 .map(|b| Self::Literal(LiteralInstance::Bool(b))),
             both!(Self::Vec, lhs, rhs) => lhs.op_ge(rhs).map(Into::into),
-            _ => Err(E::InvalidBinary(
+            _ => Err(E::Binary(
                 BinaryOperator::GreaterThanEqual,
                 self.ty(),
                 rhs.ty(),
@@ -975,7 +930,7 @@ impl LiteralInstance {
             Self::AbstractInt(n) => Ok(Self::AbstractInt(!n)),
             Self::I32(n) => Ok(Self::I32(!n)),
             Self::U32(n) => Ok(Self::U32(!n)),
-            _ => Err(E::InvalidUnary(UnaryOperator::BitwiseComplement, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::BitwiseComplement, self.ty())),
         }
     }
     pub fn op_bitor(&self, rhs: &Self) -> Result<Self, E> {
@@ -984,11 +939,7 @@ impl LiteralInstance {
             both!(Self::AbstractInt, rhs, lhs) => Ok(Self::AbstractInt(lhs | rhs)),
             both!(Self::I32, rhs, lhs) => Ok(Self::I32(lhs | rhs)),
             both!(Self::U32, rhs, lhs) => Ok(Self::U32(lhs | rhs)),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::BitwiseOr,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::BitwiseOr, self.ty(), rhs.ty())),
         }
     }
     pub fn op_bitand(&self, rhs: &Self) -> Result<Self, E> {
@@ -997,11 +948,7 @@ impl LiteralInstance {
             both!(Self::AbstractInt, rhs, lhs) => Ok(Self::AbstractInt(lhs & rhs)),
             both!(Self::I32, rhs, lhs) => Ok(Self::I32(lhs & rhs)),
             both!(Self::U32, rhs, lhs) => Ok(Self::U32(lhs & rhs)),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::BitwiseAnd,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::BitwiseAnd, self.ty(), rhs.ty())),
         }
     }
     pub fn op_bitxor(&self, rhs: &Self) -> Result<Self, E> {
@@ -1009,11 +956,7 @@ impl LiteralInstance {
             both!(Self::AbstractInt, rhs, lhs) => Ok(Self::AbstractInt(lhs ^ rhs)),
             both!(Self::I32, rhs, lhs) => Ok(Self::I32(lhs ^ rhs)),
             both!(Self::U32, rhs, lhs) => Ok(Self::U32(lhs ^ rhs)),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::BitwiseAnd,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::BitwiseAnd, self.ty(), rhs.ty())),
         }
     }
     pub fn op_shl(&self, rhs: &Self) -> Result<Self, E> {
@@ -1026,11 +969,7 @@ impl LiteralInstance {
                 .checked_shl(*rhs)
                 .map(Into::into)
                 .ok_or(E::ShlOverflow(*rhs)),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::BitwiseAnd,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::BitwiseAnd, self.ty(), rhs.ty())),
         }
     }
     pub fn op_shr(&self, rhs: &Self) -> Result<Self, E> {
@@ -1043,11 +982,7 @@ impl LiteralInstance {
                 .checked_shr(*rhs)
                 .map(Into::into)
                 .ok_or(E::ShlOverflow(*rhs)),
-            _ => Err(E::InvalidBinary(
-                BinaryOperator::BitwiseAnd,
-                self.ty(),
-                rhs.ty(),
-            )),
+            _ => Err(E::Binary(BinaryOperator::BitwiseAnd, self.ty(), rhs.ty())),
         }
     }
 }
@@ -1078,42 +1013,42 @@ impl Instance {
         match self {
             Instance::Literal(l) => l.op_bitnot().map(Into::into),
             Instance::Vec(v) => v.op_bitnot().map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::BitwiseComplement, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::BitwiseComplement, self.ty())),
         }
     }
     pub fn op_bitor(&self, rhs: &Self) -> Result<Self, E> {
         match (self, rhs) {
             both!(Self::Literal, lhs, rhs) => lhs.op_bitor(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_bitor(rhs).map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::LogicalNegation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::LogicalNegation, self.ty())),
         }
     }
     pub fn op_bitand(&self, rhs: &Self) -> Result<Self, E> {
         match (self, rhs) {
             both!(Self::Literal, lhs, rhs) => lhs.op_bitand(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_bitand(rhs).map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::LogicalNegation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::LogicalNegation, self.ty())),
         }
     }
     pub fn op_bitxor(&self, rhs: &Self) -> Result<Self, E> {
         match (self, rhs) {
             both!(Self::Literal, lhs, rhs) => lhs.op_bitxor(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_bitxor(rhs).map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::LogicalNegation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::LogicalNegation, self.ty())),
         }
     }
     pub fn op_shl(&self, rhs: &Self) -> Result<Self, E> {
         match (self, rhs) {
             both!(Self::Literal, lhs, rhs) => lhs.op_shl(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_shl(rhs).map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::LogicalNegation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::LogicalNegation, self.ty())),
         }
     }
     pub fn op_shr(&self, rhs: &Self) -> Result<Self, E> {
         match (self, rhs) {
             both!(Self::Literal, lhs, rhs) => lhs.op_shr(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_shr(rhs).map(Into::into),
-            _ => Err(E::InvalidUnary(UnaryOperator::LogicalNegation, self.ty())),
+            _ => Err(E::Unary(UnaryOperator::LogicalNegation, self.ty())),
         }
     }
 }
