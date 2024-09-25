@@ -1,10 +1,10 @@
-use std::{fmt::Display, ops::Deref};
+use std::fmt::Display;
 
 use crate::consteval::conv::Convert;
 
 use super::{
-    AccessMode, ConstEvalError, Context, Eval, EvalTy, Instance, LiteralInstance, RefInstance,
-    ScopeKind, Ty, Type, VecInstance,
+    AccessMode, ConstEvalError, Context, Eval, EvalStage, EvalTy, Instance, LiteralInstance,
+    ScopeKind, Ty, Type,
 };
 
 use wgsl_parse::syntax::*;
@@ -33,6 +33,40 @@ impl Display for Flow {
 
 pub trait Exec {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E>;
+}
+
+impl Exec for TranslationUnit {
+    fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
+        fn inner(ctx: &mut Context) -> Result<Flow, E> {
+            for decl in &ctx.source.global_declarations {
+                let flow = decl.exec(ctx)?;
+                match flow {
+                    Flow::Next => (),
+                    Flow::Break | Flow::Continue | Flow::Return(_) => {
+                        return Err(E::FlowInModule(flow))
+                    }
+                }
+            }
+
+            Ok(Flow::Next)
+        }
+
+        let kind = ctx.kind;
+        ctx.kind = ScopeKind::Module;
+        let res = inner(ctx);
+        ctx.kind = kind;
+        res
+    }
+}
+
+impl Exec for GlobalDeclaration {
+    fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
+        match self {
+            GlobalDeclaration::Declaration(decl) => decl.exec(ctx),
+            GlobalDeclaration::ConstAssert(decl) => decl.exec(ctx),
+            _ => Ok(Flow::Next),
+        }
+    }
 }
 
 impl Exec for Statement {
@@ -496,13 +530,26 @@ impl Exec for Declaration {
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Module) => {
-                // we just ignore override-declarations since they cannot be used in const
-                // eval contexts. But we could at least store the ident to provide a better
-                // err msg if one is used.
-                Ok(Flow::Next)
+                if ctx.stage == EvalStage::Const {
+                    // in const contexts we just ignore var declarations since they cannot be
+                    // used in const eval contexts. But we could at least store the ident to
+                    // provide a better err msg if one is used.
+                    Ok(Flow::Next)
+                } else {
+                    todo!("evaluate module scope")
+                }
             }
             (DeclarationKind::Let, ScopeKind::Module) => Err(E::LetInMod),
-            (DeclarationKind::Var, ScopeKind::Module) => todo!("evaluate module scope"),
+            (DeclarationKind::Var, ScopeKind::Module) => {
+                if ctx.stage == EvalStage::Const {
+                    // in const contexts we just ignore var declarations since they cannot be
+                    // used in const eval contexts. But we could at least store the ident to
+                    // provide a better err msg if one is used.
+                    Ok(Flow::Next)
+                } else {
+                    todo!("evaluate module scope")
+                }
+            }
         }
     }
 }

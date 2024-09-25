@@ -2,7 +2,7 @@ use core::panic;
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     rc::Rc,
 };
 
@@ -12,7 +12,7 @@ use itertools::Itertools;
 
 use crate::consteval::Ty;
 
-use super::{ConstEvalError, Context, Type};
+use super::{ConstEvalError, Type};
 
 type E = ConstEvalError;
 

@@ -5,8 +5,8 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use wesl::{
-    syntax::Expression, CompileOptions, Context, Eval, FileResolver, Instance, Mangler, Resource,
-    MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
+    syntax::Expression, CompileOptions, Context, Eval, Exec, FileResolver, Instance, Mangler,
+    Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 
@@ -155,7 +155,10 @@ fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
         .expr
         .parse::<Expression>()
         .map_err(wesl::Error::ParseError)?;
-    let instance = expr.eval(&mut ctx).map_err(wesl::Error::ConstEvalError)?;
+    let instance = wgsl
+        .exec(&mut ctx)
+        .and_then(|_| expr.eval(&mut ctx))
+        .map_err(wesl::Error::ConstEvalError)?;
 
     Ok(instance)
 }

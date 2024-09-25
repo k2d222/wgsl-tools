@@ -17,7 +17,7 @@ pub use condcomp::{run as run_condcomp, CondCompError};
 pub use import::{resolve, ImportError, Module};
 
 #[cfg(feature = "consteval")]
-pub use consteval::{ConstEvalError, Context, Eval, Instance};
+pub use consteval::{ConstEvalError, Context, Eval, Exec, Instance};
 
 pub use mangle::{
     FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE, MANGLER_HASH,

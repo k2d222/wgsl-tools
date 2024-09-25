@@ -31,7 +31,7 @@ pub enum ConstEvalError {
     NotImpl(String),
     #[error("expected type `{0}`, got `{1}`")]
     Type(Type, Type),
-    #[error("unknown type `{0}`")]
+    #[error("unknown type or variable `{0}`")]
     UnknownType(String),
     #[error("unknown function `{0}`")]
     UnknownFunction(String),
@@ -157,6 +157,8 @@ pub enum ConstEvalError {
     ConstAssertFailure(Expression),
     #[error("a function body cannot contain a `{0}` statement")]
     FlowInFunction(Flow),
+    #[error("a global declaration cannot contain a `{0}` statement")]
+    FlowInModule(Flow),
 }
 
 #[derive(Clone, Debug)]
@@ -220,10 +222,21 @@ impl<'a> Drop for ScopeGuard<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvalStage {
+    /// Shader module creation
+    Const,
+    /// Pipeline creation
+    Override,
+    /// Shader execution
+    Exec,
+}
+
 pub struct Context<'s> {
     source: &'s TranslationUnit,
     scope: Scope,
     kind: ScopeKind,
+    stage: EvalStage,
 }
 
 impl<'s> Context<'s> {
@@ -232,6 +245,7 @@ impl<'s> Context<'s> {
             source,
             scope: Default::default(),
             kind: ScopeKind::Function,
+            stage: EvalStage::Const,
         }
     }
 
