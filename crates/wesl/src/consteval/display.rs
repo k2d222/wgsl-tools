@@ -86,7 +86,7 @@ impl Display for RefInstance {
         let ty = &self.ty;
         let view = &self.view;
         let ptr_ty = self.ptr.borrow().ty();
-        let val = self.deref_inst();
+        let val = self.read().expect("invalid reference");
         write!(f, "ref<{ty}, {ptr_ty}{view}>({})", *val)
     }
 }

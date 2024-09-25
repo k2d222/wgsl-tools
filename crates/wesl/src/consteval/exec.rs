@@ -1,10 +1,10 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref};
 
 use crate::consteval::conv::Convert;
 
 use super::{
-    ConstEvalError, Context, Eval, EvalTy, Instance, LiteralInstance, RefInstance, ScopeKind, Ty,
-    Type, VecInstance,
+    AccessMode, ConstEvalError, Context, Eval, EvalTy, Instance, LiteralInstance, RefInstance,
+    ScopeKind, Ty, Type, VecInstance,
 };
 
 use wgsl_parse::syntax::*;
@@ -84,40 +84,49 @@ impl Exec for AssignmentStatement {
 
         if let Instance::Ref(mut r) = lhs {
             let rhs = self.rhs.eval_value(ctx)?;
-            let mut lhs = r.deref_inst_mut();
             match self.operator {
                 AssignmentOperator::Equal => {
-                    *lhs = rhs;
+                    let _ = r.write(rhs)?;
                 }
                 AssignmentOperator::PlusEqual => {
-                    *lhs = lhs.op_add(&rhs)?;
+                    let val = r.read()?.op_add(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::MinusEqual => {
-                    *lhs = lhs.op_sub(&rhs)?;
+                    let val = r.read()?.op_sub(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::TimesEqual => {
-                    *lhs = lhs.op_mul(&rhs)?;
+                    let val = r.read()?.op_mul(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::DivisionEqual => {
-                    *lhs = lhs.op_div(&rhs)?;
+                    let val = r.read()?.op_div(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::ModuloEqual => {
-                    *lhs = lhs.op_rem(&rhs)?;
+                    let val = r.read()?.op_rem(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::AndEqual => {
-                    *lhs = lhs.op_bitand(&rhs)?;
+                    let val = r.read()?.op_bitand(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::OrEqual => {
-                    *lhs = lhs.op_bitor(&rhs)?;
+                    let val = r.read()?.op_bitor(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::XorEqual => {
-                    *lhs = lhs.op_bitxor(&rhs)?;
+                    let val = r.read()?.op_bitxor(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::ShiftRightAssign => {
-                    *lhs = lhs.op_shl(&rhs)?;
+                    let val = r.read()?.op_shl(&rhs)?;
+                    let _ = r.write(val)?;
                 }
                 AssignmentOperator::ShiftLeftAssign => {
-                    *lhs = lhs.op_shr(&rhs)?;
+                    let val = r.read()?.op_shr(&rhs)?;
+                    let _ = r.write(val)?;
                 }
             }
             Ok(Flow::Next)
@@ -131,14 +140,19 @@ impl Exec for IncrementStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         let expr = self.expression.eval(ctx)?;
         if let Instance::Ref(mut r) = expr {
-            match &mut *r.deref_inst_mut() {
+            let mut r = r.read_write()?;
+            match &*r {
                 Instance::Literal(LiteralInstance::I32(n)) => {
-                    n.checked_add(1).ok_or(E::IncrOverflow).map(|_| Flow::Next)
+                    let val = n.checked_add(1).ok_or(E::IncrOverflow)?;
+                    let _ = r.write(LiteralInstance::I32(val).into());
+                    Ok(Flow::Next)
                 }
                 Instance::Literal(LiteralInstance::U32(n)) => {
-                    n.checked_add(1).ok_or(E::IncrOverflow).map(|_| Flow::Next)
+                    let val = n.checked_add(1).ok_or(E::IncrOverflow)?;
+                    let _ = r.write(LiteralInstance::U32(val).into());
+                    Ok(Flow::Next)
                 }
-                r => Err(E::IncrType(r.ty())),
+                i => Err(E::IncrType(i.ty())),
             }
         } else {
             Err(E::NotRef(expr))
@@ -150,12 +164,17 @@ impl Exec for DecrementStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         let expr = self.expression.eval(ctx)?;
         if let Instance::Ref(mut r) = expr {
-            match &mut *r.deref_inst_mut() {
+            let mut r = r.read_write()?;
+            match &*r {
                 Instance::Literal(LiteralInstance::I32(n)) => {
-                    n.checked_sub(1).ok_or(E::DecrOverflow).map(|_| Flow::Next)
+                    let val = n.checked_sub(1).ok_or(E::DecrOverflow)?;
+                    let _ = r.write(LiteralInstance::I32(val).into());
+                    Ok(Flow::Next)
                 }
                 Instance::Literal(LiteralInstance::U32(n)) => {
-                    n.checked_sub(1).ok_or(E::DecrOverflow).map(|_| Flow::Next)
+                    let val = n.checked_sub(1).ok_or(E::DecrOverflow)?;
+                    let _ = r.write(LiteralInstance::U32(val).into());
+                    Ok(Flow::Next)
                 }
                 r => Err(E::DecrType(r.ty())),
             }
@@ -429,7 +448,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), ty))?;
                 }
 
-                ctx.scope.add(self.name.clone(), inst);
+                ctx.scope.add(self.name.clone(), inst, AccessMode::Read);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Function) => Err(E::OverrideInFn),
@@ -449,7 +468,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), inst.ty().concretize()))?
                 };
 
-                ctx.scope.add(self.name.clone(), inst);
+                ctx.scope.add(self.name.clone(), inst, AccessMode::Read);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Var, ScopeKind::Function) => {
@@ -472,7 +491,8 @@ impl Exec for Declaration {
                     }
                 }?;
 
-                ctx.scope.add(self.name.clone(), inst);
+                ctx.scope
+                    .add(self.name.clone(), inst, AccessMode::ReadWrite);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Module) => {

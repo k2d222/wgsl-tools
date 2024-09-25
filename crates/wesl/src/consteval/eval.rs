@@ -1,10 +1,10 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
-use crate::consteval::MemView;
+use crate::consteval::{MatInstance, MemView};
 
 use super::{
-    call_builtin, ConstEvalError, Context, Convert, EvalTy, Exec, Flow, Instance, LiteralInstance,
-    PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
+    call_builtin, AccessMode, ConstEvalError, Context, Convert, EvalTy, Exec, Flow, Instance,
+    LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
 };
 
 use half::f16;
@@ -19,8 +19,8 @@ pub trait Eval {
     fn eval_value(&self, ctx: &mut Context) -> Result<Instance, E> {
         let inst = self.eval(ctx)?;
         if let Instance::Ref(r) = inst {
-            let v = r.ptr.borrow();
-            v.view(&r.view).cloned().ok_or_else(|| E::Ref(r.clone()))
+            let r = r.read()?;
+            Ok((*r).clone())
         } else {
             Ok(inst)
         }
@@ -65,7 +65,7 @@ impl Eval for ParenthesizedExpression {
 
 impl Eval for NamedComponentExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        fn vec_eval(
+        fn vec_comp(
             v: &VecInstance,
             comp: &String,
             r: Option<&RefInstance>,
@@ -84,12 +84,16 @@ impl Eval for NamedComponentExpression {
                 })
                 .collect_vec();
             match indices.as_slice() {
-                [i] => if let Some(r) = r {
-                    r.view_index(*i).map(Into::into)
-                } else {
-                    v.get(*i).cloned().map(Into::into)
+                [i] => {
+                    if let Some(r) = r {
+                        r.view_index(*i).map(Into::into)
+                    } else {
+                        v.get(*i)
+                            .cloned()
+                            .map(Into::into)
+                            .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize))
+                    }
                 }
-                .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize)),
                 _ => {
                     let components = indices
                         .iter()
@@ -104,7 +108,7 @@ impl Eval for NamedComponentExpression {
             }
         }
 
-        fn eval_inst(base: Instance, comp: &String, ctx: &mut Context) -> Result<Instance, E> {
+        fn inst_comp(base: Instance, comp: &String, ctx: &mut Context) -> Result<Instance, E> {
             match &base {
                 Instance::Struct(s) => {
                     let val = s
@@ -113,13 +117,10 @@ impl Eval for NamedComponentExpression {
                         .ok_or_else(|| E::Component(Type::Struct(s.name.clone()), comp.clone()))?;
                     Ok(val.clone())
                 }
-                Instance::Vec(v) => vec_eval(v, comp, None),
-                Instance::Ref(r) => match &*r.deref_inst() {
-                    Instance::Struct(s) => r
-                        .view_member(comp.clone())
-                        .map(Into::into)
-                        .ok_or_else(|| E::Component(Type::Struct(s.name.clone()), comp.clone())),
-                    Instance::Vec(v) => vec_eval(v, comp, Some(r)),
+                Instance::Vec(v) => vec_comp(v, comp, None),
+                Instance::Ref(r) => match &*r.read()? {
+                    Instance::Struct(s) => r.view_member(comp.clone()).map(Into::into),
+                    Instance::Vec(v) => vec_comp(v, comp, Some(r)),
                     _ => Err(E::Component(base.ty(), comp.clone())),
                 },
                 _ => Err(E::Component(base.ty(), comp.clone())),
@@ -127,35 +128,36 @@ impl Eval for NamedComponentExpression {
         }
 
         let base = self.base.eval(ctx)?;
-        eval_inst(base, &self.component, ctx)
+        inst_comp(base, &self.component, ctx)
     }
 }
 
 impl Eval for IndexingExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        fn eval_inst(base: Instance, index: usize, ctx: &mut Context) -> Result<Instance, E> {
+        fn vec_index(v: &VecInstance, index: usize) -> Result<Instance, E> {
+            v.get(index)
+                .map(|e| Instance::Literal(e.clone()))
+                .ok_or_else(|| E::OutOfBounds(index, v.ty(), v.n() as usize))
+        }
+        fn mat_index(m: &MatInstance, index: usize) -> Result<Instance, E> {
+            m.col(index)
+                .map(Into::into)
+                .ok_or_else(|| E::OutOfBounds(index, m.ty(), m.c() as usize))
+        }
+        fn index_inst(base: &Instance, index: usize) -> Result<Instance, E> {
             match base {
-                Instance::Vec(v) => v
-                    .get(index)
-                    .map(|e| Instance::Literal(e.clone()))
-                    .ok_or_else(|| E::OutOfBounds(index, v.ty(), v.n() as usize)),
-                Instance::Mat(m) => m
-                    .col(index)
-                    .map(Into::into)
-                    .ok_or_else(|| E::OutOfBounds(index, m.ty(), m.c() as usize)),
+                Instance::Vec(v) => vec_index(v, index),
+                Instance::Mat(m) => mat_index(m, index),
                 Instance::Array(a) => a
                     .get(index)
                     .cloned()
                     .ok_or_else(|| E::OutOfBounds(index, a.ty(), a.n())),
-                Instance::Ref(r) => r
-                    .view_index(index)
-                    .map(Into::into)
-                    .ok_or_else(|| E::OutOfBounds(index, r.ty.clone(), r.deref_inst().len())),
-                Instance::Literal(_)
-                | Instance::Struct(_)
-                | Instance::Ptr(_)
-                | Instance::Type(_)
-                | Instance::Void => Err(E::NotIndexable(base.ty())),
+                Instance::Ref(r) => match &*r.read()? {
+                    Instance::Vec(v) => vec_index(v, index),
+                    Instance::Mat(m) => mat_index(m, index),
+                    _ => Err(E::NotIndexable(r.ty())),
+                },
+                _ => Err(E::NotIndexable(base.ty())),
             }
         }
 
@@ -168,7 +170,7 @@ impl Eval for IndexingExpression {
             _ => Err(E::Index(index.ty())),
         }?;
 
-        eval_inst(base, index, ctx)
+        index_inst(&base, index)
     }
 }
 
@@ -314,7 +316,7 @@ impl Eval for FunctionCall {
             }
 
             for (a, p) in zip(args, &decl.parameters) {
-                ctx.scope.add(p.name.clone(), a);
+                ctx.scope.add(p.name.clone(), a, AccessMode::Read);
             }
 
             decl.body.exec(ctx)?
@@ -333,8 +335,8 @@ impl Eval for FunctionCall {
 
 impl Eval for IdentifierExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        if let Some(ptr) = ctx.scope.get(&self.name) {
-            Ok(RefInstance::new(ptr).into())
+        if let Some(r) = ctx.scope.get(&self.name) {
+            Ok(r.clone().into())
         } else {
             let ty = self.name.as_str().eval_ty(ctx)?;
             Ok(ty.into())

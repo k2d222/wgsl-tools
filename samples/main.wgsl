@@ -1,9 +1,11 @@
 import imp1/{f1, c1};
 
 @compute
-fn main() -> vec4f {
+fn main() -> u32 {
     @if(true)
-    let c1 = 2u;
+    const c1 = 2;
+    c1 += 1;
     let foo = bool();
-    return foo;
+    let x = c1 + f32(foo);
+    return c1;
 }

@@ -325,7 +325,7 @@ VariableOrValueStatement: Declaration = {
         let (name, ty) = ident;
         Declaration {
             attributes: Vec::new(),
-            kind: DeclarationKind::Let,
+            kind: DeclarationKind::Const,
             template_args: None,
             name,
             ty,
@@ -1047,7 +1047,7 @@ VariableOrValueStatement: Declaration = {
         let (name, ty) = ident;
         Declaration {
             attributes,
-            kind: DeclarationKind::Let,
+            kind: DeclarationKind::Const,
             template_args: None,
             name,
             ty,

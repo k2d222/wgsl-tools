@@ -14,6 +14,8 @@ use crate::consteval::Ty;
 
 use super::{ConstEvalError, Context, Type};
 
+type E = ConstEvalError;
+
 #[derive(Clone, Debug, From, PartialEq)]
 pub enum Instance {
     Literal(LiteralInstance),
@@ -28,41 +30,55 @@ pub enum Instance {
 }
 
 impl Instance {
-    pub fn view<'a>(&'a self, view: &'a MemView) -> Option<&Instance> {
+    pub fn view<'a>(&'a self, view: &'a MemView) -> Result<&Instance, E> {
         match view {
-            MemView::Whole => Some(self),
+            MemView::Whole => Ok(self),
             MemView::Member(m, v) => match self {
                 Instance::Struct(s) => {
-                    let inst = s.members.get(m)?;
+                    let inst = s
+                        .members
+                        .get(m)
+                        .ok_or_else(|| E::Component(s.ty(), m.clone()))?;
                     inst.view(v)
                 }
-                _ => None,
+                _ => Err(E::Component(self.ty(), m.clone())),
             },
-            MemView::Index(i, v) => match self {
+            MemView::Index(i, view) => match self {
                 Instance::Array(a) => {
-                    let inst = a.components.get(*i)?;
-                    inst.view(v)
+                    let inst = a
+                        .components
+                        .get(*i)
+                        .ok_or_else(|| E::OutOfBounds(*i, a.ty(), a.n()))?;
+                    inst.view(view)
                 }
-                _ => None,
+                _ => Err(E::NotIndexable(self.ty())),
             },
         }
     }
-    pub fn view_mut<'a>(&'a mut self, view: &'a MemView) -> Option<&mut Instance> {
+    pub fn view_mut<'a>(&'a mut self, view: &'a MemView) -> Result<&mut Instance, E> {
+        let ty = self.ty();
         match view {
-            MemView::Whole => Some(self),
+            MemView::Whole => Ok(self),
             MemView::Member(m, v) => match self {
                 Instance::Struct(s) => {
-                    let inst = s.members.get_mut(m)?;
+                    let inst = s
+                        .members
+                        .get_mut(m)
+                        .ok_or_else(|| E::Component(ty, m.clone()))?;
                     inst.view_mut(v)
                 }
-                _ => None,
+                _ => Err(E::Component(ty, m.clone())),
             },
             MemView::Index(i, v) => match self {
                 Instance::Array(a) => {
-                    let inst = a.components.get_mut(*i)?;
+                    let n = a.n();
+                    let inst = a
+                        .components
+                        .get_mut(*i)
+                        .ok_or_else(|| E::OutOfBounds(*i, ty, n))?;
                     inst.view_mut(v)
                 }
-                _ => None,
+                _ => Err(E::NotIndexable(ty)),
             },
         }
     }
@@ -400,11 +416,27 @@ impl MatInstance {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccessMode {
+    Read,
+    Write,
+    ReadWrite,
+}
+impl AccessMode {
+    pub fn is_read(&self) -> bool {
+        matches!(self, Self::Read | Self::ReadWrite)
+    }
+    pub fn is_write(&self) -> bool {
+        matches!(self, Self::Write | Self::ReadWrite)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PtrInstance {
     pub ty: Type,
     pub view: MemView,
     pub ptr: Rc<RefCell<Instance>>,
+    pub access: AccessMode,
 }
 
 impl From<RefInstance> for PtrInstance {
@@ -413,6 +445,7 @@ impl From<RefInstance> for PtrInstance {
             ty: r.ty.clone(),
             view: r.view.clone(),
             ptr: r.ptr.clone(),
+            access: r.access,
         }
     }
 }
@@ -422,15 +455,17 @@ pub struct RefInstance {
     pub ty: Type,
     pub view: MemView,
     pub ptr: Rc<RefCell<Instance>>,
+    pub access: AccessMode,
 }
 
 impl RefInstance {
-    pub fn new(ptr: Rc<RefCell<Instance>>) -> Self {
+    pub fn new(ptr: Rc<RefCell<Instance>>, access: AccessMode) -> Self {
         let ty = ptr.borrow().ty();
         Self {
             ty,
             view: MemView::Whole,
             ptr,
+            access,
         }
     }
 }
@@ -441,6 +476,7 @@ impl From<PtrInstance> for RefInstance {
             ty: p.ty.clone(),
             view: p.view.clone(),
             ptr: p.ptr.clone(),
+            access: p.access,
         }
     }
 }
@@ -462,7 +498,16 @@ pub struct RefViewMut<'a> {
     r: RefMut<'a, Instance>,
     v: &'a MemView,
 }
-
+impl<'a> RefViewMut<'a> {
+    pub fn write(&mut self, value: Instance) -> Result<Instance, E> {
+        let view = self.r.view_mut(self.v).expect("invalid reference");
+        if value.ty() != view.ty() {
+            return Err(E::WriteRefType(value.ty(), view.ty()));
+        }
+        let old = std::mem::replace(view, value);
+        Ok(old)
+    }
+}
 impl<'a> Deref for RefViewMut<'a> {
     type Target = Instance;
 
@@ -471,44 +516,68 @@ impl<'a> Deref for RefViewMut<'a> {
     }
 }
 
-impl<'a> DerefMut for RefViewMut<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.r.view_mut(self.v).expect("invalid reference")
-    }
-}
-
 impl RefInstance {
-    pub fn view_member(&self, member: String) -> Option<Self> {
+    pub fn view_member(&self, member: String) -> Result<Self, E> {
+        if !self.access.is_read() {
+            return Err(E::NotRead);
+        }
         let mut view = self.view.clone();
         view.append_member(member);
         let inst = self.ptr.borrow();
         let inst = inst.view(&self.view)?;
-        Some(Self {
+        Ok(Self {
             ty: inst.ty(),
             view,
             ptr: self.ptr.clone(),
+            access: self.access,
         })
     }
-    pub fn view_index(&self, index: usize) -> Option<Self> {
+    pub fn view_index(&self, index: usize) -> Result<Self, E> {
+        if !self.access.is_read() {
+            return Err(E::NotRead);
+        }
         let mut view = self.view.clone();
         view.append_index(index);
         let inst = self.ptr.borrow();
         let inst = inst.view(&self.view)?;
-        Some(Self {
+        Ok(Self {
             ty: inst.ty(),
             view,
             ptr: self.ptr.clone(),
+            access: self.access,
         })
     }
 
-    pub fn deref_inst<'a>(&'a self) -> RefView<'a> {
-        let r = self.ptr.borrow();
-        RefView { r, v: &self.view }
+    pub fn read<'a>(&'a self) -> Result<RefView<'a>, E> {
+        if !self.access.is_read() {
+            Err(E::NotRead)
+        } else {
+            let r = self.ptr.borrow();
+            Ok(RefView { r, v: &self.view })
+        }
     }
 
-    pub fn deref_inst_mut<'a>(&'a mut self) -> RefViewMut<'a> {
-        let r = self.ptr.borrow_mut();
-        RefViewMut { r, v: &self.view }
+    pub fn write(&mut self, value: Instance) -> Result<Instance, E> {
+        if !self.access.is_write() {
+            Err(E::NotWrite)
+        } else {
+            let mut r = self.ptr.borrow_mut();
+            let view = r.view_mut(&self.view).expect("invalid reference");
+            if value.ty() != view.ty() {
+                return Err(E::WriteRefType(value.ty(), view.ty()));
+            }
+            let old = std::mem::replace(view, value);
+            Ok(old)
+        }
+    }
+
+    pub fn read_write<'a>(&'a mut self) -> Result<RefViewMut<'a>, E> {
+        if !self.access.is_write() {
+            Err(E::NotReadWrite)
+        } else {
+            let r = self.ptr.borrow_mut();
+            Ok(RefViewMut { r, v: &self.view })
+        }
     }
 }
 

@@ -29,10 +29,6 @@ use wgsl_parse::syntax::*;
 pub enum ConstEvalError {
     #[error("not implemented: `{0}`")]
     NotImpl(String),
-    #[error("invalid reference to memory view `{0}`")]
-    Ref(RefInstance),
-    #[error("invalid reference to `{0}`, expected reference to `{1}`")]
-    RefType(Type, Type),
     #[error("expected type `{0}`, got `{1}`")]
     Type(Type, Type),
     #[error("unknown type `{0}`")]
@@ -47,6 +43,20 @@ pub enum ConstEvalError {
     NotConstructible(Type),
     #[error("expected a scalar type, got `{0}`")]
     NotScalar(Type),
+
+    // references
+    #[error("invalid reference to memory view `{0}{1}`")]
+    View(Type, MemView),
+    #[error("invalid reference to `{0}`, expected reference to `{1}`")]
+    RefType(Type, Type),
+    #[error("cannot write a `{0}` to a reference to `{1}`")]
+    WriteRefType(Type, Type),
+    #[error("attempt to write to a read-only reference")]
+    NotWrite,
+    #[error("attempt to read a write-only reference")]
+    NotRead,
+    #[error("reference is not read-write")]
+    NotReadWrite,
 
     // conversions
     #[error("overflow while converting `{0}` to `{1}`")]
@@ -151,7 +161,7 @@ pub enum ConstEvalError {
 
 #[derive(Clone, Debug)]
 pub struct Scope {
-    stack: Vec<HashMap<String, Rc<RefCell<Instance>>>>,
+    stack: Vec<HashMap<String, RefInstance>>,
 }
 
 impl Scope {
@@ -166,23 +176,17 @@ impl Scope {
     }
 
     pub fn pop(&mut self) {
-        // TODO: garbage collect ctx memory
         self.stack.pop().expect("failed to pop scope");
     }
 
-    pub fn add(&mut self, name: String, value: Instance) {
-        if self
-            .stack
-            .last_mut()
-            .unwrap()
-            .insert(name, Rc::new(RefCell::new(value)))
-            .is_some()
-        {
+    pub fn add(&mut self, name: String, value: Instance, access: AccessMode) {
+        let r = RefInstance::new(Rc::new(RefCell::new(value)), access);
+        if self.stack.last_mut().unwrap().insert(name, r).is_some() {
             panic!("duplicate variable insertion")
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<Rc<RefCell<Instance>>> {
+    pub fn get(&self, name: &str) -> Option<RefInstance> {
         self.stack
             .iter()
             .rev()
