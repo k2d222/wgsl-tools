@@ -7,6 +7,7 @@ use std::{
 };
 
 use derive_more::derive::From;
+use half::f16;
 use itertools::Itertools;
 
 use crate::consteval::Ty;
@@ -83,8 +84,7 @@ pub enum LiteralInstance {
     I32(i32),
     U32(u32),
     F32(f32),
-    #[from(skip)]
-    F16(f32),
+    F16(f16),
 }
 
 #[derive(Clone, Debug, PartialEq)]

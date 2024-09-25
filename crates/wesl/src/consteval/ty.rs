@@ -1,6 +1,7 @@
 use super::{
-    ArrayInstance, ConstEvalError, Context, Eval, Instance, LiteralInstance, MatInner, MatInstance,
-    PtrInstance, RefInstance, StructInstance, SyntaxUtil, VecInner, VecInstance,
+    ArrayInstance, ArrayTemplate, ConstEvalError, Context, Eval, Instance, LiteralInstance,
+    MatInner, MatInstance, PtrInstance, RefInstance, StructInstance, SyntaxUtil, VecInner,
+    VecInstance, VecTemplate,
 };
 
 use wgsl_parse::syntax::*;
@@ -15,7 +16,7 @@ pub enum Type {
     F32,
     F16,
     Struct(String),
-    Array(Option<usize>, Box<Type>),
+    Array(usize, Box<Type>),
     Vec(u8, Box<Type>),
     Mat(u8, u8, Box<Type>),
     Atomic(Box<Type>),
@@ -64,7 +65,7 @@ impl Type {
         match self {
             Type::AbstractInt => true,
             Type::AbstractFloat => true,
-            Type::Array(ty) | Type::Vec(_, ty) | Type::Mat(_, _, ty) => ty.is_abstract(),
+            Type::Array(_, ty) | Type::Vec(_, ty) | Type::Mat(_, _, ty) => ty.is_abstract(),
             _ => false,
         }
     }
@@ -101,7 +102,7 @@ impl Ty for Type {
             Type::F32 => self.clone(),
             Type::F16 => self.clone(),
             Type::Struct(_) => self.clone(),
-            Type::Array(ty) => ty.inner_ty(),
+            Type::Array(_, ty) => ty.inner_ty(),
             Type::Vec(_, ty) => ty.inner_ty(),
             Type::Mat(_, _, ty) => ty.inner_ty(),
             Type::Atomic(ty) => ty.inner_ty(),
@@ -148,7 +149,7 @@ impl Ty for StructInstance {
 
 impl Ty for ArrayInstance {
     fn ty(&self) -> Type {
-        Type::Array(Box::new(self.inner_ty().clone()))
+        Type::Array(self.components.len(), Box::new(self.inner_ty().clone()))
     }
     fn inner_ty(&self) -> Type {
         self.components[0].ty()
@@ -227,90 +228,72 @@ impl<T: Ty> EvalTy for T {
     }
 }
 
-impl EvalTy for TypeExpression {
+impl EvalTy for &str {
     fn eval_ty(&self, ctx: &mut Context) -> Result<Type, ConstEvalError> {
-        match self.name.as_str() {
-            "bool" => self
-                .template_args
-                .is_none()
-                .then_some(Type::Bool)
-                .ok_or_else(|| ConstEvalError::UnexpectedTemplate(Type::Bool)),
-            "i32" => self
-                .template_args
-                .is_none()
-                .then_some(Type::I32)
-                .ok_or_else(|| ConstEvalError::UnexpectedTemplate(Type::I32)),
-            "u32" => self
-                .template_args
-                .is_none()
-                .then_some(Type::U32)
-                .ok_or_else(|| ConstEvalError::UnexpectedTemplate(Type::U32)),
-            "f32" => self
-                .template_args
-                .is_none()
-                .then_some(Type::F32)
-                .ok_or_else(|| ConstEvalError::UnexpectedTemplate(Type::F32)),
-            "f16" => self
-                .template_args
-                .is_none()
-                .then_some(Type::F16)
-                .ok_or_else(|| ConstEvalError::UnexpectedTemplate(Type::F16)),
-            "array" => self
-                .template_args
-                .as_ref()
-                .map(|args| match args.as_slice() {
-                    [e1, e2] => {
-                        let ty = e1.eval(ctx)?.ty(); // TODO: check is valid array type
-                        let n_ty = e2.eval(ctx)?.ty(); // TODO: check is concrete integer scalar.
-                        Ok(Type::Array(Box::new(ty)))
-                    }
-                    [e] => {
-                        let ty = e.eval(ctx)?.ty(); // TODO: check is valid array type
-                        Ok(Type::Array(Box::new(ty)))
-                    }
-                    _ => Err(ConstEvalError::TemplateArgs("array")),
-                })
-                .unwrap_or_else(|| Err(ConstEvalError::MissingTemplate("array"))),
-            "vec2" | "vec3" | "vec4" => self
-                .template_args
-                .as_ref()
-                .map(|args| match args.as_slice() {
-                    [e] => {
-                        let n = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
-                        let ty = e.eval(ctx)?.ty(); // TODO: check is numeric scalar
-                        Ok(Type::Vec(n, Box::new(ty)))
-                    }
-                    _ => Err(ConstEvalError::TemplateArgs("vecN")),
-                })
-                .unwrap_or_else(|| Err(ConstEvalError::MissingTemplate("vec"))),
-            "mat2x2" | "mat2x3" | "mat2x4" | "mat3x2" | "mat3x3" | "mat3x4" | "mat4x2"
-            | "mat4x3" | "mat4x4" => self
-                .template_args
-                .as_ref()
-                .map(|args| match args.as_slice() {
-                    [e] => {
-                        let c = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
-                        let r = self.name.chars().nth(5).unwrap().to_digit(10).unwrap() as u8;
-                        let ty = e.eval(ctx)?.ty(); // TODO: check is numeric scalar
-                        Ok(Type::Mat(c, r, Box::new(ty)))
-                    }
-                    _ => Err(ConstEvalError::TemplateArgs("matCxR")),
-                })
-                .unwrap_or_else(|| Err(ConstEvalError::MissingTemplate("matCxR"))),
+        match *self {
+            "bool" => Ok(Type::Bool),
+            "i32" => Ok(Type::I32),
+            "u32" => Ok(Type::U32),
+            "f32" => Ok(Type::F32),
+            "f16" => Ok(Type::F16),
             _ => {
-                if let Some(ty) = ctx.source.resolve_alias(&self.name) {
+                if let Some(ty) = ctx.source.resolve_alias(self) {
                     ty.eval_ty(ctx)
                 } else {
-                    let ty = Type::Struct(self.name.clone());
-                    if self.template_args.is_some() {
-                        Err(ConstEvalError::UnexpectedTemplate(ty))
-                    } else if ctx.source.decl_struct(&self.name).is_none() {
-                        Err(ConstEvalError::UnknownType(self.clone()))
-                    } else {
+                    if ctx.source.decl_struct(self).is_some() {
+                        let ty = Type::Struct(self.to_string());
                         Ok(ty)
+                    } else {
+                        Err(ConstEvalError::UnknownType(self.to_string()))
                     }
                 }
             }
+        }
+    }
+}
+
+impl EvalTy for TypeExpression {
+    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, ConstEvalError> {
+        if let Some(tplt) = &self.template_args {
+            match self.name.as_str() {
+                "array" => {
+                    let tplt = tplt
+                        .iter()
+                        .map(|e| e.eval_value(ctx))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let tplt = ArrayTemplate::parse(&tplt)?;
+                    Ok(Type::Array(tplt.n, Box::new(tplt.ty)))
+                }
+                "vec2" | "vec3" | "vec4" => {
+                    let tplt = tplt
+                        .iter()
+                        .map(|e| e.eval_value(ctx))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let tplt = VecTemplate::parse(&tplt)?;
+                    let n = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
+                    Ok(Type::Vec(n, Box::new(tplt.ty)))
+                }
+                "mat2x2" | "mat2x3" | "mat2x4" | "mat3x2" | "mat3x3" | "mat3x4" | "mat4x2"
+                | "mat4x3" | "mat4x4" => {
+                    let tplt = tplt
+                        .iter()
+                        .map(|e| e.eval_value(ctx))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let tplt = VecTemplate::parse(&tplt)?;
+                    let c = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
+                    let r = self.name.chars().nth(5).unwrap().to_digit(10).unwrap() as u8;
+                    Ok(Type::Mat(c, r, Box::new(tplt.ty)))
+                }
+                _ => {
+                    if let Some(ty) = ctx.source.resolve_alias(&self.name) {
+                        ty.eval_ty(ctx)
+                    } else {
+                        Err(ConstEvalError::UnexpectedTemplate(self.name.clone()))
+                    }
+                }
+            }
+        } else {
+            self.name.as_str().eval_ty(ctx)
         }
     }
 }

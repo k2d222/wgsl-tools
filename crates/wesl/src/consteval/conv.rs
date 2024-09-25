@@ -1,4 +1,6 @@
+use half::f16;
 use itertools::Itertools;
+use num_traits::{FromPrimitive, NumCast, ToPrimitive};
 
 use super::{
     Instance, LiteralInstance, MatInner, MatInstance, SyntaxUtil, Ty, Type, VecInner, VecInstance,
@@ -31,7 +33,7 @@ impl Type {
         match self {
             Type::AbstractInt => Type::I32,
             Type::AbstractFloat => Type::F32,
-            Type::Array(ty) => Type::Array(ty.concretize().into()),
+            Type::Array(n, ty) => Type::Array(*n, ty.concretize().into()),
             Type::Vec(n, ty) => Type::Vec(*n, ty.concretize().into()),
             Type::Mat(c, r, ty) => Type::Mat(*c, *r, ty.concretize().into()),
             _ => self.clone(),
@@ -43,36 +45,76 @@ impl Type {
     }
 }
 
+// impl Convert for LiteralInstance {
+//     fn convert_to(&self, ty: &Type) -> Option<Self> {
+//         if ty == &self.ty() {
+//             return Some(self.clone());
+//         }
+//         // TODO: check that these conversions are correctly implemented.
+//         // I think they are correct.
+//         // reference: https://www.w3.org/TR/WGSL/#floating-point-conversion
+//         match (self, ty) {
+//             (Self::AbstractInt(n), Type::AbstractFloat) => f64::from(n).map(Self::AbstractFloat),
+//             (Self::AbstractInt(n), Type::I32) => i32::try_from(*n).ok().map(Self::I32),
+//             (Self::AbstractInt(n), Type::U32) => u32::try_from(*n).ok().map(Self::U32),
+//             (Self::AbstractInt(n), Type::F32) => Some(*n as f32).map(Self::F32),
+//             (Self::AbstractInt(n), Type::F16) => {
+//                 // TODO: this is incorrect because it is stored in a f32.
+//                 let n = *n as f32;
+//                 n.is_finite().then_some(n)
+//             }
+//             .map(Self::F16),
+//             (Self::AbstractFloat(n), Type::F32) => {
+//                 let n = *n as f32;
+//                 n.is_finite().then_some(n)
+//             }
+//             .map(Self::F32),
+//             (Self::AbstractFloat(n), Type::F16) => {
+//                 let n = *n as f32;
+//                 n.is_finite().then_some(n)
+//             }
+//             .map(Self::F16),
+//             _ => None,
+//         }
+//     }
+// }
+impl LiteralInstance {
+    fn is_infinite(&self) -> bool {
+        match self {
+            LiteralInstance::Bool(_) => false,
+            LiteralInstance::AbstractInt(_) => false,
+            LiteralInstance::AbstractFloat(n) => n.is_infinite(),
+            LiteralInstance::I32(_) => false,
+            LiteralInstance::U32(_) => false,
+            LiteralInstance::F32(n) => n.is_infinite(),
+            LiteralInstance::F16(n) => n.is_infinite(),
+        }
+    }
+    fn is_finite(&self) -> bool {
+        !self.is_infinite()
+    }
+}
+
 impl Convert for LiteralInstance {
     fn convert_to(&self, ty: &Type) -> Option<Self> {
         if ty == &self.ty() {
             return Some(self.clone());
         }
+
         // TODO: check that these conversions are correctly implemented.
         // I think they are correct.
         // reference: https://www.w3.org/TR/WGSL/#floating-point-conversion
         match (self, ty) {
-            (Self::AbstractInt(n), Type::AbstractFloat) => Some(*n as f64).map(Self::AbstractFloat),
-            (Self::AbstractInt(n), Type::I32) => i32::try_from(*n).ok().map(Self::I32),
-            (Self::AbstractInt(n), Type::U32) => u32::try_from(*n).ok().map(Self::U32),
-            (Self::AbstractInt(n), Type::F32) => Some(*n as f32).map(Self::F32),
-            (Self::AbstractInt(n), Type::F16) => {
-                let n = *n as f32;
-                n.is_finite().then_some(n)
-            }
-            .map(Self::F16),
-            (Self::AbstractFloat(n), Type::F32) => {
-                let n = *n as f32;
-                n.is_finite().then_some(n)
-            }
-            .map(Self::F32),
-            (Self::AbstractFloat(n), Type::F16) => {
-                let n = *n as f32;
-                n.is_finite().then_some(n)
-            }
-            .map(Self::F16),
+            (Self::AbstractInt(n), Type::AbstractFloat) => n.to_f64().map(Self::AbstractFloat),
+            (Self::AbstractInt(n), Type::I32) => n.to_i32().map(Self::I32),
+            (Self::AbstractInt(n), Type::U32) => n.to_u32().map(Self::U32),
+            (Self::AbstractInt(n), Type::F32) => n.to_f32().map(Self::F32),
+            (Self::AbstractInt(n), Type::F16) => f16::from_i64(*n).map(Self::F16),
+            (Self::AbstractFloat(n), Type::F32) => n.to_f32().map(Self::F32),
+            (Self::AbstractFloat(n), Type::F16) => Some(f16::from_f64(*n)).map(Self::F16),
             _ => None,
         }
+        .and_then(|n| n.is_finite().then_some(n))
     }
 }
 
@@ -214,7 +256,7 @@ pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
                 None
             }
         }
-        (Type::Array(ty1), Type::Array(ty2)) => conversion_rank(ty1, ty2),
+        (Type::Array(n1, ty1), Type::Array(n2, ty2)) if n1 == n2 => conversion_rank(ty1, ty2),
         (Type::Vec(n1, ty1), Type::Vec(n2, ty2)) if n1 == n2 => conversion_rank(ty1, ty2),
         (Type::Mat(c1, r1, ty1), Type::Mat(c2, r2, ty2)) if c1 == c2 && r1 == r2 => {
             conversion_rank(ty1, ty2)
@@ -247,7 +289,7 @@ pub fn convert_inner<T1: Convert + Ty + Clone, T2: Convert + Ty + Clone>(
 }
 
 /// See [`convert`]
-pub fn convert_all<'a, T: Convert + Ty + Clone + 'a>(insts: &Vec<T>) -> Option<Vec<T>> {
+pub fn convert_all<'a, T: Convert + Ty + Clone + 'a>(insts: &[T]) -> Option<Vec<T>> {
     let tys = insts.iter().map(|i| i.ty()).collect_vec();
     let ty = convert_ty_all(&tys)?;
     insts

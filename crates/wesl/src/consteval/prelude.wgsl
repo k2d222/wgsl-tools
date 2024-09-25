@@ -58,10 +58,114 @@ alias mat4x4h = mat4x4<f16>;
 @internal struct modf_result_vec4_abstract { fract: vec4<AbstractFloat>, whole: vec4<AbstractFloat> }
 @internal @generic(T) struct atomic_compare_exchange_result { old_value: T, exchanged: bool }
 
-@generic(T, N) @const @must_use fn array() -> array<T, N> @builtin { }
-@generic(T) @const @must_use fn bool(e : T) -> bool { var inst: bool; return inst; }
+// constructors
+fn array() @builtin {}
+fn bool() @builtin {}
+fn i32() @builtin {}
+fn u32() @builtin {}
+fn f32() @builtin {}
+fn f16() @builtin {}
+fn mat2x2() @builtin {}
+fn mat2x3() @builtin {}
+fn mat2x4() @builtin {}
+fn mat3x2() @builtin {}
+fn mat3x3() @builtin {}
+fn mat3x4() @builtin {}
+fn mat4x2() @builtin {}
+fn mat4x3() @builtin {}
+fn mat4x4() @builtin {}
+fn vec2() @builtin {}
+fn vec3() @builtin {}
+fn vec4() @builtin {}
 
-@generic(T) @const @must_use fn vec2() -> vec2<T> @builtin { }
-@generic(T) @const @must_use fn vec3() -> vec3<T> @builtin { }
-@generic(T) @const @must_use fn vec4() -> vec4<T> @builtin { }
+// bitcast
+fn bitcast() @builtin {}
 
+// logical
+fn all() @builtin {}
+fn any() @builtin {}
+fn select() @builtin {}
+
+// array
+fn arrayLength() @builtin {}
+
+// numeric
+fn abs() @builtin {}
+fn acos() @builtin {}
+fn acosh() @builtin {}
+fn asin() @builtin {}
+fn asinh() @builtin {}
+fn atan() @builtin {}
+fn atanh() @builtin {}
+fn atan2() @builtin {}
+fn ceil() @builtin {}
+fn clamp() @builtin {}
+fn cos() @builtin {}
+fn cosh() @builtin {}
+fn countLeadingZeros() @builtin {}
+fn countOneBits() @builtin {}
+fn countTrailingZeros() @builtin {}
+fn cross() @builtin {}
+fn degrees() @builtin {}
+fn determinant() @builtin {}
+fn distance() @builtin {}
+fn dot() @builtin {}
+fn dot4U8Packed() @builtin {}
+fn dot4I8Packed() @builtin {}
+fn exp() @builtin {}
+fn exp2() @builtin {}
+fn extractBits() @builtin {}
+fn faceForward() @builtin {}
+fn firstLeadingBit() @builtin {}
+fn firstTrailingBit() @builtin {}
+fn floor() @builtin {}
+fn fma() @builtin {}
+fn fract() @builtin {}
+fn frexp() @builtin {}
+fn insertBits() @builtin {}
+fn inverseSqrt() @builtin {}
+fn ldexp() @builtin {}
+fn length() @builtin {}
+fn log() @builtin {}
+fn log2() @builtin {}
+fn max() @builtin {}
+fn min() @builtin {}
+fn mix() @builtin {}
+fn modf() @builtin {}
+fn normalize() @builtin {}
+fn pow() @builtin {}
+fn quantizeToF16() @builtin {}
+fn radians() @builtin {}
+fn reflect() @builtin {}
+fn refract() @builtin {}
+fn reverseBits() @builtin {}
+fn round() @builtin {}
+fn saturate() @builtin {}
+fn sign() @builtin {}
+fn sin() @builtin {}
+fn sinh() @builtin {}
+fn smoothstep() @builtin {}
+fn sqrt() @builtin {}
+fn step() @builtin {}
+fn tan() @builtin {}
+fn tanh() @builtin {}
+fn transpose() @builtin {}
+fn trunc() @builtin {}
+
+// packing
+fn pack4x8snorm() @builtin {}
+fn pack4x8unorm() @builtin {}
+fn pack4xI8() @builtin {}
+fn pack4xU8() @builtin {}
+fn pack4xI8Clamp() @builtin {}
+fn pack4xU8Clamp() @builtin {}
+fn pack2x16snorm() @builtin {}
+fn pack2x16unorm() @builtin {}
+fn pack2x16float() @builtin {}
+fn unpack4x8snorm() @builtin {}
+fn unpack4x8unorm() @builtin {}
+fn unpack4xI8() @builtin {}
+fn unpack4xU8() @builtin {}
+fn unpack2x16snorm() @builtin {}
+fn unpack2x16unorm() @builtin {}
+fn unpack2x16float() @builtin {}

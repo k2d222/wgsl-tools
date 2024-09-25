@@ -65,11 +65,11 @@ impl Exec for CompoundStatement {
         for stat in &self.statements {
             let flow = stat.exec(ctx)?;
             match flow {
-                Flow::Next | Flow::Break | Flow::Continue => {
+                Flow::Next => (),
+                Flow::Break | Flow::Continue | Flow::Return(_) => {
                     ctx.scope.pop();
                     return Ok(flow);
                 }
-                Flow::Return(_) => todo!(),
             }
         }
 

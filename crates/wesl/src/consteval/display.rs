@@ -28,7 +28,7 @@ impl Display for LiteralInstance {
         match self {
             LiteralInstance::Bool(lit) => write!(f, "{lit}"),
             LiteralInstance::AbstractInt(lit) => write!(f, "{lit}"),
-            LiteralInstance::AbstractFloat(lit) => write!(f, "{lit}"),
+            LiteralInstance::AbstractFloat(lit) => write!(f, "{lit:?}"), // using the Debug formatter to print the trailing .0 in floats representing integers. because format!("{}", 3.0f32) == "3"
             LiteralInstance::I32(lit) => write!(f, "{lit}i"),
             LiteralInstance::U32(lit) => write!(f, "{lit}u"),
             LiteralInstance::F32(lit) => write!(f, "{lit}f"),
@@ -122,7 +122,7 @@ impl<'a> Display for Type {
             Type::F32 => write!(f, "f32"),
             Type::F16 => write!(f, "f16"),
             Type::Struct(name) => write!(f, "{name}"),
-            Type::Array(ty) => write!(f, "array<{ty}>"),
+            Type::Array(n, ty) => write!(f, "array<{n}, {ty}>"),
             Type::Vec(n, ty) => write!(f, "vec{n}<{ty}>"),
             Type::Mat(m, n, ty) => write!(f, "mat{m}x{n}<{ty}>"),
             Type::Atomic(ty) => write!(f, "atomic<{ty}>"),

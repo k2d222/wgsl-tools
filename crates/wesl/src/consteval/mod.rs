@@ -36,7 +36,7 @@ pub enum ConstEvalError {
     #[error("expected type `{0}`, got `{1}`")]
     Type(Type, Type),
     #[error("unknown type `{0}`")]
-    UnknownType(TypeExpression),
+    UnknownType(String),
     #[error("unknown function `{0}`")]
     UnknownFunction(String),
     #[error("no declaration named `{0}` in scope")]
@@ -47,6 +47,10 @@ pub enum ConstEvalError {
     NotConstructible(Type),
     #[error("expected a scalar type, got `{0}`")]
     NotScalar(Type),
+
+    // conversions
+    #[error("overflow while converting `{0}` to `{1}`")]
+    ConvOverflow(LiteralInstance, Type),
 
     // indexing
     #[error("`{0}` has no component `{1}`")]
@@ -85,16 +89,22 @@ pub enum ConstEvalError {
     ShrOverflow(u32),
 
     // functions
+    #[error(
+        "invalid function call signature: `{0}{}({})`",
+        (.1).as_ref().map(|t| format!("<{}>", t.iter().map(Ty::ty).format(", "))).unwrap_or_default(),
+        (.2).iter().map(Ty::ty).format(", "),
+    )]
+    Signature(String, Option<Vec<Instance>>, Vec<Instance>),
     #[error("{0}")]
     Builtin(&'static str),
     #[error("invalid template arguments to `{0}`")]
     TemplateArgs(&'static str),
     #[error("type `{0}` does not take any template arguments")]
-    UnexpectedTemplate(Type),
+    UnexpectedTemplate(String),
     #[error("missing template arguments for type `{0}`")]
     MissingTemplate(&'static str),
-    #[error("invalid number of function call parameters, expected `{0}`, got `{1}`")]
-    ParamCount(usize, usize),
+    #[error("incorrect number of arguments to `{0}`, expected `{1}`, got `{2}`")]
+    ParamCount(String, usize, usize),
     #[error("invalid parameter type, expected `{0}`, got `{1}`")]
     ParamType(Type, Type),
     #[error("invalid return type, expected `{0}`, got `{1}`")]

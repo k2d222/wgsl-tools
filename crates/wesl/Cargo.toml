@@ -8,8 +8,10 @@ license.workspace = true
 
 [dependencies]
 derive_more = { version = "1.0.0", features = ["from"] }
+half = { version = "2.4.1", features = ["num-traits"] }
 itertools = "0.13.0"
 lazy_static = "1.5.0"
+num-traits = "0.2.19"
 thiserror = "1.0.63"
 wgsl-parse = { path = "../wgsl-parse", features = ["imports", "condcomp"] }
 wgsl-parse-macros = { version = "0.0.2", path = "../wgsl-parse-macros" }

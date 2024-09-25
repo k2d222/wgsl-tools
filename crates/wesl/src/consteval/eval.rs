@@ -3,10 +3,11 @@ use std::{cell::RefCell, iter::zip, rc::Rc};
 use crate::consteval::MemView;
 
 use super::{
-    call_builtin, get_builtin_fn, ConstEvalError, Context, Convert, EvalTy, Exec, Flow, Instance,
-    LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
+    call_builtin, ConstEvalError, Context, Convert, EvalTy, Exec, Flow, Instance, LiteralInstance,
+    PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
 };
 
+use half::f16;
 use itertools::Itertools;
 use wgsl_parse::syntax::*;
 
@@ -51,7 +52,7 @@ impl Eval for LiteralExpression {
             LiteralExpression::I32(l) => Ok(LiteralInstance::I32(*l).into()),
             LiteralExpression::U32(l) => Ok(LiteralInstance::U32(*l).into()),
             LiteralExpression::F32(l) => Ok(LiteralInstance::F32(*l).into()),
-            LiteralExpression::F16(l) => Ok(LiteralInstance::F16(*l).into()),
+            LiteralExpression::F16(l) => Ok(LiteralInstance::F16(f16::from_f32(*l)).into()), // TODO: check infinity
         }
     }
 }
@@ -282,11 +283,17 @@ impl Eval for FunctionCall {
             .ok_or_else(|| E::UnknownFunction(name.clone()))?;
 
         if decl.body.attributes.contains(&ATTR_BUILTIN) {
-            return call_builtin(&name, tplt, args);
+            return call_builtin(&name, tplt, args, ctx);
         }
 
+        // TODO: ensure has const attribute
+
         if self.arguments.len() != decl.parameters.len() {
-            return Err(E::ParamCount(decl.parameters.len(), self.arguments.len()));
+            return Err(E::ParamCount(
+                decl.name.clone(),
+                decl.parameters.len(),
+                self.arguments.len(),
+            ));
         }
 
         let ret_ty = decl
@@ -296,23 +303,22 @@ impl Eval for FunctionCall {
             .unwrap_or(Ok(Type::Void))?;
 
         ctx.scope.push();
+        let flow = {
+            for (a, p) in zip(&args, &decl.parameters) {
+                let p_ty = p.ty.eval_ty(ctx)?;
+                let a_ty = a.ty();
 
-        for (a, p) in zip(&args, &decl.parameters) {
-            let p_ty = p.ty.eval_ty(ctx)?;
-            let a_ty = a.ty();
-
-            if &a_ty != &p_ty {
-                return Err(E::ParamType(a_ty, p_ty));
+                if &a_ty != &p_ty {
+                    return Err(E::ParamType(a_ty, p_ty));
+                }
             }
-        }
 
-        for (a, p) in zip(args, &decl.parameters) {
-            ctx.scope.add(p.name.clone(), a);
-        }
+            for (a, p) in zip(args, &decl.parameters) {
+                ctx.scope.add(p.name.clone(), a);
+            }
 
-        // TODO: ensure has const attribute
-
-        let flow = decl.body.exec(ctx)?;
+            decl.body.exec(ctx)?
+        };
         ctx.scope.pop();
 
         match flow {
@@ -327,11 +333,12 @@ impl Eval for FunctionCall {
 
 impl Eval for IdentifierExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        let ptr = ctx
-            .scope
-            .get(&self.name)
-            .ok_or_else(|| E::NoDecl(self.name.clone()))?;
-        Ok(RefInstance::new(ptr).into())
+        if let Some(ptr) = ctx.scope.get(&self.name) {
+            Ok(RefInstance::new(ptr).into())
+        } else {
+            let ty = self.name.as_str().eval_ty(ctx)?;
+            Ok(ty.into())
+        }
     }
 }
 
