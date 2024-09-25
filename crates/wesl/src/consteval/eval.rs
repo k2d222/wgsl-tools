@@ -1,8 +1,10 @@
-use std::iter::zip;
+use std::{cell::RefCell, iter::zip, rc::Rc};
+
+use crate::consteval::MemView;
 
 use super::{
-    call_builtin, get_builtin_fn, Address, ConstEvalError, Context, Convert, EvalTy, Exec, Flow,
-    Instance, LiteralInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
+    call_builtin, get_builtin_fn, ConstEvalError, Context, Convert, EvalTy, Exec, Flow, Instance,
+    LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
 };
 
 use itertools::Itertools;
@@ -16,7 +18,8 @@ pub trait Eval {
     fn eval_value(&self, ctx: &mut Context) -> Result<Instance, E> {
         let inst = self.eval(ctx)?;
         if let Instance::Ref(r) = inst {
-            r.value(ctx).cloned()
+            let v = r.ptr.borrow();
+            v.view(&r.view).cloned().ok_or_else(|| E::Ref(r.clone()))
         } else {
             Ok(inst)
         }
@@ -61,7 +64,11 @@ impl Eval for ParenthesizedExpression {
 
 impl Eval for NamedComponentExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        fn vec_eval(v: &VecInstance, comp: &String, addr: Option<Address>) -> Result<Instance, E> {
+        fn vec_eval(
+            v: &VecInstance,
+            comp: &String,
+            r: Option<&RefInstance>,
+        ) -> Result<Instance, E> {
             if !check_swizzle(comp) {
                 return Err(E::Swizzle(comp.clone()));
             }
@@ -76,21 +83,12 @@ impl Eval for NamedComponentExpression {
                 })
                 .collect_vec();
             match indices.as_slice() {
-                [i] => v
-                    .get(*i)
-                    .map(|e| {
-                        if let Some(mut address) = addr {
-                            address.view.append_index(*i);
-                            Instance::Ref(RefInstance {
-                                ty: e.ty(),
-                                address,
-                            })
-                            .into()
-                        } else {
-                            e.clone().into()
-                        }
-                    })
-                    .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize)),
+                [i] => if let Some(r) = r {
+                    r.view_index(*i).map(Into::into)
+                } else {
+                    v.get(*i).cloned().map(Into::into)
+                }
+                .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize)),
                 _ => {
                     let components = indices
                         .iter()
@@ -115,28 +113,14 @@ impl Eval for NamedComponentExpression {
                     Ok(val.clone())
                 }
                 Instance::Vec(v) => vec_eval(v, comp, None),
-                Instance::Ref(r) => {
-                    let val = r.value(ctx)?;
-                    if r.ty != val.ty() {
-                        Err(E::RefType(val.ty(), r.ty.clone()))
-                    } else {
-                        match val {
-                            Instance::Struct(s) => {
-                                let comp_val = s.components.get(comp).ok_or_else(|| {
-                                    E::Component(Type::Struct(s.name.clone()), comp.clone())
-                                })?;
-                                let mut address = r.address.clone();
-                                address.view.append_member(comp.clone());
-                                Ok(Instance::Ref(RefInstance {
-                                    ty: comp_val.ty(),
-                                    address,
-                                }))
-                            }
-                            Instance::Vec(v) => vec_eval(v, comp, Some(r.address.clone())),
-                            _ => Err(E::Component(base.ty(), comp.clone())),
-                        }
-                    }
-                }
+                Instance::Ref(r) => match &*r.deref_inst() {
+                    Instance::Struct(s) => r
+                        .view_member(comp.clone())
+                        .map(Into::into)
+                        .ok_or_else(|| E::Component(Type::Struct(s.name.clone()), comp.clone())),
+                    Instance::Vec(v) => vec_eval(v, comp, Some(r)),
+                    _ => Err(E::Component(base.ty(), comp.clone())),
+                },
                 _ => Err(E::Component(base.ty(), comp.clone())),
             }
         }
@@ -162,48 +146,10 @@ impl Eval for IndexingExpression {
                     .get(index)
                     .cloned()
                     .ok_or_else(|| E::OutOfBounds(index, a.ty(), a.n())),
-                Instance::Ref(r) => {
-                    let val = r.value(ctx)?;
-                    if r.ty != val.ty() {
-                        return Err(E::RefType(val.ty(), r.ty.clone()));
-                    }
-                    match val {
-                        Instance::Vec(v) => v
-                            .get(index)
-                            .map(|_| {
-                                let mut address = r.address.clone();
-                                address.view.append_index(index);
-                                Instance::Ref(RefInstance {
-                                    ty: v.ty(),
-                                    address,
-                                })
-                            })
-                            .ok_or_else(|| E::OutOfBounds(index, v.ty(), v.n() as usize)),
-                        Instance::Mat(m) => m
-                            .col(index)
-                            .map(|v| {
-                                let mut address = r.address.clone();
-                                address.view.append_index(index);
-                                Instance::Ref(RefInstance {
-                                    ty: v.ty(),
-                                    address,
-                                })
-                            })
-                            .ok_or_else(|| E::OutOfBounds(index, m.ty(), m.c() as usize)),
-                        Instance::Array(s) => s
-                            .get(index)
-                            .map(|e| {
-                                let mut address = r.address.clone();
-                                address.view.append_index(index);
-                                Ok(Instance::Ref(RefInstance {
-                                    ty: e.ty(),
-                                    address,
-                                }))
-                            })
-                            .ok_or_else(|| E::OutOfBounds(index, s.ty(), s.n() as usize))?,
-                        _ => Err(E::NotIndexable(r.ty.clone())),
-                    }
-                }
+                Instance::Ref(r) => r
+                    .view_index(index)
+                    .map(Into::into)
+                    .ok_or_else(|| E::OutOfBounds(index, r.ty.clone(), r.deref_inst().len())),
                 Instance::Literal(_)
                 | Instance::Struct(_)
                 | Instance::Ptr(_)
@@ -230,10 +176,7 @@ impl Eval for UnaryExpression {
         if self.operator == UnaryOperator::AddressOf {
             let operand = self.operand.eval(ctx)?;
             match operand {
-                Instance::Ref(r) => Ok(Instance::Ref(RefInstance {
-                    ty: r.ty.clone(),
-                    address: r.address.clone(),
-                })),
+                Instance::Ref(r) => Ok(PtrInstance::from(r).into()),
                 operand @ _ => Err(E::Unary(self.operator, operand.ty())),
             }
         } else {
@@ -244,10 +187,7 @@ impl Eval for UnaryExpression {
                 UnaryOperator::BitwiseComplement => operand.op_bitnot(),
                 UnaryOperator::AddressOf => unreachable!(),
                 UnaryOperator::Indirection => match operand {
-                    Instance::Ptr(p) => Ok(Instance::Ref(RefInstance {
-                        ty: p.ty.clone(),
-                        address: p.address.clone(),
-                    })),
+                    Instance::Ptr(p) => Ok(RefInstance::from(p).into()),
                     operand @ _ => Err(E::Unary(self.operator, operand.ty())),
                 },
             }
@@ -367,8 +307,7 @@ impl Eval for FunctionCall {
         }
 
         for (a, p) in zip(args, &decl.parameters) {
-            ctx.scope.add(p.name.clone(), ctx.memory.len());
-            ctx.memory.push(a);
+            ctx.scope.add(p.name.clone(), a);
         }
 
         // TODO: ensure has const attribute
@@ -392,13 +331,7 @@ impl Eval for IdentifierExpression {
             .scope
             .get(&self.name)
             .ok_or_else(|| E::NoDecl(self.name.clone()))?;
-        let address = Address::new(ptr);
-        let inst = ctx.memory.get(ptr).ok_or_else(|| E::Ref(address.clone()))?;
-        Ok(RefInstance {
-            ty: inst.ty(),
-            address,
-        }
-        .into())
+        Ok(RefInstance::new(ptr).into())
     }
 }
 

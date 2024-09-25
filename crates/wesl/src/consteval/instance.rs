@@ -1,4 +1,9 @@
-use std::collections::HashMap;
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 use derive_more::derive::From;
 use itertools::Itertools;
@@ -18,6 +23,55 @@ pub enum Instance {
     Ref(RefInstance),
     Type(Type),
     Void,
+}
+
+impl Instance {
+    pub fn view<'a>(&'a self, view: &'a MemView) -> Option<&Instance> {
+        match view {
+            MemView::Whole => Some(self),
+            MemView::Member(m, v) => match self {
+                Instance::Struct(s) => {
+                    let inst = s.components.get(m)?;
+                    inst.view(v)
+                }
+                _ => None,
+            },
+            MemView::Index(i, v) => match self {
+                Instance::Array(a) => {
+                    let inst = a.components.get(*i)?;
+                    inst.view(v)
+                }
+                _ => None,
+            },
+        }
+    }
+    pub fn view_mut<'a>(&'a mut self, view: &'a MemView) -> Option<&mut Instance> {
+        match view {
+            MemView::Whole => Some(self),
+            MemView::Member(m, v) => match self {
+                Instance::Struct(s) => {
+                    let inst = s.components.get_mut(m)?;
+                    inst.view_mut(v)
+                }
+                _ => None,
+            },
+            MemView::Index(i, v) => match self {
+                Instance::Array(a) => {
+                    let inst = a.components.get_mut(*i)?;
+                    inst.view_mut(v)
+                }
+                _ => None,
+            },
+        }
+    }
+    pub fn len(&self) -> usize {
+        match self {
+            Instance::Array(a) => a.n(),
+            Instance::Vec(v) => v.n() as usize,
+            Instance::Mat(m) => m.c() as usize,
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, From)]
@@ -296,76 +350,115 @@ impl MatInstance {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PtrInstance {
     pub ty: Type,
-    pub address: Address,
+    pub view: MemView,
+    pub ptr: Rc<RefCell<Instance>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl From<RefInstance> for PtrInstance {
+    fn from(r: RefInstance) -> Self {
+        Self {
+            ty: r.ty.clone(),
+            view: r.view.clone(),
+            ptr: r.ptr.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct RefInstance {
     pub ty: Type,
-    pub address: Address,
+    pub view: MemView,
+    pub ptr: Rc<RefCell<Instance>>,
 }
 
 impl RefInstance {
-    pub fn value<'a>(&'a self, ctx: &'a Context) -> Result<&'a Instance, ConstEvalError> {
-        fn rec_view<'a>(inst: &'a Instance, view: &'a MemView) -> Option<&'a Instance> {
-            match view {
-                MemView::Whole => Some(inst),
-                MemView::Member(m, v) => match inst {
-                    Instance::Struct(s) => {
-                        let inst = s.components.get(m)?;
-                        rec_view(inst, v)
-                    }
-                    _ => None,
-                },
-                MemView::Index(i, v) => match inst {
-                    Instance::Array(a) => {
-                        let inst = a.components.get(*i)?;
-                        rec_view(inst, v)
-                    }
-                    _ => None,
-                },
-            }
+    pub fn new(ptr: Rc<RefCell<Instance>>) -> Self {
+        let ty = ptr.borrow().ty();
+        Self {
+            ty,
+            view: MemView::Whole,
+            ptr,
         }
+    }
+}
 
-        let inst = ctx
-            .memory
-            .get(self.address.ptr)
-            .ok_or_else(|| ConstEvalError::Ref(self.address.clone()))?;
-        rec_view(inst, &self.address.view).ok_or_else(|| ConstEvalError::Ref(self.address.clone()))
+impl From<PtrInstance> for RefInstance {
+    fn from(p: PtrInstance) -> Self {
+        Self {
+            ty: p.ty.clone(),
+            view: p.view.clone(),
+            ptr: p.ptr.clone(),
+        }
+    }
+}
+
+pub struct RefView<'a> {
+    r: Ref<'a, Instance>,
+    v: &'a MemView,
+}
+
+impl<'a> Deref for RefView<'a> {
+    type Target = Instance;
+
+    fn deref(&self) -> &Self::Target {
+        self.r.view(self.v).expect("invalid reference")
+    }
+}
+
+pub struct RefViewMut<'a> {
+    r: RefMut<'a, Instance>,
+    v: &'a MemView,
+}
+
+impl<'a> Deref for RefViewMut<'a> {
+    type Target = Instance;
+
+    fn deref(&self) -> &Self::Target {
+        self.r.view(self.v).expect("invalid reference")
+    }
+}
+
+impl<'a> DerefMut for RefViewMut<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.r.view_mut(self.v).expect("invalid reference")
+    }
+}
+
+impl RefInstance {
+    pub fn view_member(&self, member: String) -> Option<Self> {
+        let mut view = self.view.clone();
+        view.append_member(member);
+        let inst = self.ptr.borrow();
+        let inst = inst.view(&self.view)?;
+        Some(Self {
+            ty: inst.ty(),
+            view,
+            ptr: self.ptr.clone(),
+        })
+    }
+    pub fn view_index(&self, index: usize) -> Option<Self> {
+        let mut view = self.view.clone();
+        view.append_index(index);
+        let inst = self.ptr.borrow();
+        let inst = inst.view(&self.view)?;
+        Some(Self {
+            ty: inst.ty(),
+            view,
+            ptr: self.ptr.clone(),
+        })
     }
 
-    pub fn value_mut<'a>(
-        &'a self,
-        ctx: &'a mut Context,
-    ) -> Result<&'a mut Instance, ConstEvalError> {
-        fn rec_view<'a>(inst: &'a mut Instance, view: &'a MemView) -> Option<&'a mut Instance> {
-            match view {
-                MemView::Whole => Some(inst),
-                MemView::Member(m, v) => match inst {
-                    Instance::Struct(s) => {
-                        let inst = s.components.get_mut(m)?;
-                        rec_view(inst, v)
-                    }
-                    _ => None,
-                },
-                MemView::Index(i, v) => match inst {
-                    Instance::Array(a) => {
-                        let inst = a.components.get_mut(*i)?;
-                        rec_view(inst, v)
-                    }
-                    _ => None,
-                },
-            }
-        }
+    pub fn deref_inst<'a>(&'a self) -> RefView<'a> {
+        let r = self.ptr.borrow();
+        RefView { r, v: &self.view }
+    }
 
-        let inst = ctx
-            .memory
-            .get_mut(self.address.ptr)
-            .ok_or_else(|| ConstEvalError::Ref(self.address.clone()))?;
-        rec_view(inst, &self.address.view).ok_or_else(|| ConstEvalError::Ref(self.address.clone()))
+    pub fn deref_inst_mut<'a>(&'a mut self) -> RefViewMut<'a> {
+        let r = self.ptr.borrow_mut();
+        RefViewMut { r, v: &self.view }
     }
 }
 
@@ -391,17 +484,17 @@ impl MemView {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Address {
-    pub ptr: usize,
-    pub view: MemView,
-}
+// #[derive(Clone, Debug, PartialEq, Eq)]
+// pub struct Address {
+//     pub ptr: usize,
+//     pub view: MemView,
+// }
 
-impl Address {
-    pub fn new(ptr: usize) -> Self {
-        Self {
-            ptr,
-            view: MemView::Whole,
-        }
-    }
-}
+// impl Address {
+//     pub fn new(ptr: usize) -> Self {
+//         Self {
+//             ptr,
+//             view: MemView::Whole,
+//         }
+//     }
+// }

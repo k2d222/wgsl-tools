@@ -14,7 +14,11 @@ pub use exec::*;
 pub use instance::*;
 pub use ty::*;
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -25,8 +29,8 @@ use wgsl_parse::syntax::*;
 pub enum ConstEvalError {
     #[error("not implemented: `{0}`")]
     NotImpl(String),
-    #[error("invalid reference to memory location `{0}`")]
-    Ref(Address),
+    #[error("invalid reference to memory view `{0}`")]
+    Ref(RefInstance),
     #[error("invalid reference to `{0}`, expected reference to `{1}`")]
     RefType(Type, Type),
     #[error("expected type `{0}`, got `{1}`")]
@@ -127,13 +131,13 @@ pub enum ConstEvalError {
     DiscardInConst,
     #[error("const assertion failed: `{0}` is `false`")]
     ConstAssertFailure(Expression),
-    #[error("a function body cannot contain a `{}` statement")]
+    #[error("a function body cannot contain a `{0}` statement")]
     FlowInFunction(Flow),
 }
 
 #[derive(Clone, Debug)]
 pub struct Scope {
-    stack: Vec<HashMap<String, usize>>,
+    stack: Vec<HashMap<String, Rc<RefCell<Instance>>>>,
 }
 
 impl Scope {
@@ -149,18 +153,26 @@ impl Scope {
 
     pub fn pop(&mut self) {
         // TODO: garbage collect ctx memory
-        self.stack.pop();
+        self.stack.pop().expect("failed to pop scope");
     }
 
-    pub fn add(&mut self, name: String, ptr: usize) -> Option<usize> {
-        self.stack.last_mut().unwrap().insert(name, ptr)
+    pub fn add(&mut self, name: String, value: Instance) {
+        if self
+            .stack
+            .last_mut()
+            .unwrap()
+            .insert(name, Rc::new(RefCell::new(value)))
+            .is_some()
+        {
+            panic!("duplicate variable insertion")
+        }
     }
 
-    pub fn get(&self, name: &str) -> Option<usize> {
+    pub fn get(&self, name: &str) -> Option<Rc<RefCell<Instance>>> {
         self.stack
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).copied())
+            .find_map(|scope| scope.get(name).cloned())
     }
 
     pub fn has(&self, name: &str) -> bool {
@@ -180,11 +192,20 @@ pub enum ScopeKind {
     Function,
 }
 
+pub struct ScopeGuard<'a> {
+    scope: &'a mut Scope,
+}
+
+impl<'a> Drop for ScopeGuard<'a> {
+    fn drop(&mut self) {
+        self.scope.pop();
+    }
+}
+
 pub struct Context<'s> {
     source: &'s TranslationUnit,
     scope: Scope,
     kind: ScopeKind,
-    memory: Vec<Instance>,
 }
 
 impl<'s> Context<'s> {
@@ -193,7 +214,12 @@ impl<'s> Context<'s> {
             source,
             scope: Default::default(),
             kind: ScopeKind::Function,
-            memory: Default::default(),
+        }
+    }
+
+    pub fn scope_guard(&mut self) -> ScopeGuard {
+        ScopeGuard {
+            scope: &mut self.scope,
         }
     }
 }

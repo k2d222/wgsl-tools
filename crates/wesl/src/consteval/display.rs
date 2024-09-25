@@ -3,8 +3,8 @@ use std::fmt::Display;
 use itertools::Itertools;
 
 use super::{
-    Address, ArrayInstance, Instance, LiteralInstance, MatInstance, MemView, PtrInstance,
-    RefInstance, StructInstance, Type, VecInstance,
+    ArrayInstance, Instance, LiteralInstance, MatInstance, MemView, PtrInstance, RefInstance,
+    StructInstance, Ty, Type, VecInstance,
 };
 
 impl Display for Instance {
@@ -76,20 +76,22 @@ impl Display for MatInstance {
 impl Display for PtrInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ty = &self.ty;
-        let addr = &self.address;
-        write!(f, "ptr<{ty}>({addr})")
+        let view = &self.view;
+        write!(f, "ptr<{ty}>({view})")
     }
 }
 
 impl Display for RefInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ty = &self.ty;
-        let addr = &self.address;
-        write!(f, "ref<{ty}>({addr})")
+        let view = &self.view;
+        let ptr_ty = self.ptr.borrow().ty();
+        let val = self.deref_inst();
+        write!(f, "ref<{ty}, {ptr_ty}{view}>({})", *val)
     }
 }
 
-impl Display for Address {
+impl Display for MemView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn fmt_view(f: &mut std::fmt::Formatter<'_>, view: &MemView) -> std::fmt::Result {
             match view {
@@ -105,8 +107,7 @@ impl Display for Address {
             }
         }
 
-        write!(f, "mem@{}:", self.ptr)?;
-        fmt_view(f, &self.view)
+        fmt_view(f, &self)
     }
 }
 

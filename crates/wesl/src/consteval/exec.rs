@@ -3,8 +3,8 @@ use std::fmt::Display;
 use crate::consteval::conv::Convert;
 
 use super::{
-    Address, ConstEvalError, Context, Eval, EvalTy, Instance, LiteralInstance, RefInstance,
-    ScopeKind, Ty, Type, VecInstance,
+    ConstEvalError, Context, Eval, EvalTy, Instance, LiteralInstance, RefInstance, ScopeKind, Ty,
+    Type, VecInstance,
 };
 
 use wgsl_parse::syntax::*;
@@ -82,9 +82,9 @@ impl Exec for AssignmentStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         let lhs = self.lhs.eval(ctx)?;
 
-        if let Instance::Ref(r) = lhs {
+        if let Instance::Ref(mut r) = lhs {
             let rhs = self.rhs.eval_value(ctx)?;
-            let lhs = r.value_mut(ctx)?;
+            let mut lhs = r.deref_inst_mut();
             match self.operator {
                 AssignmentOperator::Equal => {
                     *lhs = rhs;
@@ -130,19 +130,15 @@ impl Exec for AssignmentStatement {
 impl Exec for IncrementStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         let expr = self.expression.eval(ctx)?;
-        if let Instance::Ref(r) = expr {
-            let val = r.value_mut(ctx)?;
-            let val = val
-                .convert_to(&r.ty)
-                .ok_or_else(|| E::AssignType(val.ty(), r.ty.clone()))?;
-            match val {
+        if let Instance::Ref(mut r) = expr {
+            match &mut *r.deref_inst_mut() {
                 Instance::Literal(LiteralInstance::I32(n)) => {
                     n.checked_add(1).ok_or(E::IncrOverflow).map(|_| Flow::Next)
                 }
                 Instance::Literal(LiteralInstance::U32(n)) => {
                     n.checked_add(1).ok_or(E::IncrOverflow).map(|_| Flow::Next)
                 }
-                _ => Err(E::IncrType(val.ty())),
+                r => Err(E::IncrType(r.ty())),
             }
         } else {
             Err(E::NotRef(expr))
@@ -153,19 +149,15 @@ impl Exec for IncrementStatement {
 impl Exec for DecrementStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         let expr = self.expression.eval(ctx)?;
-        if let Instance::Ref(r) = expr {
-            let val = r.value_mut(ctx)?;
-            let val = val
-                .convert_to(&r.ty)
-                .ok_or_else(|| E::AssignType(val.ty(), r.ty.clone()))?;
-            match val {
+        if let Instance::Ref(mut r) = expr {
+            match &mut *r.deref_inst_mut() {
                 Instance::Literal(LiteralInstance::I32(n)) => {
                     n.checked_sub(1).ok_or(E::DecrOverflow).map(|_| Flow::Next)
                 }
                 Instance::Literal(LiteralInstance::U32(n)) => {
                     n.checked_sub(1).ok_or(E::DecrOverflow).map(|_| Flow::Next)
                 }
-                _ => Err(E::DecrType(val.ty())),
+                r => Err(E::DecrType(r.ty())),
             }
         } else {
             Err(E::NotRef(expr))
@@ -437,8 +429,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), ty))?;
                 }
 
-                ctx.scope.add(self.name.clone(), ctx.memory.len());
-                ctx.memory.push(inst);
+                ctx.scope.add(self.name.clone(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Function) => Err(E::OverrideInFn),
@@ -458,8 +449,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), inst.ty().concretize()))?
                 };
 
-                ctx.scope.add(self.name.clone(), ctx.memory.len());
-                ctx.memory.push(inst);
+                ctx.scope.add(self.name.clone(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Var, ScopeKind::Function) => {
@@ -479,8 +469,7 @@ impl Exec for Declaration {
                     }
                 }?;
 
-                ctx.scope.add(self.name.clone(), ctx.memory.len());
-                ctx.memory.push(inst);
+                ctx.scope.add(self.name.clone(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Module) => {
