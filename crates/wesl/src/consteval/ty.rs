@@ -15,7 +15,7 @@ pub enum Type {
     F32,
     F16,
     Struct(String),
-    Array(Box<Type>),
+    Array(Option<usize>, Box<Type>),
     Vec(u8, Box<Type>),
     Mat(u8, u8, Box<Type>),
     Atomic(Box<Type>),

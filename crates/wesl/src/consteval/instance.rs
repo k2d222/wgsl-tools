@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
@@ -31,7 +32,7 @@ impl Instance {
             MemView::Whole => Some(self),
             MemView::Member(m, v) => match self {
                 Instance::Struct(s) => {
-                    let inst = s.components.get(m)?;
+                    let inst = s.members.get(m)?;
                     inst.view(v)
                 }
                 _ => None,
@@ -50,7 +51,7 @@ impl Instance {
             MemView::Whole => Some(self),
             MemView::Member(m, v) => match self {
                 Instance::Struct(s) => {
-                    let inst = s.components.get_mut(m)?;
+                    let inst = s.members.get_mut(m)?;
                     inst.view_mut(v)
                 }
                 _ => None,
@@ -89,7 +90,7 @@ pub enum LiteralInstance {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructInstance {
     pub name: String,
-    pub components: HashMap<String, Instance>,
+    pub members: HashMap<String, Instance>,
 }
 
 impl StructInstance {
@@ -104,8 +105,11 @@ pub struct ArrayInstance {
 }
 
 impl ArrayInstance {
+    ///
+    /// # Panics
+    /// panics if the components are not all the same type
     pub(crate) fn new(components: Vec<Instance>) -> Self {
-        debug_assert!(components.iter().map(|c| c.ty()).all_equal());
+        assert!(components.iter().map(|c| c.ty()).all_equal());
         Self { components }
     }
 
@@ -128,7 +132,7 @@ pub type Vec3 = VecInner<3>;
 pub type Vec4 = VecInner<4>;
 
 impl<const N: usize> VecInner<N> {
-    pub fn new(components: Vec<LiteralInstance>) -> Self {
+    pub(crate) fn new(components: Vec<LiteralInstance>) -> Self {
         assert!(components.len() == N);
         Self { components }
     }
@@ -161,7 +165,11 @@ pub enum VecInstance {
 }
 
 impl VecInstance {
+    /// # Panics
+    /// * if the components length is not [2, 3, 4]
+    /// * if the components are not all the same type
     pub(crate) fn new(components: Vec<LiteralInstance>) -> Self {
+        assert!(components.iter().map(|c| c.ty()).all_equal());
         match components.len() {
             2 => Self::Vec2(VecInner::new(components)),
             3 => Self::Vec3(VecInner::new(components)),
@@ -229,7 +237,8 @@ pub type Mat4x3 = MatInner<4, 3>;
 pub type Mat4x4 = MatInner<4, 4>;
 
 impl<const C: usize, const R: usize> MatInner<C, R> {
-    pub fn new(components: Vec<VecInner<R>>) -> Self {
+    pub(crate) fn new(components: Vec<VecInner<R>>) -> Self {
+        assert!(components.len() == C);
         Self { components }
     }
     pub fn new_with_value(val: &LiteralInstance) -> Self {
@@ -267,6 +276,47 @@ pub enum MatInstance {
 }
 
 impl MatInstance {
+    /// # Panics
+    /// * if the number of columns is not [2, 3, 4]
+    /// * if the colums don't have the same number of rows
+    /// * if the number of rows is not [2, 3, 4]
+    pub(crate) fn new(components: Vec<Vec<LiteralInstance>>) -> Self {
+        assert!(
+            components.iter().map(|c| c.len()).all_equal(),
+            "MatInstance columns must have the same number for rows"
+        );
+        macro_rules! make_mat {
+            ($vec:expr, $mat:ident) => {{
+                let components = components
+                    .into_iter()
+                    .map(|c| VecInner::<$vec>::new(c))
+                    .collect_vec();
+                Self::$mat(MatInner::new(components))
+            }};
+        }
+        match components.len() {
+            2 => match components[0].len() {
+                2 => make_mat!(2, Mat2x2),
+                3 => make_mat!(3, Mat2x3),
+                4 => make_mat!(4, Mat2x4),
+                _ => panic!("number of MatInstance rows must be 2, 3 or 4"),
+            },
+            3 => match components[0].len() {
+                2 => make_mat!(2, Mat3x2),
+                3 => make_mat!(3, Mat3x3),
+                4 => make_mat!(4, Mat3x4),
+                _ => panic!("number of MatInstance rows must be 2, 3 or 4"),
+            },
+            4 => match components[0].len() {
+                2 => make_mat!(2, Mat4x2),
+                3 => make_mat!(3, Mat4x3),
+                4 => make_mat!(4, Mat4x4),
+                _ => panic!("number of MatInstance rows must be 2, 3 or 4"),
+            },
+            _ => panic!("number of MatInstance columns must be 2, 3 or 4"),
+        }
+    }
+
     pub fn r(&self) -> u8 {
         match self {
             MatInstance::Mat2x2(_) => 2,

@@ -43,6 +43,10 @@ pub enum ConstEvalError {
     NoDecl(String),
     #[error("cannot convert from `{0}` to `{1}`")]
     ConversionFailure(Type, Type),
+    #[error("`{0}` is not constructible")]
+    NotConstructible(Type),
+    #[error("expected a scalar type, got `{0}`")]
+    NotScalar(Type),
 
     // indexing
     #[error("`{0}` has no component `{1}`")]

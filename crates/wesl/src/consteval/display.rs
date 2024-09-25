@@ -41,7 +41,7 @@ impl Display for StructInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = &self.name;
         let comps = self
-            .components
+            .members
             .iter()
             .map(|(k, v)| format!("{k} = {v}"))
             .format(", ");

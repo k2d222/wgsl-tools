@@ -1,19 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    iter::zip,
-};
+use std::{collections::HashMap, iter::zip};
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use wgsl_parse::syntax::{
-    self, Attribute, Expression, FunctionCall, GlobalDeclaration, LiteralExpression, TemplateArg,
-    TemplateArgs, TranslationUnit,
-};
+use wgsl_parse::syntax::{Attribute, GlobalDeclaration, TranslationUnit};
+
+use crate::Context;
 
 use super::{
     conv::{convert_all, Convert},
-    ArrayInstance, ConstEvalError, Flow, Instance, LiteralInstance, MatInner, MatInstance, Ty,
-    Type, VecInner, VecInstance,
+    ArrayInstance, ConstEvalError, EvalTy, Instance, LiteralInstance, MatInner, MatInstance,
+    StructInstance, SyntaxUtil, Ty, Type, VecInner, VecInstance,
 };
 
 type E = ConstEvalError;
@@ -62,6 +58,103 @@ lazy_static! {
 
         prelude
     };
+}
+
+// -----------
+// ZERO VALUES
+// -----------
+// reference: https://www.w3.org/TR/WGSL/#zero-value
+
+impl Instance {
+    /// zero-value initialize an instance of a given type.
+    pub fn zero_value(ty: &Type, ctx: &mut Context) -> Result<Self, E> {
+        match ty {
+            Type::Bool => Ok(LiteralInstance::Bool(false).into()),
+            Type::AbstractInt => Ok(LiteralInstance::AbstractInt(0).into()),
+            Type::AbstractFloat => Ok(LiteralInstance::AbstractFloat(0.0).into()),
+            Type::I32 => Ok(LiteralInstance::I32(0).into()),
+            Type::U32 => Ok(LiteralInstance::U32(0).into()),
+            Type::F32 => Ok(LiteralInstance::F32(0.0).into()),
+            Type::F16 => Ok(LiteralInstance::F16(0.0).into()),
+            Type::Struct(name) => StructInstance::zero_value(name, ctx).map(Into::into),
+            Type::Array(n, a_ty) => n
+                .map(|n| ArrayInstance::zero_value(n, a_ty, ctx).map(Into::into))
+                .unwrap_or_else(|| Err(E::NotConstructible(ty.clone()))),
+            Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty, ctx).map(Into::into),
+            Type::Mat(c, r, m_ty) => MatInstance::zero_value(*c, *r, m_ty, ctx).map(Into::into),
+            Type::Atomic(_) => Err(E::NotConstructible(ty.clone())),
+            Type::Ptr(_) => Err(E::NotConstructible(ty.clone())),
+            Type::Void => Ok(Instance::Void),
+        }
+    }
+}
+
+impl LiteralInstance {
+    pub fn zero_value(ty: &Type) -> Result<Self, E> {
+        match ty {
+            Type::Bool => Ok(LiteralInstance::Bool(false)),
+            Type::AbstractInt => Ok(LiteralInstance::AbstractInt(0)),
+            Type::AbstractFloat => Ok(LiteralInstance::AbstractFloat(0.0)),
+            Type::I32 => Ok(LiteralInstance::I32(0)),
+            Type::U32 => Ok(LiteralInstance::U32(0)),
+            Type::F32 => Ok(LiteralInstance::F32(0.0)),
+            Type::F16 => Ok(LiteralInstance::F16(0.0)),
+            _ => Err(E::NotScalar(ty.clone())),
+        }
+    }
+}
+
+impl StructInstance {
+    /// zero-value initialize a struct instance.
+    pub fn zero_value(name: &str, ctx: &mut Context) -> Result<Self, E> {
+        let decl = ctx
+            .source
+            .decl_struct(name)
+            .expect("struct declaration not found");
+
+        let members = decl
+            .members
+            .iter()
+            .map(|m| {
+                let ty = m.ty.eval_ty(ctx)?;
+                let val = Instance::zero_value(&ty, ctx)?;
+                Ok((m.name.clone(), val))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(StructInstance {
+            name: name.to_string(),
+            members: HashMap::from_iter(members),
+        })
+    }
+}
+
+impl ArrayInstance {
+    /// zero-value initialize a struct instance.
+    pub fn zero_value(n: usize, ty: &Type, ctx: &mut Context) -> Result<Self, E> {
+        let zero = Instance::zero_value(ty, ctx)?;
+        let comps = (0..n).map(|_| zero.clone()).collect_vec();
+        Ok(ArrayInstance::new(comps))
+    }
+}
+
+impl VecInstance {
+    /// zero-value initialize a struct instance.
+    pub fn zero_value(n: u8, ty: &Type, ctx: &mut Context) -> Result<Self, E> {
+        let zero = LiteralInstance::zero_value(ty)?;
+        let comps = (0..n).map(|_| zero.clone()).collect_vec();
+        Ok(VecInstance::new(comps))
+    }
+}
+
+impl MatInstance {
+    /// zero-value initialize a struct instance.
+    pub fn zero_value(c: u8, r: u8, ty: &Type, ctx: &mut Context) -> Result<Self, E> {
+        let zero = LiteralInstance::zero_value(ty)?;
+        let zero_col = (0..r).map(|_| zero.clone()).collect_vec();
+        let comps = (0..c).map(|_| zero_col.clone()).collect_vec();
+        Ok(MatInstance::new(comps))
+    }
 }
 
 // ------------

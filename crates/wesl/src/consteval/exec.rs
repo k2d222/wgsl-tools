@@ -460,7 +460,10 @@ impl Exec for Declaration {
                         inst.concretize()
                             .ok_or_else(|| E::ConversionFailure(inst.ty(), inst.ty().concretize()))
                     }
-                    (Some(ty), None) => todo!("default constructor"),
+                    (Some(ty), None) => {
+                        let ty = ty.eval_ty(ctx)?;
+                        Instance::zero_value(&ty, ctx)
+                    }
                     (Some(ty), Some(init)) => {
                         let inst = init.eval(ctx)?;
                         let ty = ty.eval_ty(ctx)?;

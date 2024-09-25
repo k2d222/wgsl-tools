@@ -107,7 +107,7 @@ impl Eval for NamedComponentExpression {
             match &base {
                 Instance::Struct(s) => {
                     let val = s
-                        .components
+                        .members
                         .get(comp)
                         .ok_or_else(|| E::Component(Type::Struct(s.name.clone()), comp.clone()))?;
                     Ok(val.clone())
