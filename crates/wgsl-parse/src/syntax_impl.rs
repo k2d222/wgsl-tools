@@ -42,10 +42,10 @@ macro_rules! impl_struct_decorated {
     };
 }
 
-#[cfg(all(feature = "imports", feature = "condcomp"))]
+#[cfg(all(feature = "imports", feature = "attributes"))]
 impl_struct_decorated!(Import);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl Decorated for GlobalDirective {
     fn attributes(&self) -> &[Attribute] {
         match self {
@@ -64,16 +64,16 @@ impl Decorated for GlobalDirective {
     }
 }
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(DiagnosticDirective);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(EnableDirective);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(RequiresDirective);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl Decorated for GlobalDeclaration {
     fn attributes(&self) -> &[Attribute] {
         match self {
@@ -100,10 +100,10 @@ impl Decorated for GlobalDeclaration {
 
 impl_struct_decorated!(Declaration);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(TypeAlias);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(Struct);
 
 impl_struct_decorated!(StructMember);
@@ -112,10 +112,10 @@ impl_struct_decorated!(Function);
 
 impl_struct_decorated!(FormalParameter);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(ConstAssert);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl Decorated for Statement {
     fn attributes(&self) -> &[Attribute] {
         match self {
@@ -164,51 +164,51 @@ impl Decorated for Statement {
 
 impl_struct_decorated!(CompoundStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(AssignmentStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(IncrementStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(DecrementStatement);
 
 impl_struct_decorated!(IfStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(ElseIfClause);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(ElseClause);
 
 impl_struct_decorated!(SwitchStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(SwitchClause);
 
 impl_struct_decorated!(LoopStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(ContinuingStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(BreakIfStatement);
 
 impl_struct_decorated!(ForStatement);
 
 impl_struct_decorated!(WhileStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(BreakStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(ContinueStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(ReturnStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(DiscardStatement);
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 impl_struct_decorated!(FunctionCallStatement);

@@ -24,5 +24,6 @@ lalrpop = { git = "https://github.com/k2d222/lalrpop.git", branch = "more-cfg-at
 
 [features]
 default = ["imports", "condcomp"]
+attributes = []
 imports = []
-condcomp = []
+condcomp = ["attributes"]

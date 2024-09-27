@@ -36,7 +36,7 @@ pub struct TranslationUnit {
 #[cfg(feature = "imports")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Import {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub path: std::path::PathBuf,
     pub content: ImportContent,
@@ -66,7 +66,7 @@ pub enum GlobalDirective {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiagnosticDirective {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub severity: DiagnosticSeverity,
     pub rule_name: String,
@@ -82,14 +82,14 @@ pub enum DiagnosticSeverity {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnableDirective {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub extensions: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequiresDirective {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub extensions: Vec<String>,
 }
@@ -124,7 +124,7 @@ pub enum DeclarationKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeAlias {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub name: String,
     pub ty: TypeExpression,
@@ -132,7 +132,7 @@ pub struct TypeAlias {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Struct {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub name: String,
     pub members: Vec<StructMember>,
@@ -164,7 +164,7 @@ pub struct FormalParameter {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConstAssert {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub expression: Expression,
 }
@@ -314,7 +314,7 @@ pub struct CompoundStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AssignmentStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub operator: AssignmentOperator,
     pub lhs: Expression,
@@ -338,14 +338,14 @@ pub enum AssignmentOperator {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IncrementStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub expression: Expression,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecrementStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub expression: Expression,
 }
@@ -366,7 +366,7 @@ pub struct IfClause {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseIfClause {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub expression: Expression,
     pub body: CompoundStatement,
@@ -374,7 +374,7 @@ pub struct ElseIfClause {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseClause {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub body: CompoundStatement,
 }
@@ -389,7 +389,7 @@ pub struct SwitchStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SwitchClause {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub case_selectors: Vec<CaseSelector>,
     pub body: CompoundStatement,
@@ -413,7 +413,7 @@ pub struct LoopStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinuingStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub body: CompoundStatement,
     // a BreakIfStatement can only appear inside a ContinuingStatement body, therefore it
@@ -424,7 +424,7 @@ pub struct ContinuingStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BreakIfStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub expression: Expression,
 }
@@ -447,32 +447,32 @@ pub struct WhileStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BreakStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinueStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub expression: Option<Expression>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiscardStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCallStatement {
-    #[cfg(feature = "condcomp")]
+    #[cfg(feature = "attributes")]
     pub attributes: Vec<Attribute>,
     pub call: FunctionCall,
 }

@@ -231,7 +231,7 @@ pub GlobalDirective: GlobalDirective = {
     RequiresDirective   => GlobalDirective::Requires(<>),
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 EnableDirective: EnableDirective = {
     "enable" <extensions: EnableExtensionList> ";" => EnableDirective {
         extensions
@@ -242,7 +242,7 @@ EnableExtensionList: Vec<String> = {
     Comma1<EnableExtensionName>,
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 RequiresDirective: RequiresDirective = {
     "requires" <extensions: SoftwareExtensionList> ";" => RequiresDirective {
         extensions
@@ -253,7 +253,7 @@ SoftwareExtensionList: Vec<String> = {
     Comma1<SoftwareExtensionName>,
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 DiagnosticDirective: DiagnosticDirective = {
     "diagnostic" <DiagnosticControl> ";" => {
         let (severity, rule_name) = <>;
@@ -267,7 +267,7 @@ DiagnosticDirective: DiagnosticDirective = {
 // 6. TYPES
 // https://www.w3.org/TR/WGSL/#types
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 StructDecl: Struct = {
     "struct" <name: Ident> <members: StructBodyDecl> => Struct {
         name, members
@@ -284,7 +284,7 @@ StructMember: StructMember = {
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 TypeAliasDecl: TypeAlias = {
     "alias" <name: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
         name, ty
@@ -303,7 +303,7 @@ TemplateElaboratedIdent = Ident /* DisambiguateTemplate */ TemplateList?;
 // 7. VARIABLE AND VALUE DECLARATIONS
 // https://www.w3.org/TR/WGSL/#var-and-value
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 VariableOrValueStatement: Declaration = {
     VariableDecl,
     <mut decl: VariableDecl> "=" <initializer: Expression> => {
@@ -334,7 +334,7 @@ VariableOrValueStatement: Declaration = {
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 VariableDecl: Declaration = {
     "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
         let (name, ty) = ident;
@@ -353,7 +353,7 @@ OptionallyTypedIdent: (String, Option<TypeExpression>) = {
     <Ident> <(":" <TypeSpecifier>)?>,
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 GlobalVariableDecl: Declaration = {
     <attributes: Attribute*> <mut decl: VariableDecl> <initializer: ("=" <Expression>)?> => {
         decl.attributes = attributes;
@@ -362,7 +362,7 @@ GlobalVariableDecl: Declaration = {
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 GlobalValueDecl: Declaration = {
     "const" <ident: OptionallyTypedIdent> "=" <initializer: Expression> => {
         let (name, ty) = ident;
@@ -615,7 +615,7 @@ CompoundStatement: CompoundStatement = {
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 AssignmentStatement: AssignmentStatement = {
     <lhs: LhsExpression> "=" <rhs: Expression> => AssignmentStatement {
         operator: AssignmentOperator::Equal, lhs, rhs
@@ -642,14 +642,14 @@ CompoundAssignmentOperator: AssignmentOperator = {
     "<<=" => AssignmentOperator::ShiftLeftAssign,
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 IncrementStatement: IncrementStatement = {
     <expression: LhsExpression> "++" => IncrementStatement {
         expression
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 DecrementStatement: DecrementStatement = {
     <expression: LhsExpression> "--" => DecrementStatement {
         expression
@@ -666,12 +666,12 @@ IfClause: IfClause = "if" <expression: Expression> <body: CompoundStatement> => 
     expression, body
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 ElseIfClause: ElseIfClause = "else" "if" <expression: Expression> <body: CompoundStatement> => ElseIfClause {
     expression, body
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 ElseClause: ElseClause = "else" <body: CompoundStatement> => ElseClause {
     body
 };
@@ -694,14 +694,14 @@ SwitchClause: SwitchClause = {
     DefaultAloneClause,
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 CaseClause: SwitchClause = {
     "case" <case_selectors: CaseSelectors> ":"? <body: CompoundStatement> => SwitchClause {
         case_selectors, body
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 DefaultAloneClause: SwitchClause = {
     "default" ":"? <body: CompoundStatement> => SwitchClause {
         case_selectors: vec![CaseSelector::Default], body
@@ -756,27 +756,27 @@ WhileStatement: WhileStatement = {
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 BreakStatement: BreakStatement = {
     "break" => BreakStatement {},
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 BreakIfStatement: BreakIfStatement = {
     "break" "if" <expression: Expression> ";" => BreakIfStatement {
         expression
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 ContinueStatement: ContinueStatement = {
     "continue" => ContinueStatement {},
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 ContinuingStatement = "continuing" <ContinuingCompoundStatement>;
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 ContinuingCompoundStatement: ContinuingStatement = {
     <attributes: Attribute*> "{" <statements: Statement*> <break_if: BreakIfStatement?> "}" => {
         let body = CompoundStatement { attributes, statements };
@@ -784,24 +784,24 @@ ContinuingCompoundStatement: ContinuingStatement = {
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 ReturnStatement: ReturnStatement = {
     "return" <expression: Expression?> => ReturnStatement {
         expression
     },
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 DiscardStatement: DiscardStatement = {
     "discard" => DiscardStatement {},
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 FuncCallStatement: FunctionCallStatement = <call: CallPhrase> => FunctionCallStatement {
     call
 };
 
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 ConstAssertStatement: ConstAssertStatement = {
     "const_assert" <expression: Expression> => ConstAssertStatement {
         expression
@@ -867,7 +867,7 @@ Param: FormalParameter = {
 // https://www.w3.org/TR/WGSL/#attributes
 
 // TODO: maybe parse the well-known attributes.
-#[cfg(not(feature = "condcomp"))]
+#[cfg(not(feature = "attributes"))]
 Attribute: Attribute = {
     "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> => Attribute {
         name, arguments
@@ -892,7 +892,7 @@ pub TranslationUnit: TranslationUnit = {
     },
 };
 
-#[cfg(all(feature = "imports", not(feature = "condcomp")))]
+#[cfg(all(feature = "imports", not(feature = "attributes")))]
 pub Import: Import = {
     "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => match relative {
         Some(mut relative) => {
@@ -904,7 +904,7 @@ pub Import: Import = {
     }
 };
 
-#[cfg(all(feature = "imports", feature = "condcomp"))]
+#[cfg(all(feature = "imports", feature = "attributes"))]
 pub Import: Import = {
     <attributes: Attribute*> "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => {
         let mut import = match relative {
@@ -933,15 +933,15 @@ ImportRelative: std::path::PathBuf = {
 #[cfg(feature = "imports")]
 ImportPath: Import = {
     <path: (<Ident> "/")+> <content: ImportContent> => Import {
-        #[cfg(feature = "condcomp")] attributes: Vec::new(),
+        #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: std::path::PathBuf::from_iter(path.iter()), content
     },
     ItemImport => Import {
-        #[cfg(feature = "condcomp")] attributes: Vec::new(),
+        #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: Default::default(), content: ImportContent::Item(<>)
     },
     StarImport => Import {
-        #[cfg(feature = "condcomp")] attributes: Vec::new(),
+        #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: Default::default(), content: ImportContent::Star(<>)
     },
 };
@@ -976,34 +976,93 @@ ImportCollection: Vec<Import> = {
 // https://github.com/wgsl-tooling-wg/wesl-spec/pull/19
 // date: 2024-09-14, hash: b1446356ff206e5826a58812895bc6d3d64a2220
 
-#[cfg(feature = "condcomp")]
+#[cfg(not(feature = "imports"))]
+Keyword: String = {
+    "alias" => <>.to_string(),
+    "break" => <>.to_string(),
+    "case" => <>.to_string(),
+    "const" => <>.to_string(),
+    "const_assert" => <>.to_string(),
+    "continue" => <>.to_string(),
+    "continuing" => <>.to_string(),
+    "default" => <>.to_string(),
+    "diagnostic" => <>.to_string(),
+    "discard" => <>.to_string(),
+    "else" => <>.to_string(),
+    "enable" => <>.to_string(),
+    "false" => <>.to_string(),
+    "fn" => <>.to_string(),
+    "for" => <>.to_string(),
+    "if" => <>.to_string(),
+    "let" => <>.to_string(),
+    "loop" => <>.to_string(),
+    "override" => <>.to_string(),
+    "requires" => <>.to_string(),
+    "return" => <>.to_string(),
+    "struct" => <>.to_string(),
+    "switch" => <>.to_string(),
+    "true" => <>.to_string(),
+    "var" => <>.to_string(),
+    "while" => <>.to_string(),
+};
+
+#[cfg(feature = "imports")]
+Keyword: String = {
+    "alias" => <>.to_string(),
+    "break" => <>.to_string(),
+    "case" => <>.to_string(),
+    "const" => <>.to_string(),
+    "const_assert" => <>.to_string(),
+    "continue" => <>.to_string(),
+    "continuing" => <>.to_string(),
+    "default" => <>.to_string(),
+    "diagnostic" => <>.to_string(),
+    "discard" => <>.to_string(),
+    "else" => <>.to_string(),
+    "enable" => <>.to_string(),
+    "false" => <>.to_string(),
+    "fn" => <>.to_string(),
+    "for" => <>.to_string(),
+    "if" => <>.to_string(),
+    "let" => <>.to_string(),
+    "loop" => <>.to_string(),
+    "override" => <>.to_string(),
+    "requires" => <>.to_string(),
+    "return" => <>.to_string(),
+    "struct" => <>.to_string(),
+    "switch" => <>.to_string(),
+    "true" => <>.to_string(),
+    "var" => <>.to_string(),
+    "while" => <>.to_string(),
+    "as" => <>.to_string(),
+    "import" => <>.to_string(),
+};
+
+#[cfg(feature = "attributes")]
 Attribute: Attribute = {
     "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> => Attribute {
         name, arguments
     },
-    "@" "const" <arguments: ArgumentExpressionList?> => Attribute {
-        name: "const".to_string(), arguments
-    },
-    "@" "if" <arguments: ArgumentExpressionList?> => Attribute {
-        name: "if".to_string(), arguments
+    "@" <name: Keyword> <arguments: ArgumentExpressionList?> => Attribute {
+        name, arguments
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 EnableDirective: EnableDirective = {
     <attributes: Attribute*> "enable" <extensions: EnableExtensionList> ";" => EnableDirective {
         attributes, extensions
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 RequiresDirective: RequiresDirective = {
     <attributes: Attribute*> "requires" <extensions: SoftwareExtensionList> ";" => RequiresDirective {
         attributes, extensions
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 DiagnosticDirective: DiagnosticDirective = {
     <Attribute*> "diagnostic" <DiagnosticControl> ";" => {
         let (attributes, (severity, rule_name)) = (<>);
@@ -1011,21 +1070,21 @@ DiagnosticDirective: DiagnosticDirective = {
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 StructDecl: Struct = {
     <attributes: Attribute*> "struct" <name: Ident> <members: StructBodyDecl> => Struct {
         attributes, name, members
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 TypeAliasDecl: TypeAlias = {
     <attributes: Attribute*> "alias" <name: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
         attributes, name, ty
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 VariableOrValueStatement: Declaration = {
     VariableDecl,
     <mut decl: VariableDecl> "=" <initializer: Expression> => {
@@ -1056,7 +1115,7 @@ VariableOrValueStatement: Declaration = {
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 VariableDecl: Declaration = {
     <attributes: Attribute*> "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
         let (name, ty) = ident;
@@ -1071,7 +1130,7 @@ VariableDecl: Declaration = {
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 GlobalVariableDecl: Declaration = {
     <mut decl: VariableDecl> <initializer: ("=" <Expression>)?> => {
         decl.initializer = initializer.map(Into::into);
@@ -1079,7 +1138,7 @@ GlobalVariableDecl: Declaration = {
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 GlobalValueDecl: Declaration = {
     <attributes: Attribute*> "const" <ident: OptionallyTypedIdent> "=" <initializer: Expression> => {
         let (name, ty) = ident;
@@ -1105,7 +1164,7 @@ GlobalValueDecl: Declaration = {
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 AssignmentStatement: AssignmentStatement = {
     <lhs: LhsExpression> "=" <rhs: Expression> => AssignmentStatement {
         attributes: vec![], operator: AssignmentOperator::Equal, lhs, rhs
@@ -1119,73 +1178,73 @@ AssignmentStatement: AssignmentStatement = {
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 IncrementStatement: IncrementStatement = {
     <expression: LhsExpression> "++" => IncrementStatement {
         attributes: vec![], expression
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 DecrementStatement: DecrementStatement = {
     <expression: LhsExpression> "--" => DecrementStatement {
         attributes: vec![], expression
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 ElseIfClause: ElseIfClause = "else" "if" <expression: Expression> <body: CompoundStatement> => ElseIfClause {
     attributes: vec![], expression, body
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 ElseClause: ElseClause = "else" <body: CompoundStatement> => ElseClause {
     attributes: vec![], body
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 CaseClause: SwitchClause = {
     <attributes: Attribute*> "case" <case_selectors: CaseSelectors> ":"? <body: CompoundStatement> => SwitchClause {
         attributes, case_selectors, body
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 DefaultAloneClause: SwitchClause = {
     <attributes: Attribute*> "default" ":"? <body: CompoundStatement> => SwitchClause {
         attributes, case_selectors: vec![CaseSelector::Default], body
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 BreakStatement: BreakStatement = {
     <attributes: Attribute*> "break" => BreakStatement {
         attributes
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 BreakIfStatement: BreakIfStatement = {
     <attributes: Attribute*> "break" "if" <expression: Expression> ";" => BreakIfStatement {
         attributes, expression
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 ContinueStatement: ContinueStatement = {
     <attributes: Attribute*> "continue" => ContinueStatement {
         attributes
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 ContinuingStatement: ContinuingStatement = <Attribute*> "continuing" <ContinuingCompoundStatement> => {
     let (attributes, mut statement) = (<>);
     statement.attributes = attributes;
     statement
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 ContinuingCompoundStatement: ContinuingStatement = {
     <attributes: Attribute*> "{" <statements: Statement*> <break_if: BreakIfStatement?> "}" => {
         let body = CompoundStatement { attributes, statements };
@@ -1193,26 +1252,26 @@ ContinuingCompoundStatement: ContinuingStatement = {
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 ReturnStatement: ReturnStatement = {
     <attributes: Attribute*> "return" <expression: Expression?> => ReturnStatement {
         attributes, expression
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 DiscardStatement: DiscardStatement = {
     <attributes: Attribute*> "discard" => DiscardStatement {
         attributes
     },
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 FuncCallStatement: FunctionCallStatement = <attributes: Attribute*> <call: CallPhrase> => FunctionCallStatement {
     attributes, call
 };
 
-#[cfg(feature = "condcomp")]
+#[cfg(feature = "attributes")]
 ConstAssertStatement: ConstAssertStatement = {
     <attributes: Attribute*> "const_assert" <expression: Expression> => ConstAssertStatement {
         attributes, expression
