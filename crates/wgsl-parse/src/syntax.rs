@@ -25,6 +25,8 @@
 
 use derive_more::From;
 
+use crate::span::Spanned;
+
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct TranslationUnit {
     #[cfg(feature = "imports")]
@@ -37,7 +39,7 @@ pub struct TranslationUnit {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Import {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub path: std::path::PathBuf,
     pub content: ImportContent,
 }
@@ -67,7 +69,7 @@ pub enum GlobalDirective {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiagnosticDirective {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub severity: DiagnosticSeverity,
     pub rule_name: String,
 }
@@ -83,14 +85,14 @@ pub enum DiagnosticSeverity {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnableDirective {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub extensions: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequiresDirective {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub extensions: Vec<String>,
 }
 
@@ -106,12 +108,12 @@ pub enum GlobalDeclaration {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Declaration {
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub kind: DeclarationKind,
     pub template_args: TemplateArgs,
     pub name: String,
     pub ty: Option<TypeExpression>,
-    pub initializer: Option<Expression>,
+    pub initializer: Option<ExpressionNode>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -125,7 +127,7 @@ pub enum DeclarationKind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeAlias {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub name: String,
     pub ty: TypeExpression,
 }
@@ -133,31 +135,31 @@ pub struct TypeAlias {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Struct {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub name: String,
     pub members: Vec<StructMember>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructMember {
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub name: String,
     pub ty: TypeExpression,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub name: String,
     pub parameters: Vec<FormalParameter>,
-    pub return_attributes: Vec<Attribute>,
+    pub return_attributes: Attributes,
     pub return_type: Option<TypeExpression>,
     pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FormalParameter {
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub name: String,
     pub ty: TypeExpression,
 }
@@ -165,15 +167,16 @@ pub struct FormalParameter {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConstAssert {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
-    pub expression: Expression,
+    pub attributes: Attributes,
+    pub expression: ExpressionNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Attribute {
     pub name: String,
-    pub arguments: Option<Vec<Expression>>,
+    pub arguments: Option<Vec<ExpressionNode>>,
 }
+pub type Attributes = Vec<Attribute>;
 
 #[derive(Clone, Debug, PartialEq, From)]
 pub enum Expression {
@@ -187,6 +190,8 @@ pub enum Expression {
     Identifier(IdentifierExpression),
     Type(TypeExpression),
 }
+
+pub type ExpressionNode = Spanned<Expression>;
 
 #[derive(Clone, Copy, Debug, PartialEq, From)]
 pub enum LiteralExpression {
@@ -202,25 +207,25 @@ pub enum LiteralExpression {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParenthesizedExpression {
-    pub expression: Box<Expression>,
+    pub expression: ExpressionNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedComponentExpression {
-    pub base: Box<Expression>,
+    pub base: ExpressionNode,
     pub component: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IndexingExpression {
-    pub base: Box<Expression>,
-    pub index: Box<Expression>,
+    pub base: ExpressionNode,
+    pub index: ExpressionNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
-    pub operand: Box<Expression>, // TODO maybe rename rhs
+    pub operand: ExpressionNode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -235,8 +240,8 @@ pub enum UnaryOperator {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
-    pub left: Box<Expression>, // TODO: rename lhs rhs
-    pub right: Box<Expression>,
+    pub left: ExpressionNode,
+    pub right: ExpressionNode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -265,7 +270,7 @@ pub enum BinaryOperator {
 pub struct FunctionCall {
     pub name: String,
     pub template_args: TemplateArgs,
-    pub arguments: Vec<Expression>,
+    pub arguments: Vec<ExpressionNode>,
 }
 
 pub type FunctionCallExpression = FunctionCall;
@@ -281,8 +286,10 @@ pub struct TypeExpression {
     pub template_args: TemplateArgs,
 }
 
-// TODO
-pub type TemplateArg = Expression;
+#[derive(Clone, Debug, PartialEq)]
+pub struct TemplateArg {
+    pub expression: ExpressionNode,
+}
 pub type TemplateArgs = Option<Vec<TemplateArg>>;
 
 #[derive(Clone, Debug, PartialEq, From)]
@@ -306,19 +313,21 @@ pub enum Statement {
     Declaration(DeclarationStatement),
 }
 
+pub type StatementNode = Spanned<Statement>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompoundStatement {
-    pub attributes: Vec<Attribute>,
-    pub statements: Vec<Statement>,
+    pub attributes: Attributes,
+    pub statements: Vec<StatementNode>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AssignmentStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub operator: AssignmentOperator,
-    pub lhs: Expression,
-    pub rhs: Expression,
+    pub lhs: ExpressionNode,
+    pub rhs: ExpressionNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -339,20 +348,20 @@ pub enum AssignmentOperator {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IncrementStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
-    pub expression: Expression,
+    pub attributes: Attributes,
+    pub expression: ExpressionNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecrementStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
-    pub expression: Expression,
+    pub attributes: Attributes,
+    pub expression: ExpressionNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfStatement {
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub if_clause: IfClause,
     pub else_if_clauses: Vec<ElseIfClause>,
     pub else_clause: Option<ElseClause>,
@@ -360,37 +369,37 @@ pub struct IfStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfClause {
-    pub expression: Expression,
+    pub expression: ExpressionNode,
     pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseIfClause {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
-    pub expression: Expression,
+    pub attributes: Attributes,
+    pub expression: ExpressionNode,
     pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseClause {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SwitchStatement {
-    pub attributes: Vec<Attribute>,
-    pub expression: Expression,
-    pub body_attributes: Vec<Attribute>,
+    pub attributes: Attributes,
+    pub expression: ExpressionNode,
+    pub body_attributes: Attributes,
     pub clauses: Vec<SwitchClause>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SwitchClause {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub case_selectors: Vec<CaseSelector>,
     pub body: CompoundStatement,
 }
@@ -398,15 +407,15 @@ pub struct SwitchClause {
 #[derive(Clone, Debug, PartialEq, From)]
 pub enum CaseSelector {
     Default,
-    Expression(Expression),
+    Expression(ExpressionNode),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct LoopStatement {
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub body: CompoundStatement,
     // a ContinuingStatement can only appear inside a LoopStatement body, therefore it is
-    // not part of the Statement enum. it appears here instead, but consider it part of
+    // not part of the StatementNode enum. it appears here instead, but consider it part of
     // body as the last statement of the CompoundStatement.
     pub continuing: Option<ContinuingStatement>,
 }
@@ -414,10 +423,10 @@ pub struct LoopStatement {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinuingStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub body: CompoundStatement,
     // a BreakIfStatement can only appear inside a ContinuingStatement body, therefore it
-    // not part of the Statement enum. it appears here instead, but consider it part of
+    // not part of the StatementNode enum. it appears here instead, but consider it part of
     // body as the last statement of the CompoundStatement.
     pub break_if: Option<BreakIfStatement>,
 }
@@ -425,55 +434,55 @@ pub struct ContinuingStatement {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BreakIfStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
-    pub expression: Expression,
+    pub attributes: Attributes,
+    pub expression: ExpressionNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForStatement {
-    pub attributes: Vec<Attribute>,
-    pub initializer: Option<Box<Statement>>,
-    pub condition: Option<Expression>,
-    pub update: Option<Box<Statement>>,
+    pub attributes: Attributes,
+    pub initializer: Option<StatementNode>,
+    pub condition: Option<ExpressionNode>,
+    pub update: Option<StatementNode>,
     pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct WhileStatement {
-    pub attributes: Vec<Attribute>,
-    pub condition: Expression,
+    pub attributes: Attributes,
+    pub condition: ExpressionNode,
     pub body: CompoundStatement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BreakStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinueStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
-    pub expression: Option<Expression>,
+    pub attributes: Attributes,
+    pub expression: Option<ExpressionNode>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiscardStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCallStatement {
     #[cfg(feature = "attributes")]
-    pub attributes: Vec<Attribute>,
+    pub attributes: Attributes,
     pub call: FunctionCall,
 }
 

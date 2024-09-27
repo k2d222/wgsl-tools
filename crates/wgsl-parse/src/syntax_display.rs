@@ -1,8 +1,14 @@
-use crate::syntax::*;
+use crate::{span::Spanned, syntax::*};
 use core::fmt;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
+
+impl<T: Display> Display for Spanned<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.node().fmt(f)
+    }
+}
 
 struct Indent<T: Display>(pub T);
 
@@ -333,11 +339,12 @@ impl Display for TypeExpression {
     }
 }
 
-// impl Display for TemplateArg {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         Ok(())
-//     }
-// }
+impl Display for TemplateArg {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let expr = &self.expression;
+        write!(f, "{expr}")
+    }
+}
 
 fn fmt_template(tplt: &Option<Vec<TemplateArg>>) -> String {
     match tplt {

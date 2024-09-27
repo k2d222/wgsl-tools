@@ -17,7 +17,7 @@ pub trait VisitMut<T> {
 // TODO: find a way to avoid duplication
 
 macro_rules! impl_visit {
-    ($type:ident => $visited:ident, $expr:tt) => {
+    ($type:ty => $visited:ty, $expr:tt) => {
         impl Visit<$visited> for $type {
             fn visit<'a>(&'a self) -> impl Iterator<Item = &'a $visited>
             where
@@ -31,7 +31,7 @@ macro_rules! impl_visit {
 }
 
 macro_rules! impl_visit_mut {
-    ($type:ident => $visited:ident, $expr:tt) => {
+    ($type:ty => $visited:ty, $expr:tt) => {
         impl VisitMut<$visited> for $type {
             fn visit_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut $visited>
             where
@@ -44,37 +44,37 @@ macro_rules! impl_visit_mut {
     };
 }
 
-impl_visit! { Expression => Expression,
+impl_visit! { Expression => ExpressionNode,
     {
-        Expression::Parenthesized.expression.(x => Visit::<Expression>::visit(&**x)),
-        Expression::NamedComponent.base.(x => Visit::<Expression>::visit(&**x)),
+        Expression::Parenthesized.expression.(x => Visit::<ExpressionNode>::visit(&**x)),
+        Expression::NamedComponent.base.(x => Visit::<ExpressionNode>::visit(&**x)),
         Expression::Indexing.{
-            base.(x => Visit::<Expression>::visit(&**x)),
-            index.(x => Visit::<Expression>::visit(&**x)),
+            base.(x => Visit::<ExpressionNode>::visit(&**x)),
+            index.(x => Visit::<ExpressionNode>::visit(&**x)),
         },
-        Expression::Unary.operand.(x => Visit::<Expression>::visit(&**x)),
+        Expression::Unary.operand.(x => Visit::<ExpressionNode>::visit(&**x)),
         Expression::Binary.{
-            left.(x => Visit::<Expression>::visit(&**x)),
-            right.(x => Visit::<Expression>::visit(&**x)),
+            left.(x => Visit::<ExpressionNode>::visit(&**x)),
+            right.(x => Visit::<ExpressionNode>::visit(&**x)),
         },
-        Expression::FunctionCall.arguments.[].(x => Visit::<Expression>::visit(x)),
+        Expression::FunctionCall.arguments.[].(x => Visit::<ExpressionNode>::visit(&**x)),
     }
 }
 
-impl_visit_mut! { Expression => Expression,
+impl_visit_mut! { Expression => ExpressionNode,
     {
-        Expression::Parenthesized.expression.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
-        Expression::NamedComponent.base.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        Expression::Parenthesized.expression.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
+        Expression::NamedComponent.base.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
         Expression::Indexing.{
-            base.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
-            index.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+            base.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
+            index.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
         },
-        Expression::Unary.operand.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+        Expression::Unary.operand.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
         Expression::Binary.{
-            left.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
-            right.(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+            left.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
+            right.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
         },
-        Expression::FunctionCall.arguments.[].(x => VisitMut::<Expression>::visit_mut(x)),
+        Expression::FunctionCall.arguments.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
     }
 }
 
@@ -85,7 +85,7 @@ impl_visit! { Expression => TypeExpression,
         Expression::Indexing.{ base.(x => Visit::<TypeExpression>::visit(&**x)), index.(x => Visit::<TypeExpression>::visit(&**x)) },
         Expression::Unary.operand.(x => Visit::<TypeExpression>::visit(&**x)),
         Expression::Binary.{ left.(x => Visit::<TypeExpression>::visit(&**x)), right.(x => Visit::<TypeExpression>::visit(&**x)) },
-        Expression::FunctionCall.arguments.[].(x => Visit::<TypeExpression>::visit(x)),
+        Expression::FunctionCall.arguments.[].(x => Visit::<TypeExpression>::visit(&**x)),
         Expression::Type,
     }
 }
@@ -97,50 +97,50 @@ impl_visit_mut! { Expression => TypeExpression,
         Expression::Indexing.{ base.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)), index.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)) },
         Expression::Unary.operand.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
         Expression::Binary.{ left.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)), right.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)) },
-        Expression::FunctionCall.arguments.[].(x => VisitMut::<TypeExpression>::visit_mut(x)),
+        Expression::FunctionCall.arguments.[].(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
         Expression::Type,
     }
 }
 
-impl_visit! { Statement => Expression,
+impl_visit! { Statement => ExpressionNode,
     {
-        Statement::Compound.statements.[].(x => Visit::<Expression>::visit(x)),
+        Statement::Compound.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
         Statement::Assignment.{ lhs, rhs },
         Statement::Increment.expression,
         Statement::Decrement.expression,
         Statement::If.{
             if_clause.{
                 expression,
-                body.statements.[].(x => Visit::<Expression>::visit(x)),
+                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
             },
             else_if_clauses.[].{
                 expression,
-                body.statements.[].(x => Visit::<Expression>::visit(x)),
+                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
             }
         },
         Statement::Switch.{
             expression,
             clauses.[].{
                 case_selectors.[].CaseSelector::Expression,
-                body.statements.[].(x => Visit::<Expression>::visit(x)),
+                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
             }
         },
         Statement::Loop.{
-            body.statements.[].(x => Visit::<Expression>::visit(x)),
+            body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
             continuing.[].{
-                body.statements.[].(x => Visit::<Expression>::visit(x)),
+                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
                 break_if.[].expression,
             }
         },
         Statement::For.{
-            initializer.[].(x => Visit::<Expression>::visit(&**x)),
+            initializer.[].(x => Visit::<ExpressionNode>::visit(&**x)),
             condition.[],
-            update.[].(x => Visit::<Expression>::visit(&**x)),
-            body.statements.[].(x => Visit::<Expression>::visit(x)),
+            update.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+            body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
         },
         Statement::While.{
             condition,
-            body.statements.[].(x => Visit::<Expression>::visit(x)),
+            body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
         },
         Statement::Return.expression.[],
         Statement::FunctionCall.call.arguments.[],
@@ -149,45 +149,45 @@ impl_visit! { Statement => Expression,
     }
 }
 
-impl_visit_mut! { Statement => Expression,
+impl_visit_mut! { Statement => ExpressionNode,
     {
-        Statement::Compound.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+        Statement::Compound.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
         Statement::Assignment.{ lhs, rhs },
         Statement::Increment.expression,
         Statement::Decrement.expression,
         Statement::If.{
             if_clause.{
                 expression,
-                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
             },
             else_if_clauses.[].{
                 expression,
-                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
             }
         },
         Statement::Switch.{
             expression,
             clauses.[].{
                 case_selectors.[].CaseSelector::Expression,
-                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
             }
         },
         Statement::Loop.{
-            body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
             continuing.[].{
-                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
                 break_if.[].expression,
             }
         },
         Statement::For.{
-            initializer.[].(x => VisitMut::<Expression>::visit_mut(&mut **x)),
+            initializer.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
             condition.[],
-            update.[].(x => VisitMut::<Expression>::visit_mut(&mut **x)),
-            body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            update.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
+            body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
         },
         Statement::While.{
             condition,
-            body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+            body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
         },
         Statement::Return.expression.[],
         Statement::FunctionCall.call.arguments.[],
@@ -196,7 +196,7 @@ impl_visit_mut! { Statement => Expression,
     }
 }
 
-impl_visit! { Statement => Statement,
+impl_visit! { Statement => StatementNode,
     {
         Statement::Compound.statements.[],
         Statement::If.{
@@ -209,15 +209,15 @@ impl_visit! { Statement => Statement,
             continuing.[].body.statements.[],
         },
         Statement::For.{
-            initializer.[].(x => std::iter::once(&**x)),
-            update.[].(x => std::iter::once(&**x)),
+            initializer.[],
+            update.[],
             body.statements.[],
         },
         Statement::While.body.statements.[],
     }
 }
 
-impl_visit_mut! { Statement => Statement,
+impl_visit_mut! { Statement => StatementNode,
     {
         Statement::Compound.statements.[],
         Statement::If.{
@@ -230,47 +230,47 @@ impl_visit_mut! { Statement => Statement,
             continuing.[].body.statements.[],
         },
         Statement::For.{
-            initializer.[].(x => std::iter::once(&mut **x)),
-            update.[].(x => std::iter::once(&mut **x)),
+            initializer.[],
+            update.[],
             body.statements.[],
         },
         Statement::While.body.statements.[],
     }
 }
 
-impl_visit! { TranslationUnit => Expression,
+impl_visit! { TranslationUnit => ExpressionNode,
     {
         global_declarations.[].{
             GlobalDeclaration::Declaration.{
                 initializer.[],
             },
             GlobalDeclaration::Function.{
-                body.statements.[].(x => Visit::<Expression>::visit(x)),
+                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
             }
         }
     }
 }
 
-impl_visit_mut! { TranslationUnit => Expression,
+impl_visit_mut! { TranslationUnit => ExpressionNode,
     {
         global_declarations.[].{
             GlobalDeclaration::Declaration.{
                 initializer.[],
             },
             GlobalDeclaration::Function.{
-                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)),
+                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
             }
         }
     }
 }
 
-impl_visit! { TranslationUnit => Statement,
+impl_visit! { TranslationUnit => StatementNode,
     {
         global_declarations.[].GlobalDeclaration::Function.body.statements.[]
     }
 }
 
-impl_visit_mut! { TranslationUnit => Statement,
+impl_visit_mut! { TranslationUnit => StatementNode,
     {
         global_declarations.[].GlobalDeclaration::Function.body.statements.[]
     }
@@ -281,14 +281,14 @@ impl_visit! { TranslationUnit => TypeExpression,
         global_declarations.[].{
             GlobalDeclaration::Declaration.{
                 ty.[],
-                initializer.[].(x => Visit::<TypeExpression>::visit(x)),
+                initializer.[].(x => Visit::<TypeExpression>::visit(&**x)),
             },
             GlobalDeclaration::TypeAlias.ty,
             GlobalDeclaration::Struct.members.[].ty,
             GlobalDeclaration::Function.{
                 parameters.[].ty,
                 return_type.[],
-                body.statements.[].(x => Visit::<Expression>::visit(x)).(x => Visit::<TypeExpression>::visit(x)),
+                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)).(x => Visit::<TypeExpression>::visit(&**x)),
             }
         }
     }
@@ -299,14 +299,14 @@ impl_visit_mut! { TranslationUnit => TypeExpression,
         global_declarations.[].{
             GlobalDeclaration::Declaration.{
                 ty.[],
-                initializer.[].(x => VisitMut::<TypeExpression>::visit_mut(x)),
+                initializer.[].(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
             },
             GlobalDeclaration::TypeAlias.ty,
             GlobalDeclaration::Struct.members.[].ty,
             GlobalDeclaration::Function.{
                 parameters.[].ty,
                 return_type.[],
-                body.statements.[].(x => VisitMut::<Expression>::visit_mut(x)).(x => VisitMut::<TypeExpression>::visit_mut(x)),
+                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)).(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
             }
         }
     }

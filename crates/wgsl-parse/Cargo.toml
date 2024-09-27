@@ -10,7 +10,7 @@ license.workspace = true
 
 [dependencies]
 annotate-snippets = "0.11.4"
-derive_more = { version = "1.0.0", features = ["from"] }
+derive_more = { version = "1.0.0", features = ["as_ref", "deref", "deref_mut", "from"] }
 itertools = "0.13.0"
 lalrpop-util = "0.20.2"
 lexical = { version = "6.1.1", features = ["format", "power-of-two"] }

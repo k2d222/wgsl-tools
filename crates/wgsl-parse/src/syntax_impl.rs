@@ -28,7 +28,7 @@ pub trait Decorated {
     fn attributes_mut(&mut self) -> &mut [Attribute];
 }
 
-macro_rules! impl_struct_decorated {
+macro_rules! impl_decorated_struct {
     ($ty:ty) => {
         impl Decorated for $ty {
             fn attributes(&self) -> &[Attribute] {
@@ -43,7 +43,7 @@ macro_rules! impl_struct_decorated {
 }
 
 #[cfg(all(feature = "imports", feature = "attributes"))]
-impl_struct_decorated!(Import);
+impl_decorated_struct!(Import);
 
 #[cfg(feature = "attributes")]
 impl Decorated for GlobalDirective {
@@ -65,13 +65,13 @@ impl Decorated for GlobalDirective {
 }
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(DiagnosticDirective);
+impl_decorated_struct!(DiagnosticDirective);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(EnableDirective);
+impl_decorated_struct!(EnableDirective);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(RequiresDirective);
+impl_decorated_struct!(RequiresDirective);
 
 #[cfg(feature = "attributes")]
 impl Decorated for GlobalDeclaration {
@@ -98,22 +98,22 @@ impl Decorated for GlobalDeclaration {
     }
 }
 
-impl_struct_decorated!(Declaration);
+impl_decorated_struct!(Declaration);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(TypeAlias);
+impl_decorated_struct!(TypeAlias);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(Struct);
+impl_decorated_struct!(Struct);
 
-impl_struct_decorated!(StructMember);
+impl_decorated_struct!(StructMember);
 
-impl_struct_decorated!(Function);
+impl_decorated_struct!(Function);
 
-impl_struct_decorated!(FormalParameter);
+impl_decorated_struct!(FormalParameter);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(ConstAssert);
+impl_decorated_struct!(ConstAssert);
 
 #[cfg(feature = "attributes")]
 impl Decorated for Statement {
@@ -162,53 +162,53 @@ impl Decorated for Statement {
     }
 }
 
-impl_struct_decorated!(CompoundStatement);
+impl_decorated_struct!(CompoundStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(AssignmentStatement);
+impl_decorated_struct!(AssignmentStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(IncrementStatement);
+impl_decorated_struct!(IncrementStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(DecrementStatement);
+impl_decorated_struct!(DecrementStatement);
 
-impl_struct_decorated!(IfStatement);
-
-#[cfg(feature = "attributes")]
-impl_struct_decorated!(ElseIfClause);
+impl_decorated_struct!(IfStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(ElseClause);
-
-impl_struct_decorated!(SwitchStatement);
+impl_decorated_struct!(ElseIfClause);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(SwitchClause);
+impl_decorated_struct!(ElseClause);
 
-impl_struct_decorated!(LoopStatement);
-
-#[cfg(feature = "attributes")]
-impl_struct_decorated!(ContinuingStatement);
+impl_decorated_struct!(SwitchStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(BreakIfStatement);
+impl_decorated_struct!(SwitchClause);
 
-impl_struct_decorated!(ForStatement);
-
-impl_struct_decorated!(WhileStatement);
+impl_decorated_struct!(LoopStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(BreakStatement);
+impl_decorated_struct!(ContinuingStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(ContinueStatement);
+impl_decorated_struct!(BreakIfStatement);
+
+impl_decorated_struct!(ForStatement);
+
+impl_decorated_struct!(WhileStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(ReturnStatement);
+impl_decorated_struct!(BreakStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(DiscardStatement);
+impl_decorated_struct!(ContinueStatement);
 
 #[cfg(feature = "attributes")]
-impl_struct_decorated!(FunctionCallStatement);
+impl_decorated_struct!(ReturnStatement);
+
+#[cfg(feature = "attributes")]
+impl_decorated_struct!(DiscardStatement);
+
+#[cfg(feature = "attributes")]
+impl_decorated_struct!(FunctionCallStatement);
