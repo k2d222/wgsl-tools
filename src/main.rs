@@ -71,6 +71,9 @@ struct EvalArgs {
     /// context to evaluate the expression into
     #[command(flatten)]
     compile: CompileArgs,
+    /// show nicer error messages
+    #[arg(long)]
+    diagnostics: bool,
     /// the expression to evaluate
     expr: String,
 }
@@ -102,6 +105,8 @@ enum CliError {
     FileNotFound,
     #[error("{0}")]
     CompileError(#[from] wesl::Error),
+    #[error("{0}")]
+    DiagnosticError(#[from] wesl::consteval::Error), // TODO refactor
 }
 
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
@@ -150,17 +155,33 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
 fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
     let wgsl = run_compile(&args.compile)?;
 
-    let mut ctx = Context::new(&wgsl);
-    let expr = args
-        .expr
-        .parse::<Expression>()
-        .map_err(wesl::Error::ParseError)?;
-    let instance = wgsl
-        .exec(&mut ctx)
-        .and_then(|_| expr.eval(&mut ctx))
-        .map_err(wesl::Error::ConstEvalError)?;
+    if args.diagnostics {
+        // we sringify and parse again to have all the spans pointing at the same source..
+        let source = wgsl.to_string();
+        let wgsl = source.parse().map_err(wesl::Error::ParseError)?;
 
-    Ok(instance)
+        let mut ctx = Context::new(&wgsl);
+        let expr = args
+            .expr
+            .parse::<Expression>()
+            .map_err(wesl::Error::ParseError)?;
+        let instance = wgsl
+            .exec(&mut ctx)
+            .and_then(|_| expr.eval(&mut ctx))
+            .map_err(|e| e.with_source(source, &ctx))?;
+        Ok(instance)
+    } else {
+        let mut ctx = Context::new(&wgsl);
+        let expr = args
+            .expr
+            .parse::<Expression>()
+            .map_err(wesl::Error::ParseError)?;
+        let instance = wgsl
+            .exec(&mut ctx)
+            .and_then(|_| expr.eval(&mut ctx))
+            .map_err(wesl::Error::ConstEvalError)?;
+        Ok(instance)
+    }
 }
 
 fn main() {

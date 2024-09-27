@@ -4,7 +4,7 @@ use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{error::FormatError, span::Span, syntax::*};
 
-use crate::Instance;
+use crate::{Context, Instance};
 
 use super::{Flow, LiteralInstance, MemView, Ty, Type};
 
@@ -144,6 +144,16 @@ pub enum EvalError {
     FlowInModule(Flow),
 }
 
+impl EvalError {
+    pub fn with_source(self, source: String, ctx: &Context) -> Error {
+        Error {
+            error: self,
+            source,
+            span: ctx.err_span.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Error {
     pub error: EvalError,
@@ -160,7 +170,7 @@ impl Display for Error {
         let mut msg = Level::Error.title(&text);
 
         if let Some(span) = &self.span {
-            let annot = Level::Info.span(span.range());
+            let annot = Level::Error.span(span.range());
             let snip = Snippet::source(&self.source).fold(true).annotation(annot);
             msg = msg.snippet(snip);
         }

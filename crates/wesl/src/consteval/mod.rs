@@ -97,6 +97,7 @@ pub struct Context<'s> {
     kind: ScopeKind,
     stage: EvalStage,
     err_span: Option<Span>,
+    ctx_span: Option<Span>,
 }
 
 impl<'s> Context<'s> {
@@ -107,6 +108,7 @@ impl<'s> Context<'s> {
             kind: ScopeKind::Function,
             stage: EvalStage::Const,
             err_span: None,
+            ctx_span: None,
         }
     }
 

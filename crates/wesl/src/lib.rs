@@ -1,7 +1,7 @@
 #[cfg(feature = "condcomp")]
 mod condcomp;
 #[cfg(feature = "consteval")]
-mod consteval;
+pub mod consteval;
 #[cfg(feature = "imports")]
 mod import;
 
