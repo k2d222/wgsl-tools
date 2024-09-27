@@ -1,6 +1,6 @@
 use std::iter::zip;
 
-use crate::ConstEvalError;
+use crate::EvalError;
 
 use super::{
     convert, convert_inner, Instance, LiteralInstance, MatInner, MatInstance, Ty, VecInner,
@@ -9,7 +9,7 @@ use super::{
 
 use wgsl_parse::syntax::*;
 
-type E = ConstEvalError;
+type E = EvalError;
 
 pub trait Compwise: Clone + Sized {
     fn compwise_unary_mut<F>(&mut self, f: F) -> Result<(), E>

@@ -10,11 +10,11 @@ use crate::Context;
 
 use super::{
     conv::{convert_all, Convert},
-    ArrayInstance, ConstEvalError, EvalTy, Instance, LiteralInstance, MatInner, MatInstance,
+    ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInner, MatInstance,
     StructInstance, SyntaxUtil, Ty, Type, VecInner, VecInstance,
 };
 
-type E = ConstEvalError;
+type E = EvalError;
 
 // TODO: when we have the wgsl! macro, we can refactor this.
 lazy_static! {
@@ -477,7 +477,7 @@ impl VecTemplate {
         match tplt {
             [Instance::Type(ty)] => {
                 if !ty.is_scalar() || ty.is_abstract() {
-                    return Err(ConstEvalError::Builtin(
+                    return Err(EvalError::Builtin(
                         "vector template type must be a concrete scalar type",
                     ));
                 }

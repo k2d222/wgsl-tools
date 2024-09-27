@@ -17,7 +17,7 @@ pub use condcomp::{run as run_condcomp, CondCompError};
 pub use import::{resolve, ImportError, Module};
 
 #[cfg(feature = "consteval")]
-pub use consteval::{ConstEvalError, Context, Eval, Exec, Instance};
+pub use consteval::{Context, Eval, EvalError, Exec, Instance};
 
 pub use mangle::{
     FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE, MANGLER_HASH,
@@ -53,7 +53,7 @@ pub enum Error {
     CondCompError(#[from] CondCompError),
     #[cfg(feature = "consteval")]
     #[error("constant evaluation error: {0}")]
-    ConstEvalError(#[from] ConstEvalError),
+    ConstEvalError(#[from] EvalError),
 }
 
 pub struct CompileOptions {

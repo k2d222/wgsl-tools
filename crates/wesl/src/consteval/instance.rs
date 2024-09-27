@@ -12,9 +12,9 @@ use itertools::Itertools;
 
 use crate::consteval::Ty;
 
-use super::{ConstEvalError, Type};
+use super::{EvalError, Type};
 
-type E = ConstEvalError;
+type E = EvalError;
 
 #[derive(Clone, Debug, From, PartialEq)]
 pub enum Instance {

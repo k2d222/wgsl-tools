@@ -1,6 +1,9 @@
 //! support functions to be injected in the lalrpop parser.
 
+use std::str::FromStr;
+
 use crate::{
+    error::CustomLalrError,
     span::{Span, Spanned},
     syntax::*,
 };
@@ -25,4 +28,18 @@ pub(crate) fn apply_components(
             Component::Index(index) => Expression::Indexing(IndexingExpression { base, index }),
         }
     })
+}
+
+impl FromStr for DiagnosticSeverity {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "error" => Ok(Self::Error),
+            "warning" => Ok(Self::Warning),
+            "info" => Ok(Self::Info),
+            "off" => Ok(Self::Off),
+            _ => Err(()),
+        }
+    }
 }

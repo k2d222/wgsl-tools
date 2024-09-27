@@ -8,7 +8,7 @@ use wesl::{
     syntax::Expression, CompileOptions, Context, Eval, Exec, FileResolver, Instance, Mangler,
     Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
-use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
+use wgsl_parse::{error::FormatError, syntax::TranslationUnit, Parser as WgslParser};
 
 #[derive(Parser)]
 #[command(version, author, about)]
@@ -175,7 +175,7 @@ fn main() {
                     print!("{} -- ", args.input.display());
                     match WgslParser::recognize_str(&source) {
                         Ok(()) => println!("OK"),
-                        Err(err) => eprintln!("{err}"),
+                        Err(err) => eprintln!("{}", err.with_source(&source)),
                     };
                 }
                 Command::Parse(_) => {
@@ -183,13 +183,13 @@ fn main() {
                         Ok(module) => {
                             println!("{module}")
                         }
-                        Err(err) => eprintln!("{err}"),
+                        Err(err) => eprintln!("{}", err.with_source(&source)),
                     };
                 }
                 Command::Dump(_) => {
                     match WgslParser::parse_str(&source) {
                         Ok(module) => println!("{module:?}"),
-                        Err(err) => eprintln!("{err}"),
+                        Err(err) => eprintln!("{}", err.with_source(&source)),
                     };
                 }
                 _ => unreachable!(),

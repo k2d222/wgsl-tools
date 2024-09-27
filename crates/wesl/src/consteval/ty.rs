@@ -1,7 +1,7 @@
 use super::{
-    ArrayInstance, ArrayTemplate, ConstEvalError, Context, Eval, Instance, LiteralInstance,
-    MatInner, MatInstance, PtrInstance, RefInstance, StructInstance, SyntaxUtil, VecInner,
-    VecInstance, VecTemplate,
+    ArrayInstance, ArrayTemplate, Context, Eval, EvalError, Instance, LiteralInstance, MatInner,
+    MatInstance, PtrInstance, RefInstance, StructInstance, SyntaxUtil, VecInner, VecInstance,
+    VecTemplate,
 };
 
 use wgsl_parse::syntax::*;
@@ -219,17 +219,17 @@ impl Ty for RefInstance {
 }
 
 pub trait EvalTy {
-    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, ConstEvalError>;
+    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError>;
 }
 
 impl<T: Ty> EvalTy for T {
-    fn eval_ty(&self, _ctx: &mut Context) -> Result<Type, ConstEvalError> {
+    fn eval_ty(&self, _ctx: &mut Context) -> Result<Type, EvalError> {
         Ok(self.ty())
     }
 }
 
 impl EvalTy for &str {
-    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, ConstEvalError> {
+    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError> {
         match *self {
             "bool" => Ok(Type::Bool),
             "i32" => Ok(Type::I32),
@@ -244,7 +244,7 @@ impl EvalTy for &str {
                         let ty = Type::Struct(self.to_string());
                         Ok(ty)
                     } else {
-                        Err(ConstEvalError::UnknownType(self.to_string()))
+                        Err(EvalError::UnknownType(self.to_string()))
                     }
                 }
             }
@@ -253,7 +253,7 @@ impl EvalTy for &str {
 }
 
 impl EvalTy for TypeExpression {
-    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, ConstEvalError> {
+    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError> {
         if let Some(tplt) = &self.template_args {
             match self.name.as_str() {
                 "array" => {
@@ -288,7 +288,7 @@ impl EvalTy for TypeExpression {
                     if let Some(ty) = ctx.source.resolve_alias(&self.name) {
                         ty.eval_ty(ctx)
                     } else {
-                        Err(ConstEvalError::UnexpectedTemplate(self.name.clone()))
+                        Err(EvalError::UnexpectedTemplate(self.name.clone()))
                     }
                 }
             }

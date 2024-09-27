@@ -15,23 +15,35 @@ use std::str::FromStr;
 
 use lalrpop_util::lalrpop_mod;
 
-use crate::{error::SpannedError, lexer::Lexer, syntax, Error};
+use crate::{error::Error, lexer::Lexer, syntax};
 
 pub struct Parser;
 
 impl Parser {
-    pub fn parse_str(source: &str) -> Result<syntax::TranslationUnit, SpannedError> {
+    pub fn parse_str(source: &str) -> Result<syntax::TranslationUnit, Error> {
         let lexer = Lexer::new(source);
         let parser = wgsl::TranslationUnitParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source))
+        parser.parse(lexer).map_err(Into::into)
     }
-    pub fn parse<'s>(
-        mut lexer: &'s mut Lexer,
-    ) -> Result<syntax::TranslationUnit, SpannedError<'s>> {
+    pub fn parse<'s>(mut lexer: &'s mut Lexer) -> Result<syntax::TranslationUnit, Error> {
         let parser = wgsl::TranslationUnitParser::new();
-        let res = parser.parse(&mut lexer);
-        res.map_err(|e| SpannedError::new(e, lexer.source()))
+        parser.parse(&mut lexer).map_err(Into::into)
+    }
+}
+
+impl Parser {
+    pub fn recognize_str(source: &str) -> Result<(), Error> {
+        let lexer = Lexer::new(source);
+        let parser = wgsl_recognize::TranslationUnitParser::new();
+        parser.parse(lexer).map_err(Into::into)
+    }
+    pub fn recognize<'s>(mut lexer: &'s mut Lexer) -> Result<(), Error> {
+        let parser = wgsl_recognize::TranslationUnitParser::new();
+        parser.parse(&mut lexer).map_err(Into::into)
+    }
+    pub fn recognize_template_list<'s>(mut lexer: &'s mut Lexer) -> Result<(), Error> {
+        let parser = wgsl_recognize::TryTemplateListParser::new();
+        parser.parse(&mut lexer).map_err(Into::into)
     }
 }
 
@@ -41,8 +53,7 @@ impl FromStr for syntax::TranslationUnit {
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         let lexer = Lexer::new(source);
         let parser = wgsl::TranslationUnitParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source).into_owned())
+        parser.parse(lexer).map_err(Into::into)
     }
 }
 impl FromStr for syntax::GlobalDirective {
@@ -51,8 +62,7 @@ impl FromStr for syntax::GlobalDirective {
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         let lexer = Lexer::new(source);
         let parser = wgsl::GlobalDirectiveParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source).into_owned())
+        parser.parse(lexer).map_err(Into::into)
     }
 }
 impl FromStr for syntax::GlobalDeclaration {
@@ -61,8 +71,7 @@ impl FromStr for syntax::GlobalDeclaration {
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         let lexer = Lexer::new(source);
         let parser = wgsl::GlobalDeclParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source).into_owned())
+        parser.parse(lexer).map_err(Into::into)
     }
 }
 impl FromStr for syntax::Expression {
@@ -71,8 +80,7 @@ impl FromStr for syntax::Expression {
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         let lexer = Lexer::new(source);
         let parser = wgsl::ExpressionParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source).into_owned())
+        parser.parse(lexer).map_err(Into::into)
     }
 }
 #[cfg(feature = "imports")]
@@ -82,26 +90,6 @@ impl FromStr for syntax::Import {
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         let lexer = Lexer::new(source);
         let parser = wgsl::ImportParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source).into_owned())
-    }
-}
-
-impl Parser {
-    pub fn recognize_str(source: &str) -> Result<(), SpannedError> {
-        let lexer = Lexer::new(source);
-        let parser = wgsl_recognize::TranslationUnitParser::new();
-        let res = parser.parse(lexer);
-        res.map_err(|e| SpannedError::new(e, source))
-    }
-    pub fn recognize<'s>(mut lexer: &'s mut Lexer) -> Result<(), SpannedError<'s>> {
-        let parser = wgsl_recognize::TranslationUnitParser::new();
-        let res = parser.parse(&mut lexer);
-        res.map_err(|e| SpannedError::new(e, lexer.source()))
-    }
-    pub fn recognize_template_list<'s>(mut lexer: &'s mut Lexer) -> Result<(), SpannedError<'s>> {
-        let parser = wgsl_recognize::TryTemplateListParser::new();
-        let res = parser.parse(&mut lexer);
-        res.map_err(|e| SpannedError::new(e, lexer.source()))
+        parser.parse(lexer).map_err(Into::into)
     }
 }

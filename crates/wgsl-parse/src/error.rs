@@ -1,135 +1,126 @@
 //! A [`SpannedError`] is the error type returned by `Parser::parse*` functions.
 
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
-use annotate_snippets::*;
 use itertools::Itertools;
 use thiserror::Error;
 
-use crate::lexer::Token;
+use crate::{lexer::Token, span::Span};
 
-#[derive(Error, Clone, Debug, Default, PartialEq)]
+#[derive(Error, Clone, Debug, PartialEq)]
 pub enum ParseError {
-    #[default]
-    #[error("syntax error")]
-    SyntaxError,
+    #[error("invalid token")]
+    InvalidToken,
+    #[error("unexpected token `{token}`, expected `{}`", .expected.iter().format(", "))]
+    UnexpectedToken { token: Token, expected: Vec<String> },
+    #[error("unexpected end of file, expected `{}`", .expected.iter().format(", "))]
+    UnexpectedEof { expected: Vec<String> },
+    #[error("extra token `{0}` at the end of the file")]
+    ExtraToken(Token),
     #[error("invalid diagnostic severity")]
-    ParseDiagnosticSeverity,
+    DiagnosticSeverity,
 }
 
-type LalrError = lalrpop_util::ParseError<usize, Token, (usize, ParseError, usize)>;
-
-#[derive(Debug, PartialEq)]
-pub struct SpannedError<'s> {
-    inner: LalrError,
-    source: &'s str,
+#[derive(Default, Clone, Debug, PartialEq)]
+pub enum CustomLalrError {
+    #[default]
+    LexerError,
+    DiagnosticSeverity,
 }
 
-impl<'s> SpannedError<'s> {
-    pub fn into_owned(self) -> Error {
-        Error {
-            inner: self.inner,
-            source: self.source.to_owned(),
-        }
-    }
-}
+type LalrError = lalrpop_util::ParseError<usize, Token, (usize, CustomLalrError, usize)>;
 
-// TODO: this error handling is not very clean
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Error, Clone, Debug, PartialEq)]
 pub struct Error {
-    inner: LalrError,
-    source: String,
-}
-
-impl<'s> SpannedError<'s> {
-    pub(crate) fn new(inner: LalrError, source: &'s str) -> Self {
-        Self { inner, source }
-    }
-}
-
-impl<'s> std::error::Error for SpannedError<'s> {}
-
-impl std::error::Error for Error {}
-
-impl<'s> Display for SpannedError<'s> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let err = &self.inner;
-        let source = &self.source;
-        let renderer = Renderer::styled();
-        match err {
-            LalrError::InvalidToken { location } => {
-                let end = (*location + 1..)
-                    .find(|e| source.is_char_boundary(*e))
-                    .unwrap_or(*location);
-                let message = Level::Error.title("invalid token").snippet(
-                    Snippet::source(source).fold(true).annotation(
-                        Level::Error
-                            .span(*location..end)
-                            .label("this token is unknown"),
-                    ),
-                );
-                write!(f, "{}", renderer.render(message))
-            }
-            LalrError::UnrecognizedEof { location, expected } => {
-                let annot = format!("expected {}", expected.iter().format(", "));
-                let message = Level::Error.title("unexpected end of file").snippet(
-                    Snippet::source(source)
-                        .fold(true)
-                        .annotation(Level::Error.span(*location..*location).label(&annot)),
-                );
-                let rendered = renderer.render(message);
-                write!(f, "{}", rendered)
-            }
-            LalrError::UnrecognizedToken { token, expected } => {
-                let title = format!("unexpected token `{}`", &source[token.0..token.2]);
-                let annot = format!(
-                    "expected {}, found {}",
-                    expected.iter().format(", "),
-                    token.1
-                );
-                let message = Level::Error.title(&title).snippet(
-                    Snippet::source(source)
-                        .fold(true)
-                        .annotation(Level::Error.span(token.0..token.2).label(&annot)),
-                );
-                let rendered = renderer.render(message);
-                write!(f, "{}", rendered)
-            }
-            LalrError::ExtraToken { token } => {
-                let title = format!("extra token `{}`", &source[token.0..token.2]);
-                let annot = format!("extra {} here", token.1);
-                let message = Level::Error.title(&title).snippet(
-                    Snippet::source(source)
-                        .fold(true)
-                        .annotation(Level::Error.span(token.0..token.2).label(&annot)),
-                );
-                let rendered = renderer.render(message);
-                write!(f, "{}", rendered)
-            }
-            LalrError::User {
-                error: (start, error, end),
-            } => {
-                let title = error.to_string();
-                let message = Level::Error.title(&title).snippet(
-                    Snippet::source(source).fold(true).annotation(
-                        Level::Error
-                            .span(*start..*end)
-                            .label("while parsing this token"),
-                    ),
-                );
-                let rendered = renderer.render(message);
-                write!(f, "{}", rendered)
-            }
-        }
-    }
+    pub error: ParseError,
+    pub span: Span,
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        SpannedError {
-            inner: self.inner.clone(),
-            source: &self.source,
+        write!(f, "chars {:?}: {}", self.span.range(), self.error)
+    }
+}
+
+impl From<LalrError> for Error {
+    fn from(err: LalrError) -> Self {
+        match err {
+            LalrError::InvalidToken { location } => {
+                let span = Span::new(location..location + 1);
+                let error = ParseError::InvalidToken;
+                Self { span, error }
+            }
+            LalrError::UnrecognizedEof { location, expected } => {
+                let span = Span::new(location..location + 1);
+                let error = ParseError::UnexpectedEof { expected };
+                Self { span, error }
+            }
+            LalrError::UnrecognizedToken {
+                token: (l, token, r),
+                expected,
+            } => {
+                let span = Span::new(l..r);
+                let error = ParseError::UnexpectedToken { token, expected };
+                Self { span, error }
+            }
+            LalrError::ExtraToken {
+                token: (l, token, r),
+            } => {
+                let span = Span::new(l..r);
+                let error = ParseError::ExtraToken(token);
+                Self { span, error }
+            }
+            LalrError::User {
+                error: (l, error, r),
+            } => {
+                let span = Span::new(l..r);
+                let error = match error {
+                    CustomLalrError::DiagnosticSeverity => ParseError::DiagnosticSeverity,
+                    CustomLalrError::LexerError => ParseError::InvalidToken,
+                };
+                Self { span, error }
+            }
         }
-        .fmt(f)
+    }
+}
+
+pub trait FormatError: Sized {
+    fn fmt_err(&self, f: &mut std::fmt::Formatter<'_>, source: &str) -> std::fmt::Result;
+
+    fn with_source(self, source: &str) -> ErrorWithSource<'_, Self> {
+        ErrorWithSource::new(self, source.into())
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ErrorWithSource<'s, T: FormatError> {
+    message: T,
+    source: Cow<'s, str>,
+}
+
+impl<'s, T: FormatError> ErrorWithSource<'s, T> {
+    pub fn new(message: T, source: Cow<'s, str>) -> Self {
+        Self { message, source }
+    }
+}
+
+impl<'s, F: FormatError> Display for ErrorWithSource<'s, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.message.fmt_err(f, &self.source)
+    }
+}
+
+impl FormatError for Error {
+    fn fmt_err(&self, f: &mut std::fmt::Formatter<'_>, source: &str) -> std::fmt::Result {
+        use annotate_snippets::*;
+        let text = format!("{}", self.error);
+
+        let annot = Level::Info.span(self.span.range());
+        let snip = Snippet::source(source).fold(true).annotation(annot);
+        let msg = Level::Error.title(&text).snippet(snip);
+
+        let renderer = Renderer::styled();
+        let rendered = renderer.render(msg);
+        write!(f, "{rendered}")
     }
 }

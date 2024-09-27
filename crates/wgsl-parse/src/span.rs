@@ -8,6 +8,9 @@ pub type Id = u32;
 pub struct Span(Range<usize>);
 
 impl Span {
+    pub fn new(range: Range<usize>) -> Self {
+        Self(range)
+    }
     pub fn range(&self) -> Range<usize> {
         self.0.clone()
     }

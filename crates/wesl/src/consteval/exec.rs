@@ -3,13 +3,13 @@ use std::fmt::Display;
 use crate::consteval::conv::Convert;
 
 use super::{
-    AccessMode, ConstEvalError, Context, Eval, EvalStage, EvalTy, Instance, LiteralInstance,
-    ScopeKind, Ty, Type,
+    AccessMode, Context, Eval, EvalError, EvalStage, EvalTy, Instance, LiteralInstance, ScopeKind,
+    Ty, Type,
 };
 
 use wgsl_parse::syntax::*;
 
-type E = ConstEvalError;
+type E = EvalError;
 
 // reference: https://www.w3.org/TR/WGSL/#behaviors
 #[derive(Clone, Debug, PartialEq)]

@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use crate::{error::ParseError, lexer::Token};
+use crate::{error::CustomLalrError, lexer::Token};
 use crate::span::{Spanned, Span};
 use crate::syntax::*;
 use crate::parser_support::*;
@@ -11,7 +11,7 @@ grammar;
 
 extern {
     type Location = usize;
-    type Error = (usize, ParseError, usize);
+    type Error = (usize, CustomLalrError, usize);
     enum Token {
         // syntactic tokens
         // https://www.w3.org/TR/WGSL/#syntactic-tokens
@@ -191,7 +191,8 @@ DiagnosticNameToken: String = {
 
 SeverityControlName: DiagnosticSeverity = {
     <l: @L> <ident: IdentPatternToken> <r: @R> =>? {
-        DiagnosticSeverity::from_str(&ident).map_err(|e| lalrpop_util::ParseError::User{ error: (l, e, r) })
+        DiagnosticSeverity::from_str(&ident)
+            .map_err(|()| lalrpop_util::ParseError::User{ error: (l, CustomLalrError::DiagnosticSeverity, r) })
     },
 };
 

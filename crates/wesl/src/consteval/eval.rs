@@ -3,15 +3,15 @@ use std::iter::zip;
 use crate::consteval::MatInstance;
 
 use super::{
-    call_builtin, AccessMode, ConstEvalError, Context, Convert, EvalTy, Exec, Flow, Instance,
+    call_builtin, AccessMode, Context, Convert, EvalError, EvalTy, Exec, Flow, Instance,
     LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
 };
 
 use half::f16;
 use itertools::Itertools;
-use wgsl_parse::syntax::*;
+use wgsl_parse::{span::Spanned, syntax::*};
 
-type E = ConstEvalError;
+type E = EvalError;
 
 pub trait Eval {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E>;
@@ -24,6 +24,16 @@ pub trait Eval {
         } else {
             Ok(inst)
         }
+    }
+}
+
+impl Eval for Spanned<Expression> {
+    fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
+        self.node().eval(ctx).inspect_err(|_| {
+            if ctx.err_span.is_none() {
+                ctx.err_span = Some(self.span().clone());
+            }
+        })
     }
 }
 

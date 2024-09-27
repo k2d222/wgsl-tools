@@ -78,7 +78,7 @@ impl Resolver for FileResolver {
         let source = fs::read_to_string(&path).map_err(|_| {
             ResolveError::FileNotFound(format!("{} (physical file)", path.display()))
         })?;
-        let wesl = Parser::parse_str(&source).map_err(|e| e.into_owned())?;
+        let wesl = Parser::parse_str(&source)?;
         Ok(wesl)
     }
 }
@@ -108,7 +108,7 @@ impl Resolver for VirtualFileResolver {
         let source = self.files.get(&path).ok_or_else(|| {
             ResolveError::FileNotFound(format!("{} (virtual file)", path.display()))
         })?;
-        let wesl = Parser::parse_str(&source).map_err(|e| e.into_owned())?;
+        let wesl = Parser::parse_str(&source)?;
         Ok(wesl)
     }
 }
