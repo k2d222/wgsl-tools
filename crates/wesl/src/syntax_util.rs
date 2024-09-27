@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use itertools::Itertools;
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
@@ -68,6 +67,12 @@ impl IterUses for Expression {
     }
 }
 
+impl IterUses for ExpressionNode {
+    fn uses_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        self.node_mut().uses_mut()
+    }
+}
+
 impl IterUses for TypeExpression {
     fn uses_mut(&mut self) -> impl Iterator<Item = &mut String> {
         query_mut!(self.{
@@ -77,18 +82,24 @@ impl IterUses for TypeExpression {
     }
 }
 
-impl IterUses for Vec<Statement> {
+impl IterUses for TemplateArg {
+    fn uses_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        query_mut!(self.expression.(IterUses::uses_mut))
+    }
+}
+
+impl IterUses for Vec<StatementNode> {
     // this one keeps track of scope, because local declarations introduce a new scope and may
     // shadow names declared at the global level.
     // we just ignore names that refer to local variables.
     fn uses_mut(&mut self) -> impl Iterator<Item = &mut String> {
         fn rec<'a>(
-            statements: impl IntoIterator<Item = &'a mut Statement>,
+            statements: impl IntoIterator<Item = &'a mut StatementNode>,
         ) -> (Vec<&'a mut String>, Scope) {
             let mut names = Vec::new();
             let mut scope = Scope::new();
             for stat in statements {
-                match stat {
+                match stat.node_mut() {
                     Statement::Compound(stat) => {
                         let it = rec(&mut stat.statements).0.into_iter();
                         names.extend(it.filter(|name| !scope.contains(*name)));
@@ -178,7 +189,7 @@ impl IterUses for Vec<Statement> {
                         // these ones have to be handled separatly, because the for initializer
                         // statement is the parent scope of the body
                         let body_scope = if let Some(init) = &mut stat.initializer {
-                            let (it, scope) = rec(std::iter::once(&mut **init));
+                            let (it, scope) = rec(std::iter::once(init));
                             names.extend(it.into_iter().filter(|name| !scope.contains(*name)));
                             scope
                         } else {
@@ -188,7 +199,7 @@ impl IterUses for Vec<Statement> {
                         names.extend(it.filter(|name| !body_scope.contains(*name)));
 
                         if let Some(update) = &mut stat.update {
-                            let it = rec(std::iter::once(&mut **update)).0.into_iter();
+                            let it = rec(std::iter::once(update)).0.into_iter();
                             names.extend(it.filter(|name| !body_scope.contains(*name)));
                         }
 

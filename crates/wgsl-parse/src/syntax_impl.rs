@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use crate::span::Spanned;
+
 use super::{error::ParseError, syntax::*};
 
 impl FromStr for DiagnosticSeverity {
@@ -26,6 +28,16 @@ impl From<String> for IdentifierExpression {
 pub trait Decorated {
     fn attributes(&self) -> &[Attribute];
     fn attributes_mut(&mut self) -> &mut [Attribute];
+}
+
+impl<T: Decorated> Decorated for Spanned<T> {
+    fn attributes(&self) -> &[Attribute] {
+        self.node().attributes()
+    }
+
+    fn attributes_mut(&mut self) -> &mut [Attribute] {
+        self.node_mut().attributes_mut()
+    }
 }
 
 macro_rules! impl_decorated_struct {

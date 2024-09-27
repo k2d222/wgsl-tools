@@ -1,6 +1,6 @@
-use std::{cell::RefCell, iter::zip, rc::Rc};
+use std::iter::zip;
 
-use crate::consteval::{MatInstance, MemView};
+use crate::consteval::MatInstance;
 
 use super::{
     call_builtin, AccessMode, ConstEvalError, Context, Convert, EvalTy, Exec, Flow, Instance,
@@ -347,6 +347,12 @@ impl Eval for IdentifierExpression {
 impl Eval for TypeExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
         todo!()
+    }
+}
+
+impl Eval for TemplateArg {
+    fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
+        self.expression.eval(ctx)
     }
 }
 

@@ -154,7 +154,7 @@ pub enum ConstEvalError {
     #[error("discard statements are not permitted in const contexts")]
     DiscardInConst,
     #[error("const assertion failed: `{0}` is `false`")]
-    ConstAssertFailure(Expression),
+    ConstAssertFailure(ExpressionNode),
     #[error("a function body cannot contain a `{0}` statement")]
     FlowInFunction(Flow),
     #[error("a global declaration cannot contain a `{0}` statement")]

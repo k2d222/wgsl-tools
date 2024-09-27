@@ -83,7 +83,7 @@ fn eval_if_attr(
             let expr = eval_attr(if_attr, features)?;
             let keep = !(expr == EXPR_FALSE);
             if keep {
-                *if_attr = expr;
+                **if_attr = expr;
             } else {
                 *opt_node = None;
             }
@@ -121,7 +121,7 @@ fn eval_if_attributes(
             });
             if let Some(if_attr) = if_attr {
                 let keep = !(expr == EXPR_FALSE);
-                *if_attr = expr;
+                **if_attr = expr;
                 keep
             } else {
                 true
@@ -135,11 +135,14 @@ fn eval_if_attributes(
 }
 
 fn statement_eval_if_attributes(
-    statements: &mut Vec<Statement>,
+    statements: &mut Vec<StatementNode>,
     features: &HashMap<String, bool>,
 ) -> Result<(), CondCompError> {
-    fn rec_one(stat: &mut Statement, feats: &HashMap<String, bool>) -> Result<(), CondCompError> {
-        match stat {
+    fn rec_one(
+        stat: &mut StatementNode,
+        feats: &HashMap<String, bool>,
+    ) -> Result<(), CondCompError> {
+        match stat.node_mut() {
             Statement::Compound(stat) => rec(&mut stat.statements, feats)?,
             Statement::If(stat) => {
                 rec(&mut stat.if_clause.body.statements, feats)?;
@@ -179,7 +182,10 @@ fn statement_eval_if_attributes(
         };
         Ok(())
     }
-    fn rec(stats: &mut Vec<Statement>, feats: &HashMap<String, bool>) -> Result<(), CondCompError> {
+    fn rec(
+        stats: &mut Vec<StatementNode>,
+        feats: &HashMap<String, bool>,
+    ) -> Result<(), CondCompError> {
         eval_if_attributes(stats, feats)?;
         for stat in stats {
             rec_one(stat, feats)?;
@@ -214,7 +220,10 @@ fn query_attributes(wesl: &mut TranslationUnit) -> impl Iterator<Item = &mut Vec
     })
 }
 
-fn statement_query_attributes(stat: &mut Statement) -> impl Iterator<Item = &mut Vec<Attribute>> {
+fn statement_query_attributes(
+    stat: &mut StatementNode,
+) -> impl Iterator<Item = &mut Vec<Attribute>> {
+    let stat = stat.node_mut();
     query_mut!(stat.{
         Statement::Compound.{ attributes, statements.[].(statement_query_attributes) },
         Statement::If.{
@@ -294,7 +303,7 @@ pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondCo
                 attr.arguments
                     .as_ref()
                     .and_then(|args| args.first())
-                    .map(|expr| *expr != EXPR_TRUE)
+                    .map(|expr| **expr != EXPR_TRUE)
                     .unwrap_or(true)
             }
         })
