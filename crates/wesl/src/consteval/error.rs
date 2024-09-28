@@ -1,10 +1,10 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{error::FormatError, span::Span, syntax::*};
 
-use crate::{Context, Instance};
+use crate::{Context, Error, Instance};
 
 use super::{Flow, LiteralInstance, MemView, Ty, Type};
 
@@ -142,41 +142,4 @@ pub enum EvalError {
     FlowInFunction(Flow),
     #[error("a global declaration cannot contain a `{0}` statement")]
     FlowInModule(Flow),
-}
-
-impl EvalError {
-    pub fn with_source(self, source: String, ctx: &Context) -> Error {
-        Error {
-            error: self,
-            source,
-            span: ctx.err_span.clone(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Error {
-    pub error: EvalError,
-    pub source: String,
-    pub span: Option<Span>,
-}
-
-impl std::error::Error for Error {}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use annotate_snippets::*;
-        let text = format!("{}", self.error);
-        let mut msg = Level::Error.title(&text);
-
-        if let Some(span) = &self.span {
-            let annot = Level::Error.span(span.range());
-            let snip = Snippet::source(&self.source).fold(true).annotation(annot);
-            msg = msg.snippet(snip);
-        }
-
-        let renderer = Renderer::styled();
-        let rendered = renderer.render(msg);
-        write!(f, "{rendered}")
-    }
 }

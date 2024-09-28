@@ -5,6 +5,7 @@ pub mod consteval;
 #[cfg(feature = "imports")]
 mod import;
 
+mod error;
 mod mangle;
 mod resolve;
 mod strip;
@@ -20,14 +21,16 @@ pub use import::{resolve, ImportError, Module};
 pub use consteval::{Context, Eval, EvalError, Exec, Instance};
 
 pub use mangle::{
-    FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE, MANGLER_HASH,
-    MANGLER_NONE,
+    CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE,
+    MANGLER_HASH, MANGLER_NONE,
 };
 
 pub use resolve::{
     DispatchResolver, FileResolver, PreprocessResolver, ResolveError, Resolver, Resource,
     VirtualFileResolver,
 };
+
+pub use error::{Diagnostic, Error};
 
 pub use strip::strip;
 
@@ -38,23 +41,6 @@ use syntax_util::{entry_points, rename_decl};
 use itertools::Itertools;
 use std::collections::HashMap;
 use wgsl_parse::syntax::TranslationUnit;
-
-#[derive(Clone, Debug, thiserror::Error)]
-pub enum Error {
-    #[error("{0}")]
-    ParseError(#[from] wgsl_parse::Error),
-    #[error("import resolution failure: {0}")]
-    ResolveError(#[from] ResolveError),
-    #[cfg(feature = "imports")]
-    #[error("import error: {0}")]
-    ImportError(#[from] ImportError),
-    #[cfg(feature = "condcomp")]
-    #[error("conditional compilation error: {0}")]
-    CondCompError(#[from] CondCompError),
-    #[cfg(feature = "consteval")]
-    #[error("constant evaluation error: {0}")]
-    ConstEvalError(#[from] EvalError),
-}
 
 pub struct CompileOptions {
     pub use_imports: bool,
@@ -78,7 +64,7 @@ impl Default for CompileOptions {
 
 pub fn compile(
     entrypoint: &Resource,
-    resolver: impl Resolver,
+    resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Error> {

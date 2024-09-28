@@ -5,8 +5,8 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use wesl::{
-    syntax::Expression, CompileOptions, Context, Eval, Exec, FileResolver, Instance, Mangler,
-    Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
+    syntax::Expression, CachedMangler, CompileOptions, Context, Diagnostic, Eval, Exec,
+    FileResolver, Instance, Mangler, Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
 use wgsl_parse::{error::FormatError, syntax::TranslationUnit, Parser as WgslParser};
 
@@ -106,7 +106,7 @@ enum CliError {
     #[error("{0}")]
     CompileError(#[from] wesl::Error),
     #[error("{0}")]
-    DiagnosticError(#[from] wesl::consteval::Error), // TODO refactor
+    DiagnosticError(#[from] wesl::Diagnostic),
 }
 
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
@@ -148,40 +148,96 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
         features,
     };
 
-    let wgsl = wesl::compile(&entrypoint, resolver, &mangler, &compile_options)?;
+    let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)
+        .map_err(|e| Diagnostic::new(e))?;
     Ok(wgsl)
 }
 
 fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
-    let wgsl = run_compile(&args.compile)?;
+    // compile
 
-    if args.diagnostics {
-        // we sringify and parse again to have all the spans pointing at the same source..
-        let source = wgsl.to_string();
-        let wgsl = source.parse().map_err(wesl::Error::ParseError)?;
+    let base = args
+        .compile
+        .common
+        .input
+        .parent()
+        .ok_or(CliError::FileNotFound)?
+        .to_path_buf();
+    let name = PathBuf::from(
+        args.compile
+            .common
+            .input
+            .file_name()
+            .ok_or(CliError::FileNotFound)?,
+    );
 
-        let mut ctx = Context::new(&wgsl);
-        let expr = args
-            .expr
-            .parse::<Expression>()
-            .map_err(wesl::Error::ParseError)?;
-        let instance = wgsl
-            .exec(&mut ctx)
-            .and_then(|_| expr.eval(&mut ctx))
-            .map_err(|e| e.with_source(source, &ctx))?;
-        Ok(instance)
-    } else {
-        let mut ctx = Context::new(&wgsl);
-        let expr = args
-            .expr
-            .parse::<Expression>()
-            .map_err(wesl::Error::ParseError)?;
-        let instance = wgsl
-            .exec(&mut ctx)
-            .and_then(|_| expr.eval(&mut ctx))
-            .map_err(wesl::Error::ConstEvalError)?;
-        Ok(instance)
-    }
+    let resolver = FileResolver::new(base);
+    let entrypoint: Resource = name.into();
+
+    let mangler = make_mangler(args.compile.mangler);
+    let mangler = CachedMangler::new(&mangler);
+
+    let mut features = HashMap::new();
+    features.extend(
+        args.compile
+            .enable_features
+            .iter()
+            .map(|f| (f.clone(), true)),
+    );
+    features.extend(
+        args.compile
+            .disable_features
+            .iter()
+            .map(|f| (f.clone(), false)),
+    );
+
+    let compile_options = CompileOptions {
+        use_imports: !args.compile.no_imports,
+        use_condcomp: !args.compile.no_cond_comp,
+        strip: !args.compile.no_strip,
+        entry_points: args.compile.entry_points.clone(),
+        features,
+    };
+
+    let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)
+        .map_err(|e| Diagnostic::new(e))?;
+
+    // eval
+
+    let mut ctx = Context::new(&wgsl);
+    let expr = args
+        .expr
+        .parse::<Expression>()
+        .map_err(wesl::Error::ParseError)?;
+
+    // diagnostics
+
+    let instance = wgsl
+        .exec(&mut ctx)
+        .and_then(|_| expr.eval(&mut ctx))
+        .map_err(|e| {
+            let mut diagnostic = Diagnostic::new(e.into());
+            let (decl, span) = ctx.err_ctx();
+            if let Some(decl) = decl {
+                let (resource, item) = mangler
+                    .unmangle(&decl)
+                    .unwrap_or_else(|| (entrypoint.clone(), decl.clone()));
+                diagnostic.file = Some(resource.to_string());
+                diagnostic.declaration = Some(item);
+                diagnostic.span = span;
+                diagnostic.source = resolver
+                    .read_file(&resource)
+                    .or_else(|_| resolver.read_file(&entrypoint))
+                    .ok();
+            } else {
+                diagnostic.file = Some("<command-line expression>".to_string());
+                diagnostic.declaration = None;
+                diagnostic.span = span;
+                diagnostic.source = Some(args.expr.clone());
+            }
+            diagnostic
+        })?;
+    Ok(instance)
 }
 
 fn main() {

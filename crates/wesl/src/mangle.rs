@@ -1,6 +1,10 @@
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::path::PathBuf;
 
 use itertools::Itertools;
 
@@ -8,11 +12,17 @@ use super::Resource;
 
 pub trait Mangler {
     fn mangle(&self, resource: &Resource, item: &str) -> String;
+    fn unmangle(&self, _mangled: &str) -> Option<(Resource, String)> {
+        None
+    }
 }
 
 impl<T: Mangler + ?Sized> Mangler for Box<T> {
     fn mangle(&self, resource: &Resource, item: &str) -> String {
         (**self).mangle(resource, item)
+    }
+    fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
+        (**self).unmangle(mangled)
     }
 }
 
@@ -51,6 +61,29 @@ impl Mangler for FileManglerEscape {
             .format("_");
         format!("{path}_{item}")
     }
+    fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
+        let mut parts = mangled.split('_').peekable();
+        let mut path_parts = Vec::new();
+
+        while let Some(part) = parts.next() {
+            let mut part = part.to_string();
+            while parts.peek() == Some(&"") {
+                part.push('_');
+                parts.next();
+            }
+            path_parts.push(part.to_string());
+        }
+
+        if path_parts.len() < 2 {
+            return None;
+        }
+
+        let item = path_parts.pop()?;
+        let path = PathBuf::from_iter(path_parts);
+
+        let resource = Resource::from(path);
+        Some((resource, item))
+    }
 }
 
 /// A mangler that just returns the identifer as-is (no mangling).
@@ -65,5 +98,42 @@ pub const MANGLER_NONE: NoMangler = NoMangler;
 impl Mangler for NoMangler {
     fn mangle(&self, _resource: &Resource, item: &str) -> String {
         item.to_string()
+    }
+    fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
+        Some((Resource::from(PathBuf::new()), mangled.to_string()))
+    }
+}
+
+/// A mangler that remembers and can unmangle.
+pub struct CachedMangler<'a, T: Mangler> {
+    cache: RefCell<HashMap<String, (Resource, String)>>,
+    mangler: &'a T,
+}
+
+impl<'a, T: Mangler> CachedMangler<'a, T> {
+    pub fn new(mangler: &'a T) -> Self {
+        Self {
+            cache: Default::default(),
+            mangler,
+        }
+    }
+}
+
+impl<'a, T: Mangler> Mangler for CachedMangler<'a, T> {
+    fn mangle(&self, resource: &Resource, item: &str) -> String {
+        let res = self.mangler.mangle(resource, item);
+        let mut cache = self.cache.borrow_mut();
+        cache.insert(res.clone(), (resource.clone(), item.to_string()));
+        res
+    }
+    fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
+        {
+            let cache = self.cache.borrow();
+            if let Some(res) = cache.get(mangled).cloned() {
+                return Some(res);
+            }
+        }
+
+        self.mangler.unmangle(mangled)
     }
 }

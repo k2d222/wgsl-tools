@@ -7,5 +7,5 @@ fn main() -> u32 {
     c1 += 1;
     let foo = bool();
     let x = c1 + f32(foo);
-    return c1;
+    return foo;
 }

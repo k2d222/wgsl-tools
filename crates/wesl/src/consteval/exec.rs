@@ -35,15 +35,27 @@ pub trait Exec {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E>;
 }
 
+impl Exec for StatementNode {
+    fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
+        self.node().exec(ctx).inspect_err(|_| {
+            if ctx.err_span.is_none() {
+                ctx.err_span = Some(self.span().clone());
+            }
+        })
+    }
+}
+
 impl Exec for TranslationUnit {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         fn inner(ctx: &mut Context) -> Result<Flow, E> {
             for decl in &ctx.source.global_declarations {
+                ctx.err_decl = Some(decl.name().to_string());
                 let flow = decl.exec(ctx)?;
+                ctx.err_decl = None;
                 match flow {
                     Flow::Next => (),
                     Flow::Break | Flow::Continue | Flow::Return(_) => {
-                        return Err(E::FlowInModule(flow))
+                        return Err(E::FlowInModule(flow));
                     }
                 }
             }

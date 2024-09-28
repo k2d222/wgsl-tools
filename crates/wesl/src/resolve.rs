@@ -6,6 +6,7 @@ use wgsl_parse::{
 };
 
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fmt::Display,
     fs,
@@ -58,27 +59,63 @@ impl<T: Resolver + ?Sized> Resolver for Box<T> {
     }
 }
 
+impl<T: Resolver> Resolver for &T {
+    fn resolve_file(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Error> {
+        (**self).resolve_file(resource)
+    }
+}
+
 #[derive(Default)]
 pub struct FileResolver {
     base: PathBuf,
+    cache: RefCell<HashMap<Resource, String>>,
 }
 
 impl FileResolver {
     /// `base` is the root directory to which absolute paths refer to.
     pub fn new(base: PathBuf) -> Self {
-        Self { base }
+        Self {
+            base,
+            cache: Default::default(),
+        }
+    }
+
+    fn read_file_nocache(&self, resource: &Resource) -> Result<String, Error> {
+        let mut path = self.base.to_path_buf();
+        path.extend(resource.path());
+        path.set_extension("wgsl");
+
+        let source = fs::read_to_string(&path).map_err(|_| {
+            ResolveError::FileNotFound(format!("{} (physical file)", path.display()))
+        })?;
+        Ok(source)
+    }
+
+    pub fn read_file(&self, resource: &Resource) -> Result<String, Error> {
+        {
+            let cache = self.cache.borrow();
+            if let Some(source) = cache.get(resource) {
+                return Ok(source.clone());
+            }
+        }
+
+        self.read_file_nocache(resource)
     }
 }
 
 impl Resolver for FileResolver {
     fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
-        let mut path = self.base.to_path_buf();
-        path.extend(resource.path());
-        path.set_extension("wgsl");
-        let source = fs::read_to_string(&path).map_err(|_| {
-            ResolveError::FileNotFound(format!("{} (physical file)", path.display()))
-        })?;
-        let wesl = Parser::parse_str(&source)?;
+        let mut cache = self.cache.borrow_mut();
+
+        let source = if let Some(source) = cache.get(resource) {
+            source
+        } else {
+            let source = self.read_file_nocache(resource)?;
+            cache.insert(resource.clone(), source);
+            cache.get(resource).unwrap()
+        };
+
+        let wesl = Parser::parse_str(source)?;
         Ok(wesl)
     }
 }
@@ -114,13 +151,13 @@ impl Resolver for VirtualFileResolver {
 }
 
 #[derive(Clone, Debug)]
-pub struct PreprocessResolver<R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>>(
-    pub R,
+pub struct PreprocessResolver<'a, R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>>(
+    pub &'a R,
     pub F,
 );
 
-impl<R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>> Resolver
-    for PreprocessResolver<R, F>
+impl<'a, R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>> Resolver
+    for PreprocessResolver<'a, R, F>
 {
     fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
         let mut res = self.0.resolve_file(resource)?;

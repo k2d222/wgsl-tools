@@ -329,7 +329,10 @@ impl Eval for FunctionCall {
                 ctx.scope.add(p.name.clone(), a, AccessMode::Read);
             }
 
-            decl.body.exec(ctx)?
+            ctx.err_decl = Some(decl.name.to_string());
+            let flow = decl.body.exec(ctx)?;
+            ctx.err_decl = None;
+            flow
         };
         ctx.scope.pop();
 

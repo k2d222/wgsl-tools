@@ -96,8 +96,8 @@ pub struct Context<'s> {
     scope: Scope,
     kind: ScopeKind,
     stage: EvalStage,
+    err_decl: Option<String>,
     err_span: Option<Span>,
-    ctx_span: Option<Span>,
 }
 
 impl<'s> Context<'s> {
@@ -108,7 +108,7 @@ impl<'s> Context<'s> {
             kind: ScopeKind::Function,
             stage: EvalStage::Const,
             err_span: None,
-            ctx_span: None,
+            err_decl: None,
         }
     }
 
@@ -116,6 +116,10 @@ impl<'s> Context<'s> {
         ScopeGuard {
             scope: &mut self.scope,
         }
+    }
+
+    pub fn err_ctx(&self) -> (Option<String>, Option<Span>) {
+        (self.err_decl.clone(), self.err_span.clone())
     }
 }
 

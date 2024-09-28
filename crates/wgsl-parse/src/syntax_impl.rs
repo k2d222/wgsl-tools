@@ -8,6 +8,19 @@ impl From<String> for IdentifierExpression {
     }
 }
 
+impl GlobalDeclaration {
+    pub fn name(&self) -> &str {
+        match self {
+            GlobalDeclaration::Void => "",
+            GlobalDeclaration::Declaration(decl) => decl.name.as_str(),
+            GlobalDeclaration::TypeAlias(decl) => decl.name.as_str(),
+            GlobalDeclaration::Struct(decl) => decl.name.as_str(),
+            GlobalDeclaration::Function(decl) => decl.name.as_str(),
+            GlobalDeclaration::ConstAssert(_) => "",
+        }
+    }
+}
+
 /// A trait implemented on all types that can be prefixed by attributes.
 pub trait Decorated {
     fn attributes(&self) -> &[Attribute];
