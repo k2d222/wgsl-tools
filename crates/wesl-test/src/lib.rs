@@ -107,7 +107,7 @@ fn wesl_testsuite_test(path: &Path) {
         let mangler = &MANGLER_HASH;
         let compile_options = CompileOptions::default();
 
-        wesl::compile(&entrypoint, resolver, mangler, &compile_options)
+        wesl::compile(&entrypoint, &resolver, mangler, &compile_options)
             .inspect_err(|err| eprintln!("{err}"))
             .expect("parse error");
     }
