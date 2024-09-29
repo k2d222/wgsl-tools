@@ -137,14 +137,19 @@ impl VirtualFileResolver {
         self.files.insert(path, file);
         Ok(())
     }
-}
 
-impl Resolver for VirtualFileResolver {
-    fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
+    pub fn get_file(&self, resource: &Resource) -> Result<&str, Error> {
         let path = resource.path().with_extension("wgsl");
         let source = self.files.get(&path).ok_or_else(|| {
             ResolveError::FileNotFound(format!("{} (virtual file)", path.display()))
         })?;
+        Ok(source)
+    }
+}
+
+impl Resolver for VirtualFileResolver {
+    fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
+        let source = self.get_file(resource)?;
         let wesl = Parser::parse_str(&source)?;
         Ok(wesl)
     }

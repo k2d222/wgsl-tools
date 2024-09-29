@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/wgsl-parse", "crates/wgsl-parse-macros", "crates/wesl", "crates/wesl-test", "crates/playground"]
+members = ["crates/wgsl-parse", "crates/wgsl-parse-macros", "crates/wesl", "crates/wesl-test"]
 
 [workspace.package]
 version = "0.0.2"

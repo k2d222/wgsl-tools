@@ -9,3 +9,9 @@ fn main() -> u32 {
     let x = c1 + f32(foo);
     return foo;
 }
+
+import imp1/f1;
+fn main() -> u32 {
+    return f1();
+}
+
