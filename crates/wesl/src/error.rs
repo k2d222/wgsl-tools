@@ -1,23 +1,23 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::fmt::Display;
 
-use wgsl_parse::{span::Span, syntax::*};
+use wgsl_parse::{error::ParseError, span::Span};
 
-use crate::{CondCompError, EvalError, ImportError, ResolveError};
+use crate::{CondCompError, EvalError, ImportError, ResolveError, Resource};
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0}")]
-    ParseError(#[from] wgsl_parse::Error),
-    #[error("import resolution failure: {0}")]
+    ParseError(#[from] ParseError),
+    #[error("{0}")]
     ResolveError(#[from] ResolveError),
     #[cfg(feature = "imports")]
-    #[error("import error: {0}")]
+    #[error("{0}")]
     ImportError(#[from] ImportError),
     #[cfg(feature = "condcomp")]
-    #[error("conditional compilation error: {0}")]
+    #[error("{0}")]
     CondCompError(#[from] CondCompError),
     #[cfg(feature = "consteval")]
-    #[error("constant evaluation error: {0}")]
+    #[error("{0}")]
     ConstEvalError(#[from] EvalError),
 }
 
@@ -25,20 +25,46 @@ pub enum Error {
 pub struct Diagnostic {
     pub error: Error,
     pub source: Option<String>,
-    pub file: Option<String>,
+    pub file: Option<Resource>,
     pub declaration: Option<String>,
     pub span: Option<Span>,
 }
 
+impl From<Error> for Diagnostic {
+    fn from(error: Error) -> Self {
+        Self {
+            error,
+            source: None,
+            file: None,
+            declaration: None,
+            span: None,
+        }
+    }
+}
+
+impl From<wgsl_parse::Error> for Diagnostic {
+    fn from(error: wgsl_parse::Error) -> Self {
+        Self {
+            error: error.error.into(),
+            source: None,
+            file: None,
+            declaration: None,
+            span: Some(error.span),
+        }
+    }
+}
+
 impl Diagnostic {
     pub fn new(error: Error) -> Diagnostic {
-        Diagnostic {
-            error,
-            source: Default::default(),
-            file: Default::default(),
-            declaration: Default::default(),
-            span: Default::default(),
-        }
+        error.into()
+    }
+    pub fn source(mut self, source: String) -> Self {
+        self.source = Some(source);
+        self
+    }
+    pub fn file(mut self, file: Resource) -> Self {
+        self.file = Some(file);
+        self
     }
 }
 
@@ -50,6 +76,11 @@ impl Display for Diagnostic {
         let title = format!("{}", self.error);
         let mut msg = Level::Error.title(&title);
 
+        let orig = self
+            .file
+            .as_ref()
+            .map(|file| file.path().display().to_string());
+
         if let Some(span) = &self.span {
             let source = self.source.as_ref().map(|source| source.as_str());
 
@@ -58,7 +89,7 @@ impl Display for Diagnostic {
                     let annot = Level::Error.span(span.range()).label(&title);
                     let mut snip = Snippet::source(source).fold(true).annotation(annot);
 
-                    if let Some(file) = &self.file {
+                    if let Some(file) = orig.as_ref() {
                         snip = snip.origin(file);
                     }
 

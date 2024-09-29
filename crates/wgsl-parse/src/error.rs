@@ -1,6 +1,9 @@
 //! A [`SpannedError`] is the error type returned by `Parser::parse*` functions.
 
-use std::{borrow::Cow, fmt::Display};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+};
 
 use itertools::Itertools;
 use thiserror::Error;
@@ -84,29 +87,34 @@ impl From<LalrError> for Error {
     }
 }
 
-pub trait FormatError: Sized {
+pub trait FormatError: Sized + Debug {
     fn fmt_err(&self, f: &mut std::fmt::Formatter<'_>, source: &str) -> std::fmt::Result;
 
-    fn with_source(self, source: &str) -> ErrorWithSource<'_, Self> {
-        ErrorWithSource::new(self, source.into())
+    fn with_source(self, source: Cow<'_, str>) -> ErrorWithSource<'_, Self> {
+        ErrorWithSource::new(self, source)
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ErrorWithSource<'s, T: FormatError> {
-    message: T,
-    source: Cow<'s, str>,
+    pub error: T,
+    pub source: Cow<'s, str>,
 }
+
+impl<'s, T: FormatError> std::error::Error for ErrorWithSource<'s, T> {}
 
 impl<'s, T: FormatError> ErrorWithSource<'s, T> {
     pub fn new(message: T, source: Cow<'s, str>) -> Self {
-        Self { message, source }
+        Self {
+            error: message,
+            source,
+        }
     }
 }
 
 impl<'s, F: FormatError> Display for ErrorWithSource<'s, F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.message.fmt_err(f, &self.source)
+        self.error.fmt_err(f, &self.source)
     }
 }
 

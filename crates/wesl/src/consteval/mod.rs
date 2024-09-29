@@ -97,7 +97,7 @@ pub struct Context<'s> {
     kind: ScopeKind,
     stage: EvalStage,
     err_decl: Option<String>,
-    err_span: Option<Span>,
+    err_expr: Option<Span>,
 }
 
 impl<'s> Context<'s> {
@@ -107,7 +107,7 @@ impl<'s> Context<'s> {
             scope: Default::default(),
             kind: ScopeKind::Function,
             stage: EvalStage::Const,
-            err_span: None,
+            err_expr: None,
             err_decl: None,
         }
     }
@@ -118,8 +118,19 @@ impl<'s> Context<'s> {
         }
     }
 
+    fn set_err_decl_ctx(&mut self, decl: &str) {
+        if self.err_decl.is_none() {
+            self.err_decl = Some(decl.to_string())
+        }
+    }
+    fn set_err_expr_ctx(&mut self, expr: &Span) {
+        if self.err_expr.is_none() {
+            self.err_expr = Some(expr.clone())
+        }
+    }
+
     pub fn err_ctx(&self) -> (Option<String>, Option<Span>) {
-        (self.err_decl.clone(), self.err_span.clone())
+        (self.err_decl.clone(), self.err_expr.clone())
     }
 }
 

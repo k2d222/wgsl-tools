@@ -5,10 +5,14 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use wesl::{
-    syntax::Expression, CachedMangler, CompileOptions, Context, Diagnostic, Eval, Exec,
-    FileResolver, Instance, Mangler, Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
+    syntax::Expression, BasicSourceMap, CachedMangler, CompileOptions, Context, Diagnostic, Eval,
+    Exec, FileResolver, Instance, Mangler, Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
-use wgsl_parse::{error::FormatError, syntax::TranslationUnit, Parser as WgslParser};
+use wgsl_parse::{
+    error::{FormatError, ParseError},
+    syntax::TranslationUnit,
+    Parser as WgslParser,
+};
 
 #[derive(Parser)]
 #[command(version, author, about)]
@@ -46,8 +50,11 @@ struct CompileArgs {
     #[arg(short, long, default_value_t = ManglerKind::Escape)]
     /// name mangling strategy
     mangler: ManglerKind,
+    /// show nicer error messages by computing a sourcemap
     #[arg(long)]
+    no_sourcemap: bool,
     /// disable imports
+    #[arg(long)]
     no_imports: bool,
     /// disable conditional compilation
     #[arg(long)]
@@ -71,9 +78,6 @@ struct EvalArgs {
     /// context to evaluate the expression into
     #[command(flatten)]
     compile: CompileArgs,
-    /// show nicer error messages
-    #[arg(long)]
-    diagnostics: bool,
     /// the expression to evaluate
     expr: String,
 }
@@ -106,7 +110,7 @@ enum CliError {
     #[error("{0}")]
     CompileError(#[from] wesl::Error),
     #[error("{0}")]
-    DiagnosticError(#[from] wesl::Diagnostic),
+    DiagnosticError(#[from] Diagnostic),
 }
 
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
@@ -117,7 +121,7 @@ fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
     }
 }
 
-fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
+fn run_compile(args: &CompileArgs) -> Result<(TranslationUnit, Option<BasicSourceMap>), CliError> {
     let base = args
         .common
         .input
@@ -148,96 +152,26 @@ fn run_compile(args: &CompileArgs) -> Result<TranslationUnit, CliError> {
         features,
     };
 
-    let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)
-        .map_err(|e| Diagnostic::new(e))?;
-    Ok(wgsl)
+    if !args.no_sourcemap {
+        let (wgsl, sourcemap) =
+            wesl::compile_with_sourcemap(&entrypoint, &resolver, &mangler, &compile_options)?;
+        Ok((wgsl, Some(sourcemap)))
+    } else {
+        let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)?;
+        Ok((wgsl, None))
+    }
 }
 
 fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
-    // compile
-
-    let base = args
-        .compile
-        .common
-        .input
-        .parent()
-        .ok_or(CliError::FileNotFound)?
-        .to_path_buf();
-    let name = PathBuf::from(
-        args.compile
-            .common
-            .input
-            .file_name()
-            .ok_or(CliError::FileNotFound)?,
-    );
-
-    let resolver = FileResolver::new(base);
-    let entrypoint: Resource = name.into();
-
-    let mangler = make_mangler(args.compile.mangler);
-    let mangler = CachedMangler::new(&mangler);
-
-    let mut features = HashMap::new();
-    features.extend(
-        args.compile
-            .enable_features
-            .iter()
-            .map(|f| (f.clone(), true)),
-    );
-    features.extend(
-        args.compile
-            .disable_features
-            .iter()
-            .map(|f| (f.clone(), false)),
-    );
-
-    let compile_options = CompileOptions {
-        use_imports: !args.compile.no_imports,
-        use_condcomp: !args.compile.no_cond_comp,
-        strip: !args.compile.no_strip,
-        entry_points: args.compile.entry_points.clone(),
-        features,
-    };
-
-    let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)
-        .map_err(|e| Diagnostic::new(e))?;
-
-    // eval
-
-    let mut ctx = Context::new(&wgsl);
-    let expr = args
-        .expr
-        .parse::<Expression>()
-        .map_err(wesl::Error::ParseError)?;
-
-    // diagnostics
-
-    let instance = wgsl
-        .exec(&mut ctx)
-        .and_then(|_| expr.eval(&mut ctx))
-        .map_err(|e| {
-            let mut diagnostic = Diagnostic::new(e.into());
-            let (decl, span) = ctx.err_ctx();
-            if let Some(decl) = decl {
-                let (resource, item) = mangler
-                    .unmangle(&decl)
-                    .unwrap_or_else(|| (entrypoint.clone(), decl.clone()));
-                diagnostic.file = Some(resource.to_string());
-                diagnostic.declaration = Some(item);
-                diagnostic.span = span;
-                diagnostic.source = resolver
-                    .read_file(&resource)
-                    .or_else(|_| resolver.read_file(&entrypoint))
-                    .ok();
-            } else {
-                diagnostic.file = Some("<command-line expression>".to_string());
-                diagnostic.declaration = None;
-                diagnostic.span = span;
-                diagnostic.source = Some(args.expr.clone());
-            }
-            diagnostic
-        })?;
-    Ok(instance)
+    let (wgsl, sourcemap) = run_compile(&args.compile)?;
+    if let Some(mut sourcemap) = sourcemap {
+        sourcemap.set_default_source(args.expr.clone());
+        let inst = wesl::eval_with_sourcemap(&args.expr, &wgsl, &sourcemap)?;
+        Ok(inst)
+    } else {
+        let inst = wesl::eval(&args.expr, &wgsl)?;
+        Ok(inst)
+    }
 }
 
 fn main() {
@@ -252,7 +186,7 @@ fn main() {
                     print!("{} -- ", args.input.display());
                     match WgslParser::recognize_str(&source) {
                         Ok(()) => println!("OK"),
-                        Err(err) => eprintln!("{}", err.with_source(&source)),
+                        Err(err) => eprintln!("{}", err.with_source((&source).into())),
                     };
                 }
                 Command::Parse(_) => {
@@ -260,13 +194,13 @@ fn main() {
                         Ok(module) => {
                             println!("{module}")
                         }
-                        Err(err) => eprintln!("{}", err.with_source(&source)),
+                        Err(err) => eprintln!("{}", err.with_source((&source).into())),
                     };
                 }
                 Command::Dump(_) => {
                     match WgslParser::parse_str(&source) {
                         Ok(module) => println!("{module:?}"),
-                        Err(err) => eprintln!("{}", err.with_source(&source)),
+                        Err(err) => eprintln!("{}", err.with_source((&source).into())),
                     };
                 }
                 _ => unreachable!(),
@@ -274,7 +208,7 @@ fn main() {
         }
         Command::Compile(args) => {
             match run_compile(args) {
-                Ok(module) => println!("{module}"),
+                Ok(module) => println!("{}", module.0),
                 Err(err) => eprintln!("{err}"),
             };
         }

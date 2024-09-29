@@ -7,4 +7,4 @@
 // fn f1() -> vec4f {
 //     return f2();
 // }
-fn my_fn() -> u32 { return 42f; }
+fn f1() -> u32 { return 42f; }

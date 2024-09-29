@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::{error::Diagnostic, Error};
 
 use wgsl_parse::{
     syntax::{self, TranslationUnit},
@@ -6,6 +6,7 @@ use wgsl_parse::{
 };
 
 use std::{
+    borrow::Cow,
     cell::RefCell,
     collections::HashMap,
     fmt::Display,
@@ -50,37 +51,80 @@ impl Display for Resource {
 /// and providing the source file.
 pub trait Resolver {
     /// Tries to resolve a source file identified by a resource.
-    fn resolve_file(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Error>;
+    fn resolve_file<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, Error>;
+    fn resolve_module(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Diagnostic> {
+        let source = self.resolve_file(resource)?;
+        let wesl = Parser::parse_str(&source).map_err(|e| {
+            Diagnostic::from(e)
+                .file(resource.clone())
+                .source(source.into_owned())
+        })?;
+        Ok(wesl)
+    }
 }
 
 impl<T: Resolver + ?Sized> Resolver for Box<T> {
-    fn resolve_file(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Error> {
+    fn resolve_file<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, Error> {
         (**self).resolve_file(resource)
+    }
+    fn resolve_module(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Diagnostic> {
+        (**self).resolve_module(resource)
     }
 }
 
 impl<T: Resolver> Resolver for &T {
-    fn resolve_file(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Error> {
+    fn resolve_file<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, Error> {
         (**self).resolve_file(resource)
+    }
+    fn resolve_module(&self, resource: &Resource) -> Result<syntax::TranslationUnit, Diagnostic> {
+        (**self).resolve_module(resource)
+    }
+}
+
+pub struct CacheResolver<'a> {
+    resolver: Box<dyn Resolver + 'a>,
+    cache: RefCell<HashMap<Resource, String>>,
+}
+
+impl<'a> CacheResolver<'a> {
+    pub fn new(resolver: Box<dyn Resolver + 'a>) -> Self {
+        Self {
+            resolver,
+            cache: Default::default(),
+        }
+    }
+}
+
+impl<'a> Resolver for CacheResolver<'a> {
+    fn resolve_file<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, Error> {
+        let mut cache = self.cache.borrow_mut();
+
+        let source = if let Some(source) = cache.get(resource) {
+            source
+        } else {
+            let source = self.resolver.resolve_file(resource)?;
+            cache.insert(resource.clone(), source.into_owned());
+            cache.get(resource).unwrap()
+        };
+
+        Ok(source.clone().into())
     }
 }
 
 #[derive(Default)]
 pub struct FileResolver {
     base: PathBuf,
-    cache: RefCell<HashMap<Resource, String>>,
 }
 
 impl FileResolver {
     /// `base` is the root directory to which absolute paths refer to.
     pub fn new(base: PathBuf) -> Self {
-        Self {
-            base,
-            cache: Default::default(),
-        }
+        Self { base }
     }
+}
 
-    fn read_file_nocache(&self, resource: &Resource) -> Result<String, Error> {
+impl Resolver for FileResolver {
+    fn resolve_file<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, Error> {
         let mut path = self.base.to_path_buf();
         path.extend(resource.path());
         path.set_extension("wgsl");
@@ -88,35 +132,8 @@ impl FileResolver {
         let source = fs::read_to_string(&path).map_err(|_| {
             ResolveError::FileNotFound(format!("{} (physical file)", path.display()))
         })?;
-        Ok(source)
-    }
 
-    pub fn read_file(&self, resource: &Resource) -> Result<String, Error> {
-        {
-            let cache = self.cache.borrow();
-            if let Some(source) = cache.get(resource) {
-                return Ok(source.clone());
-            }
-        }
-
-        self.read_file_nocache(resource)
-    }
-}
-
-impl Resolver for FileResolver {
-    fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
-        let mut cache = self.cache.borrow_mut();
-
-        let source = if let Some(source) = cache.get(resource) {
-            source
-        } else {
-            let source = self.read_file_nocache(resource)?;
-            cache.insert(resource.clone(), source);
-            cache.get(resource).unwrap()
-        };
-
-        let wesl = Parser::parse_str(source)?;
-        Ok(wesl)
+        Ok(source.into())
     }
 }
 
@@ -148,26 +165,44 @@ impl VirtualFileResolver {
 }
 
 impl Resolver for VirtualFileResolver {
-    fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
+    fn resolve_file<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, Error> {
         let source = self.get_file(resource)?;
-        let wesl = Parser::parse_str(&source)?;
-        Ok(wesl)
+        Ok(source.into())
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct PreprocessResolver<'a, R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>>(
-    pub &'a R,
-    pub F,
-);
+pub struct PreprocessResolver<'a, F: Fn(&mut TranslationUnit) -> Result<(), Error>> {
+    pub resolver: Box<dyn Resolver + 'a>,
+    pub preprocess: F,
+}
 
-impl<'a, R: Resolver, F: Fn(&mut TranslationUnit) -> Result<(), Error>> Resolver
-    for PreprocessResolver<'a, R, F>
-{
-    fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
-        let mut res = self.0.resolve_file(resource)?;
-        self.1(&mut res)?;
+impl<'a, F: Fn(&mut TranslationUnit) -> Result<(), Error>> PreprocessResolver<'a, F> {
+    pub fn new(resolver: Box<dyn Resolver + 'a>, preprocess: F) -> Self {
+        Self {
+            resolver,
+            preprocess,
+        }
+    }
+}
+
+impl<'a, F: Fn(&mut TranslationUnit) -> Result<(), Error>> Resolver for PreprocessResolver<'a, F> {
+    fn resolve_file<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, Error> {
+        let res = self.resolver.resolve_file(resource)?;
         Ok(res)
+    }
+    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, Diagnostic> {
+        let source = self.resolve_file(resource)?;
+        let mut wesl = Parser::parse_str(&source).map_err(|e| {
+            Diagnostic::from(e)
+                .file(resource.clone())
+                .source(source.clone().into())
+        })?;
+        (self.preprocess)(&mut wesl).map_err(|e| {
+            Diagnostic::new(e)
+                .file(resource.clone())
+                .source(source.into_owned())
+        })?;
+        Ok(wesl)
     }
 }
 
@@ -199,7 +234,7 @@ impl DispatchResolver {
 }
 
 impl Resolver for DispatchResolver {
-    fn resolve_file(&self, resource: &Resource) -> Result<TranslationUnit, Error> {
+    fn resolve_file<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, Error> {
         let (mount_path, resolver) = self
             .mount_points
             .iter()

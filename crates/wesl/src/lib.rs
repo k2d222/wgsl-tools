@@ -8,6 +8,7 @@ mod import;
 mod error;
 mod mangle;
 mod resolve;
+mod sourcemap;
 mod strip;
 mod syntax_util;
 
@@ -31,6 +32,8 @@ pub use resolve::{
 };
 
 pub use error::{Diagnostic, Error};
+
+pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 
 pub use strip::strip;
 
@@ -67,26 +70,32 @@ pub fn compile(
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
-) -> Result<TranslationUnit, Error> {
+) -> Result<TranslationUnit, Diagnostic> {
+    let resolver = Box::new(resolver);
     let resolver: Box<dyn Resolver> = if cfg!(feature = "condcomp") && options.use_condcomp {
-        Box::new(PreprocessResolver(resolver, |wesl| {
+        Box::new(PreprocessResolver::new(resolver, |wesl| {
             condcomp::run(wesl, &options.features)?;
             Ok(())
         }))
     } else {
-        Box::new(resolver)
+        resolver
     };
 
-    let wesl = resolver.resolve_file(entrypoint)?;
+    let source = resolver.resolve_file(entrypoint)?;
+    let wesl = source.parse::<TranslationUnit>().map_err(|e| {
+        Diagnostic::from(e)
+            .source(source.into_owned())
+            .file(entrypoint.clone())
+    })?;
 
     let entry_names = entry_points(&wesl)
         .map(|name| name.to_string())
         .collect_vec();
 
-    let mut wesl = if cfg!(feature = "imports") && options.use_imports {
+    let mut wgsl = if cfg!(feature = "imports") && options.use_imports {
         let mut module = Module::new(wesl, entrypoint.clone());
         module.resolve(&resolver)?;
-        module.mangle(mangler)?;
+        module.mangle(mangler);
         let wesl = module.assemble();
         wesl
     } else {
@@ -99,23 +108,97 @@ pub fn compile(
                 .iter()
                 .map(|name| mangler.mangle(entrypoint, name))
                 .collect_vec();
-            strip(&mut wesl, &mangled_names);
+            strip(&mut wgsl, &mangled_names);
         } else {
             let mangled_names = entry_names
                 .iter()
                 .map(|name| mangler.mangle(entrypoint, name))
                 .collect_vec();
-            strip(&mut wesl, &mangled_names);
+            strip(&mut wgsl, &mangled_names);
         }
     }
 
     for entry_name in &entry_names {
         rename_decl(
-            &mut wesl,
+            &mut wgsl,
             &mangler.mangle(entrypoint, &entry_name),
             entry_name,
         );
     }
 
-    Ok(wesl)
+    Ok(wgsl)
+}
+
+pub fn compile_with_sourcemap(
+    entrypoint: &Resource,
+    resolver: &impl Resolver,
+    mangler: &impl Mangler,
+    options: &CompileOptions,
+) -> Result<(TranslationUnit, BasicSourceMap), Diagnostic> {
+    let resolver = Box::new(resolver);
+    let mangler = Box::new(mangler);
+    let sourcemapper = SourceMapper::new(resolver, mangler);
+    let wgsl = compile(entrypoint, &sourcemapper, &sourcemapper, options)?;
+    let sourcemap = sourcemapper.finish();
+    Ok((wgsl, sourcemap))
+}
+
+pub fn eval(expr: &str, wgsl: &TranslationUnit) -> Result<Instance, Diagnostic> {
+    let mut ctx = Context::new(wgsl);
+    let expr = expr
+        .parse::<syntax::Expression>()
+        .map_err(|e| Diagnostic::from(e).source(expr.to_string()))?;
+
+    let instance = wgsl
+        .exec(&mut ctx)
+        .and_then(|_| expr.eval(&mut ctx))
+        .map_err(|e| {
+            let mut diagnostic = Diagnostic::new(e.into());
+            let (decl, span) = ctx.err_ctx();
+            diagnostic.declaration = decl;
+            diagnostic.span = span;
+            diagnostic
+        })?;
+    Ok(instance)
+}
+
+pub fn eval_with_sourcemap(
+    expr: &str,
+    wgsl: &TranslationUnit,
+    sourcemap: &impl SourceMap,
+) -> Result<Instance, Diagnostic> {
+    let mut ctx = Context::new(wgsl);
+    let expr = expr
+        .parse::<syntax::Expression>()
+        .map_err(|e| Diagnostic::from(e).source(expr.to_string()))?;
+
+    let instance = wgsl
+        .exec(&mut ctx)
+        .and_then(|_| expr.eval(&mut ctx))
+        .map_err(|e| {
+            let mut diagnostic = Diagnostic::new(e.into());
+            let (decl, span) = ctx.err_ctx();
+            diagnostic.span = span;
+
+            if let Some(decl) = decl {
+                if let Some((resource, decl)) = sourcemap.get_decl(&decl) {
+                    diagnostic.file = Some(resource.clone());
+                    diagnostic.declaration = Some(decl.to_string());
+                    diagnostic.source = sourcemap.get_source(resource).map(|s| s.to_string());
+                } else {
+                    diagnostic.declaration = Some(decl);
+                    diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
+                }
+            } else {
+                println!(
+                    "{:?} {decl:?} {:?}",
+                    ctx.err_ctx(),
+                    sourcemap.get_default_source()
+                );
+
+                diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
+            }
+            diagnostic
+        })?;
+    Ok(instance)
 }

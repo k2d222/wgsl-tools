@@ -29,11 +29,9 @@ pub trait Eval {
 
 impl Eval for Spanned<Expression> {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        self.node().eval(ctx).inspect_err(|_| {
-            if ctx.err_span.is_none() {
-                ctx.err_span = Some(self.span().clone());
-            }
-        })
+        self.node()
+            .eval(ctx)
+            .inspect_err(|_| ctx.set_err_expr_ctx(self.span()))
     }
 }
 
@@ -329,20 +327,22 @@ impl Eval for FunctionCall {
                 ctx.scope.add(p.name.clone(), a, AccessMode::Read);
             }
 
-            ctx.err_decl = Some(decl.name.to_string());
-            let flow = decl.body.exec(ctx)?;
-            ctx.err_decl = None;
+            let flow = decl
+                .body
+                .exec(ctx)
+                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
             flow
         };
         ctx.scope.pop();
 
-        match flow {
+        let inst = match flow {
             Flow::Next => Ok(Instance::Void),
             Flow::Break | Flow::Continue => Err(E::FlowInFunction(flow)),
             Flow::Return(inst) => inst
                 .convert_to(&ret_ty)
                 .ok_or(E::ReturnType(ret_ty, inst.ty())),
-        }
+        };
+        inst
     }
 }
 

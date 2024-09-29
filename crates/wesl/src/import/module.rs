@@ -1,8 +1,12 @@
 use std::{collections::HashMap, path::Path};
 
-use wgsl_parse::syntax::{self, TranslationUnit};
+use wgsl_parse::{
+    error::FormatError,
+    syntax::{self, TranslationUnit},
+    Parser,
+};
 
-use crate::{Error, Mangler, Resolver, Resource};
+use crate::{error::Diagnostic, Error, Mangler, Resolver, Resource};
 
 // XXX: are imports supposed to be order-independent?
 type Imports = HashMap<Resource, Vec<syntax::ImportItem>>;
@@ -29,32 +33,34 @@ impl Module {
     }
 
     pub fn is_resolved(&self) -> bool {
-        let Ok(imports) = imports_to_resources(&self.source.imports, &self.resource) else {
-            return false;
-        };
+        let imports = imports_to_resources(&self.source.imports, &self.resource);
         imports
             .keys()
             .all(|path| self.resolutions.contains_key(path))
     }
 
-    pub fn resolve(&mut self, resolver: &impl Resolver) -> Result<(), Error> {
+    pub fn resolve(&mut self, resolver: &impl Resolver) -> Result<(), Diagnostic> {
         fn rec(
             module: &mut Module,
             resolver: &impl Resolver,
             imports: &Imports,
-        ) -> Result<(), Error> {
+        ) -> Result<(), Diagnostic> {
             for child_res in imports.keys() {
                 if !module.resolutions.contains_key(child_res) {
                     let source = resolver.resolve_file(&child_res)?;
-                    let imports = imports_to_resources(&source.imports, &child_res)?;
-                    module.resolve_import(child_res, source);
-                    rec(module, resolver, &imports)?;
+                    let wesl = source
+                        .parse::<TranslationUnit>()
+                        .map_err(|e| Diagnostic::from(e).file(module.resource.clone()))?;
+                    let imports = imports_to_resources(&wesl.imports, &child_res);
+                    module.resolve_import(child_res, wesl);
+                    rec(module, resolver, &imports)
+                        .map_err(|e| Diagnostic::from(e).file(module.resource.clone()))?;
                 }
             }
             Ok(())
         }
 
-        let imports = imports_to_resources(&self.source.imports, &self.resource)?;
+        let imports = imports_to_resources(&self.source.imports, &self.resource);
         rec(self, resolver, &imports)?;
         debug_assert!(self.is_resolved());
         Ok(())
@@ -64,7 +70,7 @@ impl Module {
 pub(crate) fn import_to_resource(
     import_path: &Path,
     parent_resource: Option<&Resource>,
-) -> Result<Resource, Error> {
+) -> Resource {
     let resource = if !import_path.starts_with(Path::new(".")) {
         import_path.to_path_buf()
     } else if let Some(parent) = parent_resource {
@@ -76,14 +82,11 @@ pub(crate) fn import_to_resource(
         import_path.to_path_buf()
     };
 
-    Ok(resource.into())
+    resource.into()
 }
 
 /// Flatten imports to a list of resources and items to import.
-pub(crate) fn imports_to_resources(
-    imports: &[syntax::Import],
-    resource: &Resource,
-) -> Result<Imports, Error> {
+pub(crate) fn imports_to_resources(imports: &[syntax::Import], resource: &Resource) -> Imports {
     let mut res = Imports::new();
 
     for import in imports {
@@ -91,7 +94,7 @@ pub(crate) fn imports_to_resources(
             syntax::ImportContent::Star(item) => {
                 let mut path = import.path.clone();
                 path.push(item.name.clone());
-                let resource = import_to_resource(&path, Some(resource))?;
+                let resource = import_to_resource(&path, Some(resource));
                 if let Some(entry) = res.get_mut(&resource) {
                     entry.push(item.clone());
                 } else {
@@ -99,7 +102,7 @@ pub(crate) fn imports_to_resources(
                 }
             }
             syntax::ImportContent::Item(item) => {
-                let resource = import_to_resource(&import.path, Some(resource))?;
+                let resource = import_to_resource(&import.path, Some(resource));
                 if let Some(entry) = res.get_mut(&resource) {
                     entry.push(item.clone());
                 } else {
@@ -119,7 +122,7 @@ pub(crate) fn imports_to_resources(
                     })
                     .collect::<Vec<_>>();
 
-                let resolved = imports_to_resources(&imports, resource)?;
+                let resolved = imports_to_resources(&imports, resource);
                 for (resource, items) in resolved {
                     if let Some(entry) = res.get_mut(&resource) {
                         entry.extend_from_slice(items.as_slice());
@@ -131,14 +134,14 @@ pub(crate) fn imports_to_resources(
         }
     }
 
-    Ok(res)
+    res
 }
 
 pub fn resolve<M: Mangler + ?Sized>(
     source: TranslationUnit,
     resource: Resource,
     resolver: &impl Resolver,
-) -> Result<Module, crate::Error> {
+) -> Result<Module, Diagnostic> {
     let mut module = Module::new(source, resource);
     module.resolve(resolver)?;
     Ok(module)

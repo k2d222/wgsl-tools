@@ -7,11 +7,7 @@ use crate::{Error, Mangler, Resource};
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
-fn mangle_file(
-    wesl: &mut TranslationUnit,
-    resource: Resource,
-    mangler: &impl Mangler,
-) -> Result<(), Error> {
+fn mangle_file(wesl: &mut TranslationUnit, resource: Resource, mangler: &impl Mangler) {
     // delared idents
     let mut replace: HashMap<String, String> = query_mut!(wesl.global_declarations.[].{
         GlobalDeclaration::Declaration.name,
@@ -28,7 +24,7 @@ fn mangle_file(
     .collect();
 
     // imported idents
-    let imports = imports_to_resources(&wesl.imports, &resource)?;
+    let imports = imports_to_resources(&wesl.imports, &resource);
     for (resource, items) in imports.iter() {
         for item in items {
             let old_ident = item.rename.as_ref().unwrap_or(&item.name).clone();
@@ -42,16 +38,13 @@ fn mangle_file(
             *name = new_ident.clone();
         }
     }
-
-    Ok(())
 }
 
 impl Module {
-    pub fn mangle(&mut self, mangler: &impl Mangler) -> Result<(), Error> {
-        mangle_file(&mut self.source, self.resource.clone(), mangler)?;
+    pub fn mangle(&mut self, mangler: &impl Mangler) {
+        mangle_file(&mut self.source, self.resource.clone(), mangler);
         for (resource, source) in &mut self.resolutions {
-            mangle_file(source, resource.clone(), mangler)?;
+            mangle_file(source, resource.clone(), mangler);
         }
-        Ok(())
     }
 }
