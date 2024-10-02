@@ -13,6 +13,7 @@
 import imp1/f1;
 
 fn main() -> u32 {
+    @foo
     return f1();
 }
 
