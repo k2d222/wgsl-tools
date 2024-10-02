@@ -1,12 +1,8 @@
 use std::{collections::HashMap, path::Path};
 
-use wgsl_parse::{
-    error::FormatError,
-    syntax::{self, TranslationUnit},
-    Parser,
-};
+use wgsl_parse::syntax::{self, TranslationUnit};
 
-use crate::{error::Diagnostic, Error, Mangler, Resolver, Resource};
+use crate::{error::Diagnostic, Mangler, Resolver, Resource};
 
 // XXX: are imports supposed to be order-independent?
 type Imports = HashMap<Resource, Vec<syntax::ImportItem>>;
@@ -47,9 +43,9 @@ impl Module {
         ) -> Result<(), Diagnostic> {
             for child_res in imports.keys() {
                 if !module.resolutions.contains_key(child_res) {
-                    let source = resolver.resolve_file(&child_res)?;
-                    let wesl = source
-                        .parse::<TranslationUnit>()
+                    let source = resolver.resolve_source(&child_res)?;
+                    let wesl = resolver
+                        .source_to_module(&source, &child_res)
                         .map_err(|e| Diagnostic::from(e).file(module.resource.clone()))?;
                     let imports = imports_to_resources(&wesl.imports, &child_res);
                     module.resolve_import(child_res, wesl);

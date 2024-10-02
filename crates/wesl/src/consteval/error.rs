@@ -1,12 +1,8 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
-
 use itertools::Itertools;
 use thiserror::Error;
-use wgsl_parse::{error::FormatError, span::Span, syntax::*};
+use wgsl_parse::syntax::*;
 
-use crate::{Context, Error, Instance};
-
-use super::{Flow, LiteralInstance, MemView, Ty, Type};
+use super::{Flow, Instance, LiteralInstance, MemView, Ty, Type};
 
 #[derive(Clone, Debug, Error)]
 pub enum EvalError {

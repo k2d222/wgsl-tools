@@ -116,7 +116,7 @@ impl Eval for NamedComponentExpression {
             }
         }
 
-        fn inst_comp(base: Instance, comp: &String, ctx: &mut Context) -> Result<Instance, E> {
+        fn inst_comp(base: Instance, comp: &String) -> Result<Instance, E> {
             match &base {
                 Instance::Struct(s) => {
                     let val = s
@@ -127,7 +127,7 @@ impl Eval for NamedComponentExpression {
                 }
                 Instance::Vec(v) => vec_comp(v, comp, None),
                 Instance::Ref(r) => match &*r.read()? {
-                    Instance::Struct(s) => r.view_member(comp.clone()).map(Into::into),
+                    Instance::Struct(_) => r.view_member(comp.clone()).map(Into::into),
                     Instance::Vec(v) => vec_comp(v, comp, Some(r)),
                     _ => Err(E::Component(base.ty(), comp.clone())),
                 },
@@ -136,7 +136,7 @@ impl Eval for NamedComponentExpression {
         }
 
         let base = self.base.eval(ctx)?;
-        inst_comp(base, &self.component, ctx)
+        inst_comp(base, &self.component)
     }
 }
 
@@ -358,7 +358,7 @@ impl Eval for IdentifierExpression {
 }
 
 impl Eval for TypeExpression {
-    fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
+    fn eval(&self, _ctx: &mut Context) -> Result<Instance, E> {
         todo!()
     }
 }

@@ -3,7 +3,6 @@
 use std::str::FromStr;
 
 use crate::{
-    error::CustomLalrError,
     span::{Span, Spanned},
     syntax::*,
 };

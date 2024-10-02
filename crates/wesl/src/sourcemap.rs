@@ -76,8 +76,11 @@ impl<'a> Mangler for SourceMapper<'a> {
 }
 
 impl<'a> Resolver for SourceMapper<'a> {
-    fn resolve_file<'b>(&'b self, resource: &Resource) -> Result<std::borrow::Cow<'b, str>, Error> {
-        let res = self.resolver.resolve_file(resource)?;
+    fn resolve_source<'b>(
+        &'b self,
+        resource: &Resource,
+    ) -> Result<std::borrow::Cow<'b, str>, Error> {
+        let res = self.resolver.resolve_source(resource)?;
         let mut sourcemap = self.sourcemap.borrow_mut();
         sourcemap.add_source(resource.clone(), res.clone().into());
         Ok(res)

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use wgsl_parse::syntax::{GlobalDeclaration, TranslationUnit};
+use wgsl_parse::syntax::TranslationUnit;
 
 use crate::syntax_util::{decl_name, IterUses};
 

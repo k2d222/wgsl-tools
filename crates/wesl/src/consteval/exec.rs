@@ -268,10 +268,10 @@ impl Exec for IfStatement {
 }
 
 impl Exec for SwitchStatement {
-    fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        let expr = self.expression.eval_value(ctx)?;
+    fn exec(&self, _ctx: &mut Context) -> Result<Flow, E> {
+        // let expr = self.expression.eval_value(ctx)?;
 
-        for clause in &self.clauses {}
+        // for clause in &self.clauses {}
 
         // this one looks quite complicated and ambiguous
         // * should I evaluate case selectors first?

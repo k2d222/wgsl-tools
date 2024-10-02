@@ -5,14 +5,10 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use wesl::{
-    syntax::Expression, BasicSourceMap, CachedMangler, CompileOptions, Context, Diagnostic, Eval,
-    Exec, FileResolver, Instance, Mangler, Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
+    BasicSourceMap, CompileOptions, Diagnostic, FileResolver, Instance, Mangler, Resource,
+    MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
-use wgsl_parse::{
-    error::{FormatError, ParseError},
-    syntax::TranslationUnit,
-    Parser as WgslParser,
-};
+use wgsl_parse::{error::FormatError, syntax::TranslationUnit, Parser as WgslParser};
 
 #[derive(Parser)]
 #[command(version, author, about)]

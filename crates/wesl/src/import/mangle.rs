@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::module::imports_to_resources;
 use super::Module;
 use crate::syntax_util::IterUses;
-use crate::{Error, Mangler, Resource};
+use crate::{Mangler, Resource};
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 

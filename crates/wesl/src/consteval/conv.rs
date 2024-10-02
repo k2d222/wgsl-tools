@@ -1,6 +1,6 @@
 use half::f16;
 use itertools::Itertools;
-use num_traits::{FromPrimitive, NumCast, ToPrimitive};
+use num_traits::{FromPrimitive, ToPrimitive};
 
 use super::{
     Instance, LiteralInstance, MatInner, MatInstance, SyntaxUtil, Ty, Type, VecInner, VecInstance,

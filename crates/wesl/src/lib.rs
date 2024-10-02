@@ -27,8 +27,8 @@ pub use mangle::{
 };
 
 pub use resolve::{
-    DispatchResolver, FileResolver, PreprocessResolver, ResolveError, Resolver, Resource,
-    VirtualFileResolver,
+    CacheResolver, DispatchResolver, FileResolver, PreprocessResolver, ResolveError, Resolver,
+    Resource, VirtualFileResolver,
 };
 
 pub use error::{Diagnostic, Error};
@@ -81,12 +81,14 @@ pub fn compile(
         resolver
     };
 
-    let source = resolver.resolve_file(entrypoint)?;
-    let wesl = source.parse::<TranslationUnit>().map_err(|e| {
-        Diagnostic::from(e)
-            .source(source.into_owned())
-            .file(entrypoint.clone())
-    })?;
+    let source = resolver.resolve_source(entrypoint)?;
+    let wesl = resolver
+        .source_to_module(&source, entrypoint)
+        .map_err(|e| {
+            Diagnostic::from(e)
+                .source(source.into_owned())
+                .file(entrypoint.clone())
+        })?;
 
     let entry_names = entry_points(&wesl)
         .map(|name| name.to_string())
