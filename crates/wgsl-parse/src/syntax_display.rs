@@ -4,9 +4,10 @@ use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
-struct LaterDisplay<F: (Fn(&mut Formatter) -> fmt::Result)>(F);
+// unstable: https://doc.rust-lang.org/std/fmt/struct.FormatterFn.html
+struct FormatFn<F: (Fn(&mut Formatter) -> fmt::Result)>(F);
 
-impl<F: Fn(&mut Formatter) -> fmt::Result> Display for LaterDisplay<F> {
+impl<F: Fn(&mut Formatter) -> fmt::Result> Display for FormatFn<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         (self.0)(f)
     }
@@ -160,14 +161,12 @@ impl Display for Declaration {
         let name = &self.name;
         let typ = self
             .ty
-            .as_ref()
-            .map(|typ| format!(": {}", typ))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |ty, f| f(&format_args!(": {}", ty)));
         let init = self
             .initializer
-            .as_ref()
-            .map(|typ| format!(" = {}", typ))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |ty, f| f(&format_args!(" = {}", ty)));
         write!(f, "{kind}{tplt} {name}{typ}{init};")
     }
 }
@@ -220,7 +219,7 @@ impl Display for Function {
         let name = &self.name;
         let params = self.parameters.iter().format(", ");
         let ret_ty = self.return_type.iter().format_with("", |ty, f| {
-            f(&LaterDisplay(|f: &mut Formatter| {
+            f(&FormatFn(|f: &mut Formatter| {
                 write!(f, "-> ")?;
                 write!(f, "{}", fmt_attrs(&self.return_attributes, true))?;
                 write!(f, "{ty} ")?;
@@ -254,17 +253,15 @@ impl Display for ConstAssert {
 impl Display for Attribute {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = &self.name;
-        let args = self
-            .arguments
-            .as_ref()
-            .map(|args| format!("({})", args.iter().format(", ")))
-            .unwrap_or_default();
+        let args = self.arguments.iter().format_with("", |args, f| {
+            f(&format_args!("({})", args.iter().format(", ")))
+        });
         write!(f, "@{name}{args}")
     }
 }
 
 fn fmt_attrs(attrs: &[Attribute], inline: bool) -> impl fmt::Display + '_ {
-    LaterDisplay(move |f| {
+    FormatFn(move |f| {
         let print = attrs.iter().format(" ");
         let suffix = if attrs.is_empty() {
             ""
@@ -600,9 +597,8 @@ impl Display for LoopStatement {
         );
         let continuing = self
             .continuing
-            .as_ref()
-            .map(|cont| format!("{}\n", Indent(cont)))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |cont, f| f(&format_args!("{}\n", Indent(cont))));
         write!(f, "loop {body_attrs}{{\n{stmts}\n{continuing}}}")
     }
 }
@@ -622,9 +618,8 @@ impl Display for ContinuingStatement {
         );
         let break_if = self
             .break_if
-            .as_ref()
-            .map(|print| format!("{print}\n"))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |stat, f| f(&format_args!("{}\n", Indent(stat))));
         write!(f, "continuing {body_attrs}{{\n{stmts}\n{break_if}}}")
     }
 }
@@ -652,9 +647,8 @@ impl Display for ForStatement {
         }
         let cond = self
             .condition
-            .as_ref()
-            .map(|expr| format!("{}", expr))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |expr, f| f(&format_args!("{expr}")));
         let mut updt = self
             .update
             .as_ref()
@@ -702,9 +696,8 @@ impl Display for ReturnStatement {
         }
         let expr = self
             .expression
-            .as_ref()
-            .map(|expr| format!(" {expr}"))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |expr, f| f(&format_args!(" {expr}")));
         write!(f, "return{expr};")
     }
 }
