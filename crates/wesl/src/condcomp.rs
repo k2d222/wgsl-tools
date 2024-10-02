@@ -46,8 +46,10 @@ pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, C
                 BinaryOperator::ShortCircuitAnd => {
                     let expr = if left == EXPR_TRUE && right == EXPR_TRUE {
                         left
-                    } else if left == EXPR_FALSE || right == EXPR_FALSE {
+                    } else if left == EXPR_FALSE {
                         left
+                    } else if right == EXPR_FALSE {
+                        right
                     } else {
                         expr.clone()
                     };
