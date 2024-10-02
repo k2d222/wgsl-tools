@@ -22,32 +22,49 @@ struct Indent<T: Display>(pub T);
 
 impl<T: Display> Display for Indent<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            return self.0.fmt(f);
+        }
+
         let indent = "    ";
         let inner_display = self.0.to_string();
         let fmt = inner_display
             .lines()
             .format_with("\n", |l, f| f(&format_args!("{indent}{l}")));
-        write!(f, "{}", fmt)?;
-        Ok(())
+        write!(f, "{}", fmt)
     }
+}
+
+fn alt(f: &Formatter<'_>, o1: &'static str, o2: &'static str) -> &'static str {
+    if !f.alternate() {
+        o1
+    } else {
+        o2
+    }
+}
+
+fn if_alt(f: &Formatter<'_>, o1: &'static str) -> &'static str {
+    alt(f, o1, "")
 }
 
 impl Display for TranslationUnit {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let newline = if_alt(f, "\n");
+        let newlines = if_alt(f, "\n\n");
         if cfg!(feature = "imports") && !self.imports.is_empty() {
-            let imports = self.imports.iter().format("\n");
-            write!(f, "{imports}\n\n")?;
+            let imports = self.imports.iter().format(newline);
+            write!(f, "{imports}{newlines}")?;
         }
         if !self.global_directives.is_empty() {
-            let directives = self.global_directives.iter().format("\n");
-            write!(f, "{directives}\n\n")?;
+            let directives = self.global_directives.iter().format(newline);
+            write!(f, "{directives}{newlines}")?;
         }
         let declarations = self
             .global_declarations
             .iter()
             // .filter(|decl| !matches!(decl, GlobalDeclaration::Void))
-            .format("\n\n");
-        write!(f, "{declarations}\n")
+            .format(newlines);
+        write!(f, "{declarations}{newlines}")
     }
 }
 
@@ -80,8 +97,8 @@ impl Display for ImportContent {
                 Ok(())
             }
             ImportContent::Collection(coll) => {
-                let coll = coll.iter().format(", ");
-                write!(f, "{{ {coll} }}")
+                let coll = coll.iter().format(alt(f, ", ", ","));
+                write!(f, "{{{0}{coll}{0}}}", if_alt(f, " "))
             }
         }
     }
@@ -104,7 +121,7 @@ impl Display for DiagnosticDirective {
         }
         let severity = &self.severity;
         let rule = &self.rule_name;
-        write!(f, "diagnostic ({severity}, {rule});")
+        write!(f, "diagnostic{0}({severity},{0}{rule});", if_alt(f, " "))
     }
 }
 
@@ -158,16 +175,15 @@ impl Display for Declaration {
         let kind = &self.kind;
         let tplt = fmt_template(&self.template_args);
         let name = &self.name;
+        let space = if_alt(f, " ");
         let typ = self
             .ty
-            .as_ref()
-            .map(|typ| format!(": {}", typ))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |ty, f| f(&format_args!(":{space}{}", ty)));
         let init = self
             .initializer
-            .as_ref()
-            .map(|typ| format!(" = {}", typ))
-            .unwrap_or_default();
+            .iter()
+            .format_with("", |ty, f| f(&format_args!("{space}={space}{}", ty)));
         write!(f, "{kind}{tplt} {name}{typ}{init};")
     }
 }
@@ -190,7 +206,7 @@ impl Display for TypeAlias {
         }
         let name = &self.name;
         let typ = &self.ty;
-        write!(f, "alias {name} = {typ};")
+        write!(f, "alias {name}{0}={0}{typ};", if_alt(f, " "))
     }
 }
 
@@ -200,8 +216,8 @@ impl Display for Struct {
             write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         }
         let name = &self.name;
-        let members = Indent(self.members.iter().format(",\n"));
-        write!(f, "struct {name} {{\n{members}\n}}")
+        let members = Indent(self.members.iter().format(alt(f, ",\n", ",")));
+        write!(f, "struct {name} {{{0}{members}{0}}}", if_alt(f, "\n"))
     }
 }
 
@@ -210,7 +226,7 @@ impl Display for StructMember {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let name = &self.name;
         let typ = &self.ty;
-        write!(f, "{name}: {typ}")
+        write!(f, "{name}:{}{typ}", if_alt(f, " "))
     }
 }
 
@@ -219,16 +235,17 @@ impl Display for Function {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let name = &self.name;
         let params = self.parameters.iter().format(", ");
+        let space = if_alt(f, " ");
         let ret_ty = self.return_type.iter().format_with("", |ty, f| {
             f(&LaterDisplay(|f: &mut Formatter| {
-                write!(f, "-> ")?;
+                write!(f, "->{space}")?;
                 write!(f, "{}", fmt_attrs(&self.return_attributes, true))?;
-                write!(f, "{ty} ")?;
+                write!(f, "{ty}{space}")?;
                 Ok(())
             }))
         });
         let body = &self.body;
-        write!(f, "fn {name}({params}) {ret_ty}{body}")
+        write!(f, "fn {name}({params}){space}{ret_ty}{body}")
     }
 }
 
@@ -237,7 +254,7 @@ impl Display for FormalParameter {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let name = &self.name;
         let typ = &self.ty;
-        write!(f, "{name}: {typ}")
+        write!(f, "{name}:{}{typ}", if_alt(f, " "))
     }
 }
 
@@ -254,11 +271,10 @@ impl Display for ConstAssert {
 impl Display for Attribute {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = &self.name;
-        let args = self
-            .arguments
-            .as_ref()
-            .map(|args| format!("({})", args.iter().format(", ")))
-            .unwrap_or_default();
+        let comma = alt(f, ", ", ",");
+        let args = self.arguments.iter().format_with("", |args, f| {
+            f(&format_args!("({})", args.iter().format(comma)))
+        });
         write!(f, "@{name}{args}")
     }
 }
@@ -268,7 +284,7 @@ fn fmt_attrs(attrs: &[Attribute], inline: bool) -> impl fmt::Display + '_ {
         let print = attrs.iter().format(" ");
         let suffix = if attrs.is_empty() {
             ""
-        } else if inline {
+        } else if inline || f.alternate() {
             " "
         } else {
             "\n"
@@ -358,7 +374,7 @@ impl Display for BinaryExpression {
         let operator = &self.operator;
         let left = &self.left;
         let right = &self.right;
-        write!(f, "{left} {operator} {right}")
+        write!(f, "{left}{0}{operator}{0}{right}", if_alt(f, " "))
     }
 }
 
@@ -391,7 +407,7 @@ impl Display for FunctionCall {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = &self.name;
         let tplt = fmt_template(&self.template_args);
-        let args = self.arguments.iter().format(", ");
+        let args = self.arguments.iter().format(alt(f, ", ", ","));
         write!(f, "{name}{tplt}({args})")
     }
 }
@@ -420,7 +436,8 @@ impl Display for TemplateArg {
 
 fn fmt_template(tplt: &Option<Vec<TemplateArg>>) -> impl fmt::Display + '_ {
     tplt.iter().format_with("", |tplt, f| {
-        f(&format_args!("<{}>", tplt.iter().format(", ")))
+        let disp = LaterDisplay(|f| write!(f, "<{}>", tplt.iter().format(alt(f, ", ", ","))));
+        f(&disp)
     })
 }
 
@@ -451,13 +468,14 @@ impl Display for Statement {
 impl Display for CompoundStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
+        let newline = if_alt(f, "\n");
         let stmts = Indent(
             self.statements
                 .iter()
                 // .filter(|stmt| !matches!(stmt, Statement::Void))
-                .format("\n"),
+                .format(newline),
         );
-        write!(f, "{{\n{stmts}\n}}")
+        write!(f, "{{{newline}{stmts}{newline}}}")
     }
 }
 
@@ -469,7 +487,7 @@ impl Display for AssignmentStatement {
         let operator = &self.operator;
         let lhs = &self.lhs;
         let rhs = &self.rhs;
-        write!(f, "{lhs} {operator} {rhs};")
+        write!(f, "{lhs}{0}{operator}{0}{rhs};", if_alt(f, " "))
     }
 }
 
@@ -517,10 +535,10 @@ impl Display for IfStatement {
         let if_clause = &self.if_clause;
         write!(f, "{if_clause}")?;
         for else_if_clause in self.else_if_clauses.iter() {
-            write!(f, "\n{else_if_clause}")?;
+            write!(f, "{}{else_if_clause}", if_alt(f, "\n"))?;
         }
         if let Some(else_clause) = &self.else_clause {
-            write!(f, "\n{else_clause}")?;
+            write!(f, "{}{else_clause}", if_alt(f, "\n"))?;
         }
         Ok(())
     }
@@ -560,8 +578,12 @@ impl Display for SwitchStatement {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let expr = &self.expression;
         let body_attrs = fmt_attrs(&self.body_attributes, false);
-        let clauses = Indent(self.clauses.iter().format("\n"));
-        write!(f, "switch {expr} {body_attrs}{{\n{clauses}\n}}")
+        let clauses = Indent(self.clauses.iter().format(if_alt(f, "\n")));
+        write!(
+            f,
+            "switch {expr} {body_attrs}{{{0}{clauses}{0}}}",
+            if_alt(f, "\n")
+        )
     }
 }
 
@@ -570,7 +592,7 @@ impl Display for SwitchClause {
         if cfg!(feature = "attributes") {
             write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         }
-        let cases = self.case_selectors.iter().format(", ");
+        let cases = self.case_selectors.iter().format(alt(f, ", ", ","));
         let body = &self.body;
         write!(f, "case {cases} {body}")
     }
@@ -591,19 +613,22 @@ impl Display for LoopStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let body_attrs = fmt_attrs(&self.body.attributes, false);
+        let newline = if_alt(f, "\n");
         let stmts = Indent(
             self.body
                 .statements
                 .iter()
                 // .filter(|stmt| !matches!(stmt, Statement::Void))
-                .format("\n"),
+                .format(newline),
         );
         let continuing = self
             .continuing
-            .as_ref()
-            .map(|cont| format!("{}\n", Indent(cont)))
-            .unwrap_or_default();
-        write!(f, "loop {body_attrs}{{\n{stmts}\n{continuing}}}")
+            .iter()
+            .format_with("", |cont, f| f(&format_args!("{}{newline}", Indent(cont))));
+        write!(
+            f,
+            "loop {body_attrs}{{{newline}{stmts}{newline}{continuing}}}"
+        )
     }
 }
 
@@ -613,19 +638,22 @@ impl Display for ContinuingStatement {
             write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         }
         let body_attrs = fmt_attrs(&self.body.attributes, false);
+        let newline = if_alt(f, "\n");
         let stmts = Indent(
             self.body
                 .statements
                 .iter()
                 // .filter(|stmt| !matches!(stmt, Statement::Void))
-                .format("\n"),
+                .format(newline),
         );
         let break_if = self
             .break_if
-            .as_ref()
-            .map(|print| format!("{print}\n"))
-            .unwrap_or_default();
-        write!(f, "continuing {body_attrs}{{\n{stmts}\n{break_if}}}")
+            .iter()
+            .format_with("", |print, f| f(&format_args!("{print}{newline}")));
+        write!(
+            f,
+            "continuing {body_attrs}{{{newline}{stmts}{newline}{break_if}}}"
+        )
     }
 }
 
@@ -650,11 +678,7 @@ impl Display for ForStatement {
         if init.ends_with(';') {
             init.pop();
         }
-        let cond = self
-            .condition
-            .as_ref()
-            .map(|expr| format!("{}", expr))
-            .unwrap_or_default();
+        let cond = self.condition.iter().format_with("", |expr, f| f(expr));
         let mut updt = self
             .update
             .as_ref()
@@ -664,7 +688,11 @@ impl Display for ForStatement {
             updt.pop();
         }
         let body = &self.body;
-        write!(f, "for ({init}; {cond}; {updt}) {body}")
+        write!(
+            f,
+            "for{0}({init};{0}{cond};{0}{updt}){0}{body}",
+            if_alt(f, " ")
+        )
     }
 }
 
@@ -673,7 +701,7 @@ impl Display for WhileStatement {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let cond = &self.condition;
         let body = &self.body;
-        write!(f, "while ({cond}) {body}")
+        write!(f, "while{0}({cond}){0}{body}", if_alt(f, " "))
     }
 }
 
