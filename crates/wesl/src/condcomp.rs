@@ -27,13 +27,31 @@ pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, C
             _ => Err(CondCompError::InvalidExpression(expr.clone())),
         },
         Expression::Parenthesized(paren) => eval_attr(&paren.expression, features),
+        Expression::Unary(unary) => {
+            let operand = eval_attr(&unary.operand, features)?;
+            match &unary.operator {
+                UnaryOperator::LogicalNegation => {
+                    let expr = if operand == EXPR_TRUE {
+                        EXPR_FALSE.clone()
+                    } else if operand == EXPR_FALSE {
+                        EXPR_TRUE.clone()
+                    } else {
+                        expr.clone()
+                    };
+                    Ok(expr)
+                }
+                _ => Err(CondCompError::InvalidExpression(expr.clone())),
+            }
+        }
         Expression::Binary(binary) => {
             let left = eval_attr(&binary.left, features)?;
             let right = eval_attr(&binary.right, features)?;
             match &binary.operator {
                 BinaryOperator::ShortCircuitOr => {
                     let expr = if left == EXPR_TRUE || right == EXPR_TRUE {
-                        left
+                        EXPR_TRUE.clone()
+                    } else if left == EXPR_FALSE && right == EXPR_FALSE {
+                        left // false
                     } else if left == EXPR_FALSE {
                         right
                     } else if right == EXPR_FALSE {
@@ -45,11 +63,13 @@ pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, C
                 }
                 BinaryOperator::ShortCircuitAnd => {
                     let expr = if left == EXPR_TRUE && right == EXPR_TRUE {
-                        left
-                    } else if left == EXPR_FALSE {
-                        left
-                    } else if right == EXPR_FALSE {
+                        left // true
+                    } else if left == EXPR_FALSE || right == EXPR_FALSE {
+                        EXPR_FALSE.clone()
+                    } else if left == EXPR_TRUE {
                         right
+                    } else if right == EXPR_TRUE {
+                        left
                     } else {
                         expr.clone()
                     };
