@@ -10,7 +10,7 @@ use derive_more::derive::From;
 use half::f16;
 use itertools::Itertools;
 
-use crate::consteval::Ty;
+use crate::eval::Ty;
 
 use super::{EvalError, Type};
 

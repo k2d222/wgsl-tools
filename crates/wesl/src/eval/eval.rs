@@ -1,6 +1,6 @@
 use std::iter::zip;
 
-use crate::consteval::MatInstance;
+use crate::eval::MatInstance;
 
 use super::{
     call_builtin, AccessMode, Context, Convert, EvalError, EvalTy, Exec, Flow, Instance,

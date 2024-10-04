@@ -16,9 +16,9 @@ pub enum Error {
     #[cfg(feature = "condcomp")]
     #[error("{0}")]
     CondCompError(#[from] CondCompError),
-    #[cfg(feature = "consteval")]
+    #[cfg(feature = "eval")]
     #[error("{0}")]
-    ConstEvalError(#[from] EvalError),
+    EvalError(#[from] EvalError),
 }
 
 #[derive(Clone, Debug)]

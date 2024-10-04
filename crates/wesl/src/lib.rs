@@ -1,7 +1,7 @@
 #[cfg(feature = "condcomp")]
 mod condcomp;
-#[cfg(feature = "consteval")]
-pub mod consteval;
+#[cfg(feature = "eval")]
+pub mod eval;
 #[cfg(feature = "imports")]
 mod import;
 
@@ -18,8 +18,8 @@ pub use condcomp::{run as run_condcomp, CondCompError};
 #[cfg(feature = "imports")]
 pub use import::{resolve, ImportError, Module};
 
-#[cfg(feature = "consteval")]
-pub use consteval::{Context, Eval, EvalError, Exec, Instance};
+#[cfg(feature = "eval")]
+pub use eval::{Context, Eval, EvalError, Exec, Instance};
 
 pub use mangle::{
     CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE,
