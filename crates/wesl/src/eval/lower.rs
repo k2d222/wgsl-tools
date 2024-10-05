@@ -151,10 +151,7 @@ impl ToExpr for Type {
                 name: format!("array"),
                 template_args: Some(vec![
                     TemplateArg {
-                        expression: Expression::Identifier(IdentifierExpression {
-                            name: n.to_string(),
-                        })
-                        .into(),
+                        expression: Expression::TypeOrIdentifier(n.to_string().into()).into(),
                     },
                     TemplateArg {
                         expression: ty.to_expr(ctx)?.into(),
@@ -220,8 +217,7 @@ impl Lower for Expression {
                     expr.right.lower(ctx)?;
                 }
                 Expression::FunctionCall(expr) => expr.lower(ctx)?,
-                Expression::Identifier(_) => (),
-                Expression::Type(_) => *self = self.eval_value(ctx)?.to_expr(ctx)?,
+                Expression::TypeOrIdentifier(_) => *self = self.eval_value(ctx)?.to_expr(ctx)?,
             },
         }
         Ok(())

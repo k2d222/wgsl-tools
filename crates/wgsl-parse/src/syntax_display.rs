@@ -286,8 +286,7 @@ impl Display for Expression {
             Expression::Unary(print) => write!(f, "{print}"),
             Expression::Binary(print) => write!(f, "{print}"),
             Expression::FunctionCall(print) => write!(f, "{print}"),
-            Expression::Identifier(print) => write!(f, "{print}"),
-            Expression::Type(print) => write!(f, "{print}"),
+            Expression::TypeOrIdentifier(print) => write!(f, "{print}"),
         }
     }
 }
@@ -389,13 +388,6 @@ impl Display for FunctionCall {
         let ty = &self.ty;
         let args = self.arguments.iter().format(", ");
         write!(f, "{ty}({args})")
-    }
-}
-
-impl Display for IdentifierExpression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let ident = &self.name;
-        write!(f, "{ident}")
     }
 }
 

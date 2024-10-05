@@ -24,7 +24,6 @@ pub use import::{resolve, ImportError, Module};
 #[cfg(feature = "eval")]
 pub use eval::{Context, Eval, EvalError, Exec, Instance};
 
-use lower::lower_sourcemap;
 pub use mangle::{
     CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE,
     MANGLER_HASH, MANGLER_NONE,
@@ -37,12 +36,13 @@ pub use resolve::{
 
 pub use error::{Diagnostic, Error};
 
-use sourcemap::NoSourceMap;
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 
 pub use strip::strip;
 
 pub use wgsl_parse::syntax;
+
+pub use lower::{lower, lower_sourcemap};
 
 use syntax_util::{entry_points, rename_decl};
 
@@ -75,6 +75,7 @@ fn compile_impl(
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
+    entry_names: &mut Vec<String>,
 ) -> Result<TranslationUnit, Error> {
     let resolver = Box::new(resolver);
     let resolver: Box<dyn Resolver> = if cfg!(feature = "condcomp") && options.use_condcomp {
@@ -89,7 +90,8 @@ fn compile_impl(
     let source = resolver.resolve_source(entrypoint)?;
     let wesl = resolver.source_to_module(&source, entrypoint)?;
 
-    let entry_names = entry_points(&wesl)
+    // hack, entry_names is passed by &mut just to return it from the function even in error case.
+    *entry_names = entry_points(&wesl)
         .map(|name| name.to_string())
         .collect_vec();
 
@@ -119,7 +121,7 @@ fn compile_impl(
         }
     }
 
-    for entry_name in &entry_names {
+    for entry_name in entry_names {
         rename_decl(
             &mut wgsl,
             &mangler.mangle(entrypoint, &entry_name),
@@ -136,8 +138,9 @@ pub fn compile(
     mangler: &impl Mangler,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Error> {
-    let mut wesl = compile_impl(entrypoint, resolver, mangler, options)?;
-    lower_sourcemap(&mut wesl, &NoSourceMap)?;
+    let mut entry_names = Vec::new();
+    let mut wesl = compile_impl(entrypoint, resolver, mangler, options, &mut entry_names)?;
+    lower(&mut wesl)?;
     Ok(wesl)
 }
 
@@ -150,8 +153,18 @@ pub fn compile_with_sourcemap(
     let resolver = Box::new(resolver);
     let mangler = Box::new(mangler);
     let sourcemapper = SourceMapper::new(resolver, mangler);
-    let comp = compile_impl(entrypoint, &sourcemapper, &sourcemapper, options);
-    let sourcemap = sourcemapper.finish();
+    let mut entry_names = Vec::new();
+    let comp = compile_impl(
+        entrypoint,
+        &sourcemapper,
+        &sourcemapper,
+        options,
+        &mut entry_names,
+    );
+    let mut sourcemap = sourcemapper.finish();
+    for entry in &entry_names {
+        sourcemap.add_decl(entry.clone(), entrypoint.clone(), entry.clone());
+    }
     let comp = comp.and_then(|mut wesl| {
         lower_sourcemap(&mut wesl, &sourcemap)?;
         Ok(wesl)

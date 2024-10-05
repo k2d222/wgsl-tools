@@ -2,9 +2,12 @@ use crate::span::Spanned;
 
 use super::syntax::*;
 
-impl From<String> for IdentifierExpression {
-    fn from(identifier: String) -> Self {
-        Self { name: identifier }
+impl From<String> for TypeExpression {
+    fn from(name: String) -> Self {
+        Self {
+            name,
+            template_args: None,
+        }
     }
 }
 

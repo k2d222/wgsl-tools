@@ -8,7 +8,7 @@ use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
 fn mangle_file(wesl: &mut TranslationUnit, resource: Resource, mangler: &impl Mangler) {
-    // delared idents
+    // find delared idents
     let mut replace: HashMap<String, String> = query_mut!(wesl.global_declarations.[].{
         GlobalDeclaration::Declaration.name,
         GlobalDeclaration::TypeAlias.name,
@@ -23,7 +23,7 @@ fn mangle_file(wesl: &mut TranslationUnit, resource: Resource, mangler: &impl Ma
     })
     .collect();
 
-    // imported idents
+    // find imported idents
     let imports = imports_to_resources(&wesl.imports, &resource);
     for (resource, items) in imports.iter() {
         for item in items {
@@ -33,10 +33,17 @@ fn mangle_file(wesl: &mut TranslationUnit, resource: Resource, mangler: &impl Ma
         }
     }
 
-    for name in wesl.uses_mut() {
-        if let Some(new_name) = replace.get(name) {
-            *name = new_name.clone();
+    // run replacements
+    fn rec(ty: &mut TypeExpression, replace: &HashMap<String, String>) {
+        if let Some(new_name) = replace.get(&ty.name) {
+            ty.name = new_name.clone();
         }
+        for ty in ty.uses_mut() {
+            rec(ty, replace);
+        }
+    }
+    for ty in wesl.uses_mut() {
+        rec(ty, &replace);
     }
 }
 

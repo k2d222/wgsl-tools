@@ -187,8 +187,7 @@ pub enum Expression {
     Unary(UnaryExpression),
     Binary(BinaryExpression),
     FunctionCall(FunctionCallExpression),
-    Identifier(IdentifierExpression),
-    Type(TypeExpression),
+    TypeOrIdentifier(TypeExpression),
 }
 
 pub type ExpressionNode = Spanned<Expression>;
@@ -273,11 +272,6 @@ pub struct FunctionCall {
 }
 
 pub type FunctionCallExpression = FunctionCall;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct IdentifierExpression {
-    pub name: String,
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeExpression {

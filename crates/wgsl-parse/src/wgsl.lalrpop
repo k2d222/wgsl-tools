@@ -294,13 +294,12 @@ TypeAliasDecl: TypeAlias = {
 };
 
 TypeSpecifier: TypeExpression = {
-    TemplateElaboratedIdent => {
-        let (name, template_args) = <>;
-        TypeExpression { name, template_args }
-    },
+    TemplateElaboratedIdent,
 };
 
-TemplateElaboratedIdent = Ident /* DisambiguateTemplate */ TemplateList?;
+TemplateElaboratedIdent: TypeExpression = <name: Ident> <template_args: TemplateList?> => TypeExpression {
+    name, template_args
+};
 
 // 7. VARIABLE AND VALUE DECLARATIONS
 // https://www.w3.org/TR/WGSL/#var-and-value
@@ -394,13 +393,7 @@ GlobalValueDecl: Declaration = {
 // https://www.w3.org/TR/WGSL/#expressions
 
 PrimaryExpression: Expression = {
-    TemplateElaboratedIdent => {
-        let (name, template_args) = <>;
-        match template_args {
-            Some(_) => Expression::Type(TypeExpression { name, template_args }),
-            None => Expression::Identifier(name.into()),
-        }
-    }, // XXX: not sure about this one, is it type?
+    TemplateElaboratedIdent => Expression::TypeOrIdentifier(<>),
     CallExpression,
     Literal => Expression::Literal(<>),
     ParenExpression => Expression::Parenthesized(<>),
@@ -411,9 +404,7 @@ CallExpression: Expression = {
 };
 
 CallPhrase: FunctionCall = {
-    <callee: TemplateElaboratedIdent> <arguments: ArgumentExpressionList> => {
-        let (name, template_args) = callee;
-        let ty = TypeExpression { name, template_args };
+    <ty: TemplateElaboratedIdent> <arguments: ArgumentExpressionList> => {
         FunctionCallExpression {
             ty, arguments
         }
@@ -487,7 +478,7 @@ LhsExpression: Expression = {
  };
  
 CoreLhsExpression: Expression = {
-    Ident /* DisambiguateTemplate */ => Expression::Identifier(<>.into()),
+    Ident /* DisambiguateTemplate */ => Expression::TypeOrIdentifier(<>.into()),
     "(" <Spanned<LhsExpression>> ")" => Expression::Parenthesized(ParenthesizedExpression {
         expression: <>
     }),
@@ -630,7 +621,7 @@ AssignmentStatement: AssignmentStatement = {
     },
     <lhs: WithSpan<"_">> "=" <rhs: ExpressionNode> => {
         let (lhs, span) = lhs;
-        let lhs = Expression::Identifier(lhs.to_string().into());
+        let lhs = Expression::TypeOrIdentifier(lhs.to_string().into());
         let lhs = Spanned::new(lhs, span);
         AssignmentStatement { operator: AssignmentOperator::Equal, lhs, rhs }
     },
@@ -868,8 +859,7 @@ FunctionDecl: Function = {
 
 FunctionHeader: (String, Vec<FormalParameter>, Vec<Attribute>, Option<TypeExpression>) = {
     "fn" <name: Ident> "(" <parameters: ParamList?> ")" <ret: ("->" <Attribute*> <TemplateElaboratedIdent>)?> => {
-        let (return_attributes, return_type) = ret.map(|(return_attributes, (name, template_args))| {
-            let return_type = TypeExpression {name, template_args };
+        let (return_attributes, return_type) = ret.map(|(return_attributes, return_type)| {
             (return_attributes, Some(return_type))
         }).unwrap_or_default();
         let parameters = parameters.unwrap_or_default();
@@ -1197,7 +1187,7 @@ AssignmentStatement: AssignmentStatement = {
         attributes: vec![], operator, lhs, rhs
     },
     <l: @L> "_" <r: @R> "=" <rhs: ExpressionNode> => {
-        let lhs = Expression::Identifier("_".to_string().into());
+        let lhs = Expression::TypeOrIdentifier("_".to_string().into());
         let span = (l..r).into();
         let lhs = Spanned::new(lhs, span);
         AssignmentStatement { attributes: vec![], operator: AssignmentOperator::Equal, lhs, rhs }

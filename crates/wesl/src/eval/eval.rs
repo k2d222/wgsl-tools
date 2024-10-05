@@ -46,8 +46,7 @@ impl Eval for Expression {
             Expression::Unary(e) => e.eval(ctx),
             Expression::Binary(e) => e.eval(ctx),
             Expression::FunctionCall(e) => e.eval(ctx),
-            Expression::Identifier(e) => e.eval(ctx),
-            Expression::Type(e) => e.eval(ctx),
+            Expression::TypeOrIdentifier(e) => e.eval(ctx),
         }
     }
 }
@@ -342,20 +341,18 @@ impl Eval for FunctionCall {
     }
 }
 
-impl Eval for IdentifierExpression {
-    fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        if let Some(r) = ctx.scope.get(&self.name) {
-            Ok(r.clone().into())
-        } else {
-            let ty = self.name.as_str().eval_ty(ctx)?;
-            Ok(ty.into())
-        }
-    }
-}
-
 impl Eval for TypeExpression {
-    fn eval(&self, _ctx: &mut Context) -> Result<Instance, E> {
-        todo!()
+    fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
+        if self.template_args.is_none() {
+            if let Some(r) = ctx.scope.get(&self.name) {
+                Ok(r.clone().into())
+            } else {
+                let ty = self.name.as_str().eval_ty(ctx)?;
+                Ok(ty.into())
+            }
+        } else {
+            todo!()
+        }
     }
 }
 
