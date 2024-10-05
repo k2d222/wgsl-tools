@@ -51,6 +51,15 @@ impl<T> Spanned<T> {
     }
 }
 
+impl<T> From<T> for Spanned<T> {
+    fn from(value: T) -> Self {
+        Self {
+            span: Default::default(),
+            node: Box::new(value),
+        }
+    }
+}
+
 impl<T> From<Spanned<T>> for (Span, T) {
     fn from(value: Spanned<T>) -> Self {
         (value.span, *value.node)

@@ -105,8 +105,6 @@ enum CliError {
     FileNotFound,
     #[error("{0}")]
     CompileError(#[from] wesl::Error),
-    #[error("{0}")]
-    DiagnosticError(#[from] Diagnostic),
 }
 
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
@@ -150,8 +148,8 @@ fn run_compile(args: &CompileArgs) -> Result<(TranslationUnit, Option<BasicSourc
 
     if !args.no_sourcemap {
         let (wgsl, sourcemap) =
-            wesl::compile_with_sourcemap(&entrypoint, &resolver, &mangler, &compile_options)?;
-        Ok((wgsl, Some(sourcemap)))
+            wesl::compile_with_sourcemap(&entrypoint, &resolver, &mangler, &compile_options);
+        Ok((wgsl?, Some(sourcemap)))
     } else {
         let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)?;
         Ok((wgsl, None))

@@ -79,11 +79,10 @@ pub enum EvalError {
 
     // functions
     #[error(
-        "invalid function call signature: `{0}{}({})`",
-        (.1).as_ref().map(|t| format!("<{}>", t.iter().map(Ty::ty).format(", "))).unwrap_or_default(),
-        (.2).iter().map(Ty::ty).format(", "),
+        "invalid function call signature: `{0}({})`",
+        (.1).iter().map(Ty::ty).format(", "),
     )]
-    Signature(String, Option<Vec<Instance>>, Vec<Instance>),
+    Signature(TypeExpression, Vec<Instance>),
     #[error("{0}")]
     Builtin(&'static str),
     #[error("invalid template arguments to `{0}`")]
@@ -98,6 +97,8 @@ pub enum EvalError {
     ParamType(Type, Type),
     #[error("invalid return type, expected `{0}`, got `{1}`")]
     ReturnType(Type, Type),
+    #[error("calling non-const function `{0}` in const context")]
+    NotConst(String),
 
     // declarations
     #[error("override-declarations are not permitted in const contexts")]

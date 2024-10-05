@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use crate::{Error, Mangler, Resolver, Resource};
+use crate::{Mangler, ResolveError, Resolver, Resource};
 
 pub trait SourceMap {
     fn get_decl(&self, decl: &str) -> Option<(&Resource, &str)>;
@@ -66,6 +66,18 @@ impl SourceMap for BasicSourceMap {
     }
 }
 
+pub struct NoSourceMap;
+
+impl SourceMap for NoSourceMap {
+    fn get_decl(&self, _decl: &str) -> Option<(&Resource, &str)> {
+        None
+    }
+
+    fn get_source(&self, _resource: &Resource) -> Option<&str> {
+        None
+    }
+}
+
 impl<'a> Mangler for SourceMapper<'a> {
     fn mangle(&self, resource: &Resource, item: &str) -> String {
         let res = self.mangler.mangle(resource, item);
@@ -79,7 +91,7 @@ impl<'a> Resolver for SourceMapper<'a> {
     fn resolve_source<'b>(
         &'b self,
         resource: &Resource,
-    ) -> Result<std::borrow::Cow<'b, str>, Error> {
+    ) -> Result<std::borrow::Cow<'b, str>, ResolveError> {
         let res = self.resolver.resolve_source(resource)?;
         let mut sourcemap = self.sourcemap.borrow_mut();
         sourcemap.add_source(resource.clone(), res.clone().into());

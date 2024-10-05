@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::Path};
 
 use wgsl_parse::syntax::{self, TranslationUnit};
 
-use crate::{error::Diagnostic, Mangler, Resolver, Resource};
+use crate::{error::Diagnostic, ImportError, Mangler, ResolveError, Resolver, Resource};
 
 // XXX: are imports supposed to be order-independent?
 type Imports = HashMap<Resource, Vec<syntax::ImportItem>>;
@@ -35,22 +35,25 @@ impl Module {
             .all(|path| self.resolutions.contains_key(path))
     }
 
-    pub fn resolve(&mut self, resolver: &impl Resolver) -> Result<(), Diagnostic> {
+    pub fn resolve(&mut self, resolver: &impl Resolver) -> Result<(), ImportError> {
         fn rec(
             module: &mut Module,
             resolver: &impl Resolver,
             imports: &Imports,
-        ) -> Result<(), Diagnostic> {
+        ) -> Result<(), ResolveError> {
             for child_res in imports.keys() {
                 if !module.resolutions.contains_key(child_res) {
                     let source = resolver.resolve_source(&child_res)?;
-                    let wesl = resolver
-                        .source_to_module(&source, &child_res)
-                        .map_err(|e| Diagnostic::from(e).file(module.resource.clone()))?;
+                    let wesl = resolver.source_to_module(&source, &child_res)?;
                     let imports = imports_to_resources(&wesl.imports, &child_res);
                     module.resolve_import(child_res, wesl);
-                    rec(module, resolver, &imports)
-                        .map_err(|e| Diagnostic::from(e).file(module.resource.clone()))?;
+                    rec(module, resolver, &imports).map_err(|e| {
+                        ResolveError::Error(
+                            Diagnostic::new(e.into())
+                                .file(child_res.clone())
+                                .source(source.to_string()),
+                        )
+                    })?;
                 }
             }
             Ok(())
@@ -137,7 +140,7 @@ pub fn resolve<M: Mangler + ?Sized>(
     source: TranslationUnit,
     resource: Resource,
     resolver: &impl Resolver,
-) -> Result<Module, Diagnostic> {
+) -> Result<Module, ImportError> {
     let mut module = Module::new(source, resource);
     module.resolve(resolver)?;
     Ok(module)

@@ -20,6 +20,17 @@ pub enum Flow {
     Return(Instance),
 }
 
+#[macro_export]
+macro_rules! with_stage {
+    ($ctx:expr, $stage:expr, $body:tt) => {{
+        let stage = $ctx.stage;
+        $ctx.stage = $stage;
+        let body = (|| $body)();
+        $ctx.stage = stage;
+        body
+    }};
+}
+
 impl Display for Flow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -457,17 +468,19 @@ impl Exec for FunctionCallStatement {
 
 impl Exec for ConstAssertStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        let expr = self.expression.eval_value(ctx)?;
-        let cond = match expr {
-            Instance::Literal(LiteralInstance::Bool(b)) => Ok(b),
-            _ => Err(E::Type(Type::Bool, expr.ty())),
-        }?;
+        with_stage!(ctx, EvalStage::Const, {
+            let expr = self.expression.eval_value(ctx)?;
+            let cond = match expr {
+                Instance::Literal(LiteralInstance::Bool(b)) => Ok(b),
+                _ => Err(E::Type(Type::Bool, expr.ty())),
+            }?;
 
-        if cond {
-            Ok(Flow::Next)
-        } else {
-            Err(E::ConstAssertFailure(self.expression.clone()))
-        }
+            if cond {
+                Ok(Flow::Next)
+            } else {
+                Err(E::ConstAssertFailure(self.expression.clone()))
+            }
+        })
     }
 }
 

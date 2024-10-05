@@ -5,6 +5,7 @@ mod error;
 mod eval;
 mod exec;
 mod instance;
+mod lower;
 mod ops;
 mod ty;
 
@@ -14,6 +15,7 @@ pub use error::*;
 pub use eval::*;
 pub use exec::*;
 pub use instance::*;
+pub use lower::*;
 pub use ty::*;
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -112,6 +114,10 @@ impl<'s> Context<'s> {
         }
     }
 
+    pub fn source(&self) -> &TranslationUnit {
+        &self.source
+    }
+
     pub fn scope_guard(&mut self) -> ScopeGuard {
         ScopeGuard {
             scope: &mut self.scope,
@@ -182,7 +188,7 @@ impl SyntaxUtil for TranslationUnit {
         match self.decl(name) {
             Some(GlobalDeclaration::TypeAlias(t)) => {
                 if t.ty.template_args.is_none() {
-                    self.resolve_alias(&t.name).or(Some(t.ty.clone()))
+                    self.resolve_alias(&t.ty.name).or(Some(t.ty.clone()))
                 } else {
                     Some(t.ty.clone())
                 }

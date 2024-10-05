@@ -1,3 +1,5 @@
+#[cfg(feature = "attributes")]
+mod attributes;
 #[cfg(feature = "condcomp")]
 mod condcomp;
 #[cfg(feature = "eval")]
@@ -6,6 +8,7 @@ pub mod eval;
 mod import;
 
 mod error;
+mod lower;
 mod mangle;
 mod resolve;
 mod sourcemap;
@@ -21,6 +24,7 @@ pub use import::{resolve, ImportError, Module};
 #[cfg(feature = "eval")]
 pub use eval::{Context, Eval, EvalError, Exec, Instance};
 
+use lower::lower_sourcemap;
 pub use mangle::{
     CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE,
     MANGLER_HASH, MANGLER_NONE,
@@ -33,6 +37,7 @@ pub use resolve::{
 
 pub use error::{Diagnostic, Error};
 
+use sourcemap::NoSourceMap;
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 
 pub use strip::strip;
@@ -65,12 +70,12 @@ impl Default for CompileOptions {
     }
 }
 
-pub fn compile(
+fn compile_impl(
     entrypoint: &Resource,
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
-) -> Result<TranslationUnit, Diagnostic> {
+) -> Result<TranslationUnit, Error> {
     let resolver = Box::new(resolver);
     let resolver: Box<dyn Resolver> = if cfg!(feature = "condcomp") && options.use_condcomp {
         Box::new(PreprocessResolver::new(resolver, |wesl| {
@@ -82,13 +87,7 @@ pub fn compile(
     };
 
     let source = resolver.resolve_source(entrypoint)?;
-    let wesl = resolver
-        .source_to_module(&source, entrypoint)
-        .map_err(|e| {
-            Diagnostic::from(e)
-                .source(source.into_owned())
-                .file(entrypoint.clone())
-        })?;
+    let wesl = resolver.source_to_module(&source, entrypoint)?;
 
     let entry_names = entry_points(&wesl)
         .map(|name| name.to_string())
@@ -131,21 +130,60 @@ pub fn compile(
     Ok(wgsl)
 }
 
+pub fn compile(
+    entrypoint: &Resource,
+    resolver: &impl Resolver,
+    mangler: &impl Mangler,
+    options: &CompileOptions,
+) -> Result<TranslationUnit, Error> {
+    let mut wesl = compile_impl(entrypoint, resolver, mangler, options)?;
+    lower_sourcemap(&mut wesl, &NoSourceMap)?;
+    Ok(wesl)
+}
+
 pub fn compile_with_sourcemap(
     entrypoint: &Resource,
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
-) -> Result<(TranslationUnit, BasicSourceMap), Diagnostic> {
+) -> (Result<TranslationUnit, Error>, BasicSourceMap) {
     let resolver = Box::new(resolver);
     let mangler = Box::new(mangler);
     let sourcemapper = SourceMapper::new(resolver, mangler);
-    let wgsl = compile(entrypoint, &sourcemapper, &sourcemapper, options)?;
+    let comp = compile_impl(entrypoint, &sourcemapper, &sourcemapper, options);
     let sourcemap = sourcemapper.finish();
-    Ok((wgsl, sourcemap))
+    let comp = comp.and_then(|mut wesl| {
+        lower_sourcemap(&mut wesl, &sourcemap)?;
+        Ok(wesl)
+    });
+    (comp, sourcemap)
 }
 
-pub fn eval(expr: &str, wgsl: &TranslationUnit) -> Result<Instance, Diagnostic> {
+impl Error {
+    pub fn to_diagnostic(self, ctx: &Context, sourcemap: &impl SourceMap) -> Diagnostic<Error> {
+        let mut diagnostic = Diagnostic::new(self);
+        let (decl, span) = ctx.err_ctx();
+        println!("{decl:?} {span:?}");
+        diagnostic.span = span;
+
+        if let Some(decl) = decl {
+            if let Some((resource, decl)) = sourcemap.get_decl(&decl) {
+                diagnostic.file = Some(resource.clone());
+                diagnostic.declaration = Some(decl.to_string());
+                diagnostic.source = sourcemap.get_source(resource).map(|s| s.to_string());
+            } else {
+                diagnostic.declaration = Some(decl);
+                diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
+            }
+        } else {
+            diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
+        }
+        diagnostic
+    }
+}
+
+#[cfg(feature = "eval")]
+pub fn eval(expr: &str, wgsl: &TranslationUnit) -> Result<Instance, Error> {
     let mut ctx = Context::new(wgsl);
     let expr = expr
         .parse::<syntax::Expression>()
@@ -164,11 +202,12 @@ pub fn eval(expr: &str, wgsl: &TranslationUnit) -> Result<Instance, Diagnostic> 
     Ok(instance)
 }
 
+#[cfg(feature = "eval")]
 pub fn eval_with_sourcemap(
     expr: &str,
     wgsl: &TranslationUnit,
     sourcemap: &impl SourceMap,
-) -> Result<Instance, Diagnostic> {
+) -> Result<Instance, Error> {
     let mut ctx = Context::new(wgsl);
     let expr = expr
         .parse::<syntax::Expression>()
@@ -177,30 +216,6 @@ pub fn eval_with_sourcemap(
     let instance = wgsl
         .exec(&mut ctx)
         .and_then(|_| expr.eval(&mut ctx))
-        .map_err(|e| {
-            let mut diagnostic = Diagnostic::new(e.into());
-            let (decl, span) = ctx.err_ctx();
-            diagnostic.span = span;
-
-            if let Some(decl) = decl {
-                if let Some((resource, decl)) = sourcemap.get_decl(&decl) {
-                    diagnostic.file = Some(resource.clone());
-                    diagnostic.declaration = Some(decl.to_string());
-                    diagnostic.source = sourcemap.get_source(resource).map(|s| s.to_string());
-                } else {
-                    diagnostic.declaration = Some(decl);
-                    diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
-                }
-            } else {
-                println!(
-                    "{:?} {decl:?} {:?}",
-                    ctx.err_ctx(),
-                    sourcemap.get_default_source()
-                );
-
-                diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
-            }
-            diagnostic
-        })?;
+        .map_err(|e| Error::EvalError(e).to_diagnostic(&ctx, sourcemap))?;
     Ok(instance)
 }

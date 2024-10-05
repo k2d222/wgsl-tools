@@ -33,9 +33,9 @@ fn mangle_file(wesl: &mut TranslationUnit, resource: Resource, mangler: &impl Ma
         }
     }
 
-    for name in wesl.uses_mut() {
-        if let Some(new_ident) = replace.get(name) {
-            *name = new_ident.clone();
+    for ty in wesl.uses_mut() {
+        if let Some(new_ident) = replace.get(&ty.name) {
+            ty.name = new_ident.clone();
         }
     }
 }

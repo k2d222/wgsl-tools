@@ -413,8 +413,9 @@ CallExpression: Expression = {
 CallPhrase: FunctionCall = {
     <callee: TemplateElaboratedIdent> <arguments: ArgumentExpressionList> => {
         let (name, template_args) = callee;
+        let ty = TypeExpression { name, template_args };
         FunctionCallExpression {
-            name, template_args, arguments
+            ty, arguments
         }
     },
 };

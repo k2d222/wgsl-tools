@@ -19,33 +19,23 @@ pub enum Error {
     #[cfg(feature = "eval")]
     #[error("{0}")]
     EvalError(#[from] EvalError),
+    #[error("{0}")]
+    Error(#[from] Diagnostic<Error>),
 }
 
 #[derive(Clone, Debug)]
-pub struct Diagnostic {
-    pub error: Error,
+pub struct Diagnostic<E: std::error::Error> {
+    pub error: Box<E>,
     pub source: Option<String>,
     pub file: Option<Resource>,
     pub declaration: Option<String>,
     pub span: Option<Span>,
 }
 
-impl From<Error> for Diagnostic {
-    fn from(error: Error) -> Self {
-        Self {
-            error,
-            source: None,
-            file: None,
-            declaration: None,
-            span: None,
-        }
-    }
-}
-
-impl From<wgsl_parse::Error> for Diagnostic {
+impl From<wgsl_parse::Error> for Diagnostic<Error> {
     fn from(error: wgsl_parse::Error) -> Self {
         Self {
-            error: error.error.into(),
+            error: Box::new(Error::ParseError(error.error)),
             source: None,
             file: None,
             declaration: None,
@@ -54,9 +44,15 @@ impl From<wgsl_parse::Error> for Diagnostic {
     }
 }
 
-impl Diagnostic {
-    pub fn new(error: Error) -> Diagnostic {
-        error.into()
+impl<E: std::error::Error> Diagnostic<E> {
+    pub fn new(error: E) -> Diagnostic<E> {
+        Self {
+            error: Box::new(error),
+            source: None,
+            file: None,
+            declaration: None,
+            span: None,
+        }
     }
     pub fn source(mut self, source: String) -> Self {
         self.source = Some(source);
@@ -68,9 +64,9 @@ impl Diagnostic {
     }
 }
 
-impl std::error::Error for Diagnostic {}
+impl<E: std::error::Error> std::error::Error for Diagnostic<E> {}
 
-impl Display for Diagnostic {
+impl<E: std::error::Error> Display for Diagnostic<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use annotate_snippets::*;
         let title = format!("{}", self.error);
@@ -102,6 +98,16 @@ impl Display for Diagnostic {
             } else {
                 msg = msg.footer(Level::Note.title("cannot display snippet: missing source file"))
             }
+        }
+
+        let note;
+        if let Some(decl) = &self.declaration {
+            if let Some(file) = orig.as_ref() {
+                note = format!("in declaration of `{decl}` in `{file}`");
+            } else {
+                note = format!("in declaration of `{decl}`");
+            }
+            msg = msg.footer(Level::Note.title(&note));
         }
 
         let renderer = Renderer::styled();

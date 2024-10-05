@@ -4,9 +4,9 @@ use std::{collections::HashMap, iter::zip};
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use wgsl_parse::syntax::{Attribute, GlobalDeclaration, TranslationUnit};
+use wgsl_parse::syntax::{Attribute, GlobalDeclaration, TranslationUnit, TypeExpression};
 
-use crate::Context;
+use crate::{Context, Eval};
 
 use super::{
     conv::{convert_all, Convert},
@@ -18,6 +18,10 @@ type E = EvalError;
 
 // TODO: when we have the wgsl! macro, we can refactor this.
 lazy_static! {
+    pub static ref ATTR_CONST: Attribute = Attribute {
+        name: "const".to_string(),
+        arguments: None
+    };
     pub static ref ATTR_BUILTIN: Attribute = Attribute {
         name: "__builtin".to_string(),
         arguments: None
@@ -163,13 +167,20 @@ impl MatInstance {
 // reference: https://www.w3.org/TR/WGSL/#constructor-builtin-function
 
 pub fn call_builtin(
-    name: &str,
-    tplt: Option<Vec<Instance>>,
+    ty: &TypeExpression,
     args: Vec<Instance>,
     ctx: &mut Context,
 ) -> Result<Instance, E> {
+    let tplt = match &ty.template_args {
+        Some(tplt) => Some(
+            tplt.iter()
+                .map(|arg| arg.eval_value(ctx))
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        None => None,
+    };
     match (
-        name,
+        ty.name.as_str(),
         tplt.as_ref().map(|tplt| tplt.as_slice()),
         args.as_slice(),
     ) {
@@ -293,7 +304,7 @@ pub fn call_builtin(
         ("unpack2x16unorm", None, [a]) => call_unpack2x16unorm(a),
         ("unpack2x16float", None, [a]) => call_unpack2x16float(a),
 
-        _ => Err(E::Signature(name.to_string(), tplt, args)),
+        _ => Err(E::Signature(ty.clone(), args)),
     }
 }
 

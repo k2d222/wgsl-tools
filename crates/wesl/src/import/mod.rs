@@ -7,6 +7,8 @@ mod module;
 use itertools::Itertools;
 pub use module::{resolve, Module};
 
+use crate::{Diagnostic, ResolveError};
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImportPath(Vec<String>);
 
@@ -26,8 +28,8 @@ impl Display for ImportPath {
 pub enum ImportError {
     #[error("duplicate imported item `{0}`")]
     DuplicateSymbol(String),
-    #[error("failed to resolve import path `{0}`")]
-    ResolutionFailure(ImportPath),
+    #[error("{0}")]
+    ResolveError(#[from] ResolveError),
     #[error("module `{0}` has no exported symbol `{1}`")]
     MissingExport(ImportPath, String),
     #[error("circular dependency between `{0}` and `{1}`")]

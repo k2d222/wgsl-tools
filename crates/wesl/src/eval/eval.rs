@@ -3,8 +3,9 @@ use std::iter::zip;
 use crate::eval::MatInstance;
 
 use super::{
-    call_builtin, AccessMode, Context, Convert, EvalError, EvalTy, Exec, Flow, Instance,
+    call_builtin, AccessMode, Context, Convert, EvalError, EvalStage, EvalTy, Exec, Flow, Instance,
     LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
+    ATTR_CONST,
 };
 
 use half::f16;
@@ -263,16 +264,16 @@ impl Eval for BinaryExpression {
 
 impl Eval for FunctionCall {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        let (name, tplt) = self
+        let ty = self
+            .ty
             .template_args
             .is_none()
             .then(|| {
                 ctx.source
-                    .resolve_alias(&self.name)
-                    .map(|ty| (ty.name, ty.template_args))
-                    .unwrap_or((self.name.clone(), None))
+                    .resolve_alias(&self.ty.name)
+                    .unwrap_or(self.ty.clone())
             })
-            .unwrap_or((self.name.clone(), self.template_args.clone()));
+            .unwrap_or(self.ty.clone());
 
         let args = self
             .arguments
@@ -280,23 +281,18 @@ impl Eval for FunctionCall {
             .map(|a| a.eval_value(ctx))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let tplt = tplt.map_or(Ok(None), |tplt| {
-            tplt.iter()
-                .map(|e| e.eval_value(ctx))
-                .collect::<Result<Vec<_>, _>>()
-                .map(Some)
-        })?;
-
         let decl = ctx
             .source
-            .decl_function(&name)
-            .ok_or_else(|| E::UnknownFunction(name.clone()))?;
+            .decl_function(&ty.name)
+            .ok_or_else(|| E::UnknownFunction(ty.name.clone()))?;
 
-        if decl.body.attributes.contains(&ATTR_BUILTIN) {
-            return call_builtin(&name, tplt, args, ctx);
+        if !decl.attributes.contains(&ATTR_CONST) && ctx.stage == EvalStage::Const {
+            return Err(E::NotConst(decl.name.clone()));
         }
 
-        // TODO: ensure has const attribute
+        if decl.body.attributes.contains(&ATTR_BUILTIN) {
+            return call_builtin(&ty, args, ctx);
+        }
 
         if self.arguments.len() != decl.parameters.len() {
             return Err(E::ParamCount(

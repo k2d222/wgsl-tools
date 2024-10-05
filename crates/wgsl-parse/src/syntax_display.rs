@@ -386,10 +386,9 @@ impl Display for BinaryOperator {
 
 impl Display for FunctionCall {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let name = &self.name;
-        let tplt = fmt_template(&self.template_args);
+        let ty = &self.ty;
         let args = self.arguments.iter().format(", ");
-        write!(f, "{name}{tplt}({args})")
+        write!(f, "{ty}({args})")
     }
 }
 

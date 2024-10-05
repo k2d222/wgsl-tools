@@ -268,8 +268,7 @@ pub enum BinaryOperator {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCall {
-    pub name: String,
-    pub template_args: TemplateArgs,
+    pub ty: TypeExpression,
     pub arguments: Vec<ExpressionNode>,
 }
 
