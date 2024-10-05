@@ -278,36 +278,56 @@ impl_visit_mut! { TranslationUnit => StatementNode,
 
 impl_visit! { TranslationUnit => TypeExpression,
     {
-        global_declarations.[].{
-            GlobalDeclaration::Declaration.{
-                ty.[],
-                initializer.[].(x => Visit::<TypeExpression>::visit(&**x)),
-            },
-            GlobalDeclaration::TypeAlias.ty,
-            GlobalDeclaration::Struct.members.[].ty,
-            GlobalDeclaration::Function.{
-                parameters.[].ty,
-                return_type.[],
-                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)).(x => Visit::<TypeExpression>::visit(&**x)),
-            }
-        }
+        global_declarations.[].(Visit::<TypeExpression>::visit)
     }
 }
 
 impl_visit_mut! { TranslationUnit => TypeExpression,
     {
-        global_declarations.[].{
-            GlobalDeclaration::Declaration.{
-                ty.[],
-                initializer.[].(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-            },
-            GlobalDeclaration::TypeAlias.ty,
-            GlobalDeclaration::Struct.members.[].ty,
-            GlobalDeclaration::Function.{
-                parameters.[].ty,
-                return_type.[],
-                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)).(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-            }
+        global_declarations.[].(VisitMut::<TypeExpression>::visit_mut)
+    }
+}
+
+impl_visit! { GlobalDeclaration => TypeExpression,
+    {
+        GlobalDeclaration::Declaration.{
+            ty.[],
+            initializer.[].(x => Visit::<TypeExpression>::visit(&**x)),
+        },
+        GlobalDeclaration::TypeAlias.ty,
+        GlobalDeclaration::Struct.members.[].ty,
+        GlobalDeclaration::Function.{
+            parameters.[].ty,
+            return_type.[],
+            body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)).(x => Visit::<TypeExpression>::visit(&**x)),
         }
+    }
+}
+
+impl_visit_mut! { GlobalDeclaration => TypeExpression,
+    {
+        GlobalDeclaration::Declaration.{
+            ty.[],
+            initializer.[].(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
+        },
+        GlobalDeclaration::TypeAlias.ty,
+        GlobalDeclaration::Struct.members.[].ty,
+        GlobalDeclaration::Function.{
+            parameters.[].ty,
+            return_type.[],
+            body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)).(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
+        }
+    }
+}
+
+impl_visit! { TypeExpression => TypeExpression,
+    {
+        template_args.[].[].expression.(x => Visit::<TypeExpression>::visit(& **x))
+    }
+}
+
+impl_visit_mut! { TypeExpression => TypeExpression,
+    {
+        template_args.[].[].expression.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x))
     }
 }

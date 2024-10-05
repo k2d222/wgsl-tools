@@ -163,7 +163,6 @@ impl Error {
     pub fn to_diagnostic(self, ctx: &Context, sourcemap: &impl SourceMap) -> Diagnostic<Error> {
         let mut diagnostic = Diagnostic::new(self);
         let (decl, span) = ctx.err_ctx();
-        println!("{decl:?} {span:?}");
         diagnostic.span = span;
 
         if let Some(decl) = decl {
