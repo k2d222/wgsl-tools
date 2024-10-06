@@ -1,0 +1,227 @@
+[
+  {
+    "name": "module-scope-var-shadowing-builtin",
+    "desc": "declare a variable with the name of a built-in function, should be valid",
+    "kind": "context",
+    "code": "var<private> sqrt: f32 = 1.0;",
+    "expect": "pass"
+  },
+  {
+    "name": "func-param-shadowing-module-var",
+    "desc": "function parameter shadows a module-scope variable",
+    "kind": "context",
+    "code": "var<private> foo: f32 = 0.0; fn myFunc(foo: f32) {}",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-module-scope-var-duplicate",
+    "desc": "declare two variables with the same name at module scope",
+    "kind": "context",
+    "code": "var<private> bar: f32 = 0.0; var<private> bar: f32 = 1.0;",
+    "expect": "fail"
+  },
+  {
+    "name": "scope-end-duplicate-vars-in-function",
+    "desc": "should fail due to duplicate variable name with the same end-of-scope inside a function",
+    "kind": "context",
+    "code": "fn myFunc() { var a: i32; var a: i32; }",
+    "expect": "fail"
+  },
+  {
+    "name": "valid-shadowing-in-nested-blocks",
+    "desc": "variable shadowing in nested blocks should be valid",
+    "kind": "context",
+    "code": "fn shadowing() { var a: f32 = 0.0; { let a: i32 = 1; } }",
+    "expect": "pass"
+  },
+  {
+    "name": "variable-in-for-loop-scope",
+    "desc": "variable declared in for-loop header has scope until the end of the loop",
+    "kind": "context",
+    "code": "fn loopScope() { for (var i: i32 = 0; i < 5; i++) { let j = i; } }",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-recursive-declaration",
+    "desc": "declaration graph has a cycle, creating a recursive declaration",
+    "kind": "context",
+    "code": "var a = b; var b = a;",
+    "expect": "fail"
+  },
+  {
+    "name": "valid-utilization-of-later-declared-var",
+    "desc": "reference a module-scope variable declared later in the source",
+    "kind": "context",
+    "code": "var earlyUse: i32 = laterDef; var<private> laterDef: i32 = 1;",
+    "expect": "pass"
+  },
+  {
+    "name": "function-shadowing-predeclared",
+    "desc": "declare a function that shadows a predeclared built-in function",
+    "kind": "context",
+    "code": "fn length() -> i32 { return 1; }",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-function-recursion",
+    "desc": "function is recursive directly or indirectly should fail",
+    "kind": "context",
+    "code": "fn recursive() { recursive(); }",
+    "expect": "fail"
+  },
+  {
+    "name": "module-scope-var",
+    "desc": "declares a module scope variable",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<private> foo: f32 = 0.0;",
+    "expect": "pass"
+  },
+  {
+    "name": "function-local-var",
+    "desc": "declares a function-local variable",
+    "kind": "context",
+    "code": "fn test() { var foo: i32 = 42; }",
+    "expect": "pass"
+  },
+  {
+    "name": "same-end-scope-error",
+    "desc": "two local variables with the same name and scope",
+    "kind": "context",
+    "code": "fn test() { var a: i32 = 0; var a: f32 = 1.0; }",
+    "expect": "fail",
+    "note": "Two variables declared in the same local scope with the same name"
+  },
+  {
+    "name": "shadowing",
+    "desc": "function argument shadows module scope variable",
+    "kind": "context",
+    "code": "var<private> foo: f32 = 0.0; fn bar(foo: f32) { var result: f32 = foo; }",
+    "expect": "pass"
+  },
+  {
+    "name": "mod-scope-recursive",
+    "desc": "module scope recursion is forbidden",
+    "kind": "context",
+    "code": "var a: i32 = b; var b: i32 = a;",
+    "expect": "fail",
+    "note": "Recursion among module-scoped declarations is not allowed"
+  },
+  {
+    "name": "valid-shadowing-predeclared",
+    "desc": "shadows predeclared object",
+    "kind": "context",
+    "code": "fn min() -> u32 { return 0; }",
+    "expect": "pass",
+    "note": "The user-defined function 'min' shadows the predeclared 'min'"
+  },
+  {
+    "name": "late-resolution-valid",
+    "desc": "module-scope variable used before its definition",
+    "kind": "context",
+    "code": "var late_use : i32 = early_def; var<private> early_def : i32 = 10;",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-same-name-function",
+    "desc": "functions with the same end scope",
+    "kind": "context",
+    "code": "fn my_func() { } fn my_func() { }",
+    "expect": "fail",
+    "note": "Two functions declared at module scope must have unique names"
+  },
+  {
+    "name": "predeclared-shadowing",
+    "desc": "user variable shadows predeclared enumerant",
+    "kind": "context",
+    "code": "const rgba8unorm = 12;",
+    "expect": "pass"
+  },
+  {
+    "name": "formal-parameter-scope",
+    "desc": "formal parameter in function scope",
+    "kind": "context",
+    "code": "fn compute(x: i32) { var result: i32 = x + 1; }",
+    "expect": "pass",
+    "note": "Formal parameter 'x' is in scope across the function body"
+  },
+  {
+    "name": "declare-var-at-module-scope",
+    "desc": "Declare a variable at module scope and ensure it is valid.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<private> myVar: i32 = 10;",
+    "expect": "pass"
+  },
+  {
+    "name": "duplicate-var-declaration",
+    "desc": "Check that duplicate variable declarations at module scope are invalid.",
+    "kind": "context",
+    "code": "var<private> myVar: i32 = 10;\nvar<private> myVar: i32 = 20;",
+    "expect": "fail",
+    "note": "Duplicate variable names at the same scope."
+  },
+  {
+    "name": "function-declaration-at-module-scope",
+    "desc": "Check that a function can be declared at module scope.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn myFunc() {}",
+    "expect": "pass"
+  },
+  {
+    "name": "function-param-shadowing",
+    "desc": "Test shadowing of function parameters inside the function body.",
+    "kind": "context",
+    "code": "fn myFunc(foo: i32) {\n  var foo: f32;\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "shadow-predeclared-builtin",
+    "desc": "Check if predeclared objects can be shadowed.",
+    "kind": "context",
+    "code": "fn f32() -> u32 { return 0; }\n",
+    "expect": "pass",
+    "note": "This declaration shadows the built-in 'f32' type."
+  },
+  {
+    "name": "duplicate-end-scope-vars",
+    "desc": "Test for duplicate variable declarations with the same end scope.",
+    "kind": "context",
+    "code": "{\n  var x: i32;\n  var x: i32;\n}",
+    "expect": "fail",
+    "note": "Same-end-scope error."
+  },
+  {
+    "name": "recursive-function-declaration",
+    "desc": "Check that function declarations are not recursively defined.",
+    "kind": "context",
+    "code": "fn recursiveFunc() { recursiveFunc(); }",
+    "expect": "fail",
+    "note": "Recursive function not allowed."
+  },
+  {
+    "name": "use-before-declaration",
+    "desc": "Test that a variable cannot be used before it is declared.",
+    "kind": "context",
+    "code": "var x: i32 = y;\nvar y: i32 = 1;",
+    "expect": "fail",
+    "note": "Variable y used before declaration."
+  },
+  {
+    "name": "shadow-built-in-types",
+    "desc": "Attempt to shadow a built-in type with a user-defined function.",
+    "kind": "context",
+    "code": "fn i32() -> u32 { return 0; }",
+    "expect": "pass",
+    "note": "Function name shadows built-in type 'i32'."
+  },
+  {
+    "name": "identifier-resolve-to-module-scope",
+    "desc": "Verify identifier resolution to module-scope when not resolved locally.",
+    "kind": "eval",
+    "code": "var testVar: i32 = outerVar;\nvar outerVar: i32 = 5;",
+    "eval": "outerVar",
+    "expect": "pass"
+  }
+]

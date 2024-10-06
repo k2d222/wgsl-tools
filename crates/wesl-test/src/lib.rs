@@ -2,13 +2,18 @@
 
 use std::{
     collections::HashMap,
+    fmt::Display,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
 };
 
 use serde::Deserialize;
-use wesl::{CompileOptions, Resource, VirtualFileResolver, MANGLER_HASH};
+use wesl::{
+    eval::ToExpr,
+    syntax::{Expression, Statement, TranslationUnit},
+    CompileOptions, Context, Resource, VirtualFileResolver, MANGLER_HASH,
+};
 
 #[test]
 fn webgpu_samples() {
@@ -19,9 +24,10 @@ fn webgpu_samples() {
         if path.extension().unwrap() == "wgsl" {
             println!("testing webgpu-sample `{}`", path.display());
             let source = std::fs::read_to_string(path).expect("failed to read file");
-            let source_module = wgsl_parse::Parser::parse_str(&source)
+            let mut source_module = wgsl_parse::Parser::parse_str(&source)
                 .inspect_err(|err| eprintln!("{err}"))
                 .expect("parse error");
+            source_module.remove_voids();
             let disp = format!("{source_module}");
             let disp_module = wgsl_parse::Parser::parse_str(&disp)
                 .inspect_err(|err| eprintln!("{err}"))
@@ -29,6 +35,179 @@ fn webgpu_samples() {
             assert_eq!(source_module, disp_module);
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum GptTestSyntaxKind {
+    Module,
+    Statement,
+    Expression,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(tag = "kind")]
+enum GptTestKind {
+    Syntax {
+        syntax: GptTestSyntaxKind,
+    },
+    Eval {
+        eval: Option<String>,
+        context: Option<String>,
+    },
+    Context,
+}
+
+impl Display for GptTestKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GptTestKind::Syntax { .. } => f.write_str("Syntax"),
+            GptTestKind::Eval { .. } => f.write_str("Eval"),
+            GptTestKind::Context => f.write_str("Context"),
+        }
+    }
+}
+
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum GptTestExpect {
+    Pass,
+    Fail,
+}
+
+impl Display for GptTestExpect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GptTestExpect::Pass => f.write_str("Pass"),
+            GptTestExpect::Fail => f.write_str("Fail"),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct GptTest {
+    name: String,
+    desc: String,
+    #[serde(flatten)]
+    kind: GptTestKind,
+    code: String,
+    expect: GptTestExpect,
+    note: Option<String>,
+}
+
+fn printerr(e: impl std::error::Error) {
+    eprintln!("{e}")
+}
+
+#[test]
+fn gpt_tests() {
+    let dir = std::fs::read_dir("gpt-tests").expect("missing directory webgpu-samples");
+    let mut total_fails = 0;
+    let mut total_count = 0;
+    let mut total_todo = 0;
+
+    for entry in dir {
+        let entry = entry.expect("error reading entry");
+        let path = entry.path();
+        if path.extension().unwrap() == "json" {
+            let mut fails = 0;
+            println!("testing gpt-tests `{}`", path.display());
+
+            let file = File::open(path).expect("failed to read file");
+            let reader = BufReader::new(file);
+            let json: Vec<GptTest> = serde_json::from_reader(reader)
+                .inspect_err(|err| eprintln!("{err}"))
+                .expect("invalid json test file");
+
+            for test in &json {
+                print!(
+                    " * `{}` kind: {}, expect: {}, result: ",
+                    test.name, test.kind, test.expect
+                );
+
+                match &test.kind {
+                    GptTestKind::Syntax { syntax } => {
+                        let res = match syntax {
+                            GptTestSyntaxKind::Module => {
+                                test.code.parse::<TranslationUnit>().map(|_| ())
+                            }
+                            GptTestSyntaxKind::Statement => {
+                                test.code.parse::<Statement>().map(|_| ())
+                            }
+                            GptTestSyntaxKind::Expression => {
+                                test.code.parse::<Expression>().map(|_| ())
+                            }
+                        };
+                        let pass = res
+                            .is_ok()
+                            .then_some(GptTestExpect::Pass)
+                            .unwrap_or(GptTestExpect::Fail);
+                        println!("{pass}");
+                        if pass != test.expect {
+                            println!(
+                                "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * result: {:?}\n",
+                                test.desc,
+                                test.note
+                                    .as_ref()
+                                    .map(|note| format!(" (note: {note})"))
+                                    .unwrap_or_default(),
+                                test.code,
+                                res
+                            );
+                            fails += 1;
+                        }
+                    }
+                    GptTestKind::Eval { eval, context } => {
+                        let ctx = match context {
+                            Some(code) => code
+                                .parse::<TranslationUnit>()
+                                .map_err(|e| wesl::Error::from(e.error)),
+                            None => Ok(TranslationUnit::default()),
+                        };
+                        let res = ctx.and_then(|ctx| {
+                            wesl::eval(&test.code, &ctx).and_then(|inst| {
+                                inst.to_expr(&Context::new(&ctx))
+                                    .map_err(|e| wesl::Error::from(e))
+                            })
+                        });
+                        let eval_expr = eval.as_ref().map(|eval| eval.parse::<Expression>());
+                        let pass = (res.as_ref().ok().map(Ok)
+                            == eval_expr.as_ref().map(|x| x.as_ref()))
+                        .then_some(GptTestExpect::Pass)
+                        .unwrap_or(GptTestExpect::Fail);
+                        println!("{pass}");
+                        if pass != test.expect {
+                            println!(
+                                "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * eval:`{:?}`\n   * result: {:?}\n",
+                                test.desc,
+                                test.note
+                                    .as_ref()
+                                    .map(|note| format!(" (note: {note})"))
+                                    .unwrap_or_default(),
+                                test.code,
+                                eval,
+                                res.map(|expr| expr.to_string())
+                            );
+                            fails += 1;
+                        }
+                    }
+                    GptTestKind::Context => {
+                        println!("TODO");
+                        total_todo += 1;
+                    }
+                }
+            }
+
+            println!("{fails}/{} failures", json.len());
+            total_fails += fails;
+            total_count += json.len();
+        }
+    }
+
+    let total_pass = total_count - total_fails - total_todo;
+    println!("SUMMARY: {total_pass}/{total_count} Pass, {total_fails}/{total_count} Fails, {total_todo}/{total_count} TODO");
+    assert!(total_fails == 0);
 }
 
 // see schema: https://github.com/wgsl-tooling-wg/wesl-testsuite/blob/main/src/TestSchema.ts
@@ -57,7 +236,7 @@ fn wesl_testsuite_test_parsing(path: &Path) {
     for test in json {
         println!(
             " * expect {}: `{}`",
-            if test.fails { "FAILURE" } else { "SUCCESS" },
+            if test.fails { "Fail" } else { "Pass" },
             test.src
         );
         if test.fails {
@@ -86,7 +265,7 @@ fn wesl_testsuite_test(path: &Path) {
 
     for test in json {
         println!(
-            " * `{}`{}",
+            " * `{}` {}",
             test.name,
             test.notes
                 .map(|note| format!(" (note: {note})"))

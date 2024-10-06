@@ -1,0 +1,203 @@
+[
+  {
+    "name": "enable-directive-valid-ext",
+    "desc": "valid enable directive for extension f16",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "enable f16;",
+    "expect": "pass"
+  },
+  {
+    "name": "enable-directive-invalid-ext",
+    "desc": "invalid enable directive for non-existent extension",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "enable fake_extension;",
+    "expect": "fail",
+    "note": "Testing use of an invalid extension name not defined in the specification."
+  },
+  {
+    "name": "duplicate-enable-directive",
+    "desc": "duplicate enable directives for the same extension",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "enable f16;\nenable f16;",
+    "expect": "pass",
+    "note": "Duplicated extensions should not cause an error."
+  },
+  {
+    "name": "requires-directive-valid-lang-ext",
+    "desc": "valid requires directive for language extension",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "requires packed_4x8_integer_dot_product;",
+    "expect": "pass"
+  },
+  {
+    "name": "requires-directive-invalid-lang-ext",
+    "desc": "invalid requires directive for non-existent language extension",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "requires fake_language_extension;",
+    "expect": "fail",
+    "note": "Testing requires directive with non-existent language extension."
+  },
+  {
+    "name": "directive-followed-by-declaration",
+    "desc": "enable directive correctly placed before declarations",
+    "kind": "context",
+    "code": "enable f16;\nvar<private> myVar: i32;",
+    "expect": "pass"
+  },
+  {
+    "name": "declaration-before-directive",
+    "desc": "declarations appear before enable directive",
+    "kind": "context",
+    "code": "var<private> myVar: i32;\nenable f16;",
+    "expect": "fail",
+    "note": "Directives must appear before any declarations."
+  },
+  {
+    "name": "multiple-valid-directives",
+    "desc": "multiple valid directives before any declaration",
+    "kind": "context",
+    "code": "enable f16;\nrequires packed_4x8_integer_dot_product;\nvar<private> myVar: i32;",
+    "expect": "pass"
+  },
+  {
+    "name": "enable-directive-valid-position",
+    "desc": "Verify that an enable directive appears before all declarations.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "enable f16;\nvar<private> myVar: i32 = 0;",
+    "expect": "pass"
+  },
+  {
+    "name": "enable-directive-after-declaration",
+    "desc": "Fail when an enable directive appears after declarations.",
+    "kind": "context",
+    "code": "var<private> myVar: i32 = 0;\nenable f16;",
+    "expect": "fail"
+  },
+  {
+    "name": "valid-enable-extension",
+    "desc": "Test enabling a valid extension and using the associated feature.",
+    "kind": "context",
+    "code": "enable f16;\nvar<private> myVar: f16 = 0.0h;",
+    "expect": "pass"
+  },
+  {
+    "name": "enable-unavailable-extension",
+    "desc": "Test enabling an unsupported extension results in failure.",
+    "kind": "context",
+    "code": "enable unsupported_extension;",
+    "expect": "fail"
+  },
+  {
+    "name": "requires-directive-unsupported",
+    "desc": "Test the use of a requires directive for an unsupported language extension.",
+    "kind": "context",
+    "code": "requires packed_4x8_integer_dot_product;",
+    "expect": "fail"
+  },
+  {
+    "name": "duplicate-enable-directive",
+    "desc": "Allow duplicate enable directives for the same extension.",
+    "kind": "context",
+    "code": "enable f16;\nenable f16;",
+    "expect": "pass"
+  },
+  {
+    "name": "missing-enable-for-f16",
+    "desc": "Fail when using 'f16' type without enabling 'f16' extension.",
+    "kind": "context",
+    "code": "var<private> myVar: f16 = 0.0h;",
+    "expect": "fail"
+  },
+  {
+    "name": "endianness-control-without-enable",
+    "desc": "Fail when hypothetical feature 'endian_control' is used without enabling.",
+    "kind": "context",
+    "code": "@endian_control big\nvar<private> data: u32;",
+    "expect": "fail"
+  },
+  {
+    "name": "duplicate-requires-directive",
+    "desc": "Test the system allows redundant requires directives.",
+    "kind": "context",
+    "code": "requires unrestricted_pointer_parameters;\nrequires unrestricted_pointer_parameters;",
+    "expect": "pass"
+  },
+  {
+    "name": "enable-directive-valid",
+    "desc": "tests a valid use of an enable directive for f16 extension",
+    "kind": "context",
+    "code": "enable f16;",
+    "expect": "pass",
+    "note": "Enables the f16 extension before any declarations."
+  },
+  {
+    "name": "enable-directive-invalid-position",
+    "desc": "tests invalid use of enable directive placed after a declaration",
+    "kind": "context",
+    "code": "var<private> x: i32; enable f16;",
+    "expect": "fail",
+    "note": "Enable directives must appear before all declarations."
+  },
+  {
+    "name": "enable-directive-unsupported-extension",
+    "desc": "tests use of an enable directive with an unsupported extension",
+    "kind": "context",
+    "code": "enable nonexistent_extension;",
+    "expect": "fail",
+    "note": "Fails if the extension is not supported by the implementation."
+  },
+  {
+    "name": "requires-directive-valid",
+    "desc": "tests a valid use of a requires directive for a language extension",
+    "kind": "context",
+    "code": "requires readonly_and_readwrite_storage_textures;",
+    "expect": "pass",
+    "note": "Documents the program's use of the language extensions."
+  },
+  {
+    "name": "requires-directive-invalid-position",
+    "desc": "tests invalid use of requires directive placed after a declaration",
+    "kind": "context",
+    "code": "var<private> x: i32; requires readonly_and_readwrite_storage_textures;",
+    "expect": "fail",
+    "note": "Requires directives must appear before all declarations."
+  },
+  {
+    "name": "redundant-enable-directive",
+    "desc": "tests the use of a redundant enable directive",
+    "kind": "context",
+    "code": "enable f16; enable f16;",
+    "expect": "pass",
+    "note": "Redundant enable directives are allowed."
+  },
+  {
+    "name": "requires-directive-unsupported-extension",
+    "desc": "tests use of a requires directive with an unsupported extension",
+    "kind": "context",
+    "code": "requires unsupported_language_extension;",
+    "expect": "fail",
+    "note": "Fails if the language extension is not supported by the implementation."
+  },
+  {
+    "name": "multiple-enable-directives",
+    "desc": "tests multiple enable directives for different extensions",
+    "kind": "context",
+    "code": "enable f16; enable clip_distances;",
+    "expect": "pass",
+    "note": "Multiple enable directives can be used together."
+  },
+  {
+    "name": "global-diagnostic-filter-syntax",
+    "desc": "tests a valid global diagnostic filter directive syntax",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "diagnostic(piecewise_linear);",
+    "expect": "pass"
+  }
+]

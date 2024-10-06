@@ -1,0 +1,256 @@
+[
+  {
+    "name": "parse-single-line-comment",
+    "desc": "Ensure single-line comments are parsed correctly.",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "var a: i32 = 1; // This is a comment",
+    "expect": "pass"
+  },
+  {
+    "name": "parse-multi-line-comment",
+    "desc": "Ensure multi-line comments can nest and are parsed correctly.",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "var b: f32 = /* This is a multi-line /* nested */ comment */ 2.0;",
+    "expect": "pass"
+  },
+  {
+    "name": "parse-hexadecimal-integer-literal",
+    "desc": "Parse a variable declaration with a hexadecimal integer literal.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const c: u32 = 0x1Fu;",
+    "expect": "pass"
+  },
+  {
+    "name": "error-floating-point-literal-no-suffix",
+    "desc": "A floating point literal must not be parsed without a suffix if no decimal point or exponent exists.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const d = 2.0;",
+    "expect": "pass"
+  },
+  {
+    "name": "parse-template-expression-with-shift",
+    "desc": "Ensure template expressions with shifts are parsed correctly.",
+    "kind": "syntax",
+    "syntax": "expression",
+    "code": "max(a << b, c>>d)",
+    "expect": "pass"
+  },
+  {
+    "name": "parse-variable-with-large-integer-literal",
+    "desc": "Integer literals too large for their suffix are errors.",
+    "kind": "context",
+    "code": "const e: i32 = 4294967296i;",
+    "expect": "fail",
+    "note": "Integer literals cannot exceed the value limits of their type."
+  },
+  {
+    "name": "identifier-valid-unicode",
+    "desc": "Identifiers with non-ASCII characters.",
+    "kind": "context",
+    "code": "var Δέλτα: f32 = 1.21;",
+    "expect": "pass"
+  },
+  {
+    "name": "template-list-discovery-multiple",
+    "desc": "Template list discovery for multiple nested templates.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var a: array<vec3<f32>, 2>;",
+    "expect": "pass"
+  },
+  {
+    "name": "forbidden-single-underscore-identifier",
+    "desc": "Identifiers cannot be a single underscore.",
+    "kind": "context",
+    "code": "var _ : i32 = 5;",
+    "expect": "fail"
+  },
+  {
+    "name": "parse-line-break-in-string-literal",
+    "desc": "Testing handling of line breaks in an unexpected context.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var str: string = \"Hello\nWorld\";",
+    "expect": "fail",
+    "note": "Strings should not have line breaks without proper handling."
+  },
+  {
+    "name": "boolean-literal-true",
+    "desc": "Parse boolean literal true",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const a = true;",
+    "expect": "pass"
+  },
+  {
+    "name": "boolean-literal-false",
+    "desc": "Parse boolean literal false",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const b = false;",
+    "expect": "pass"
+  },
+  {
+    "name": "integer-literal-positive",
+    "desc": "Parse positive integer literal",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const c = 123;",
+    "expect": "pass"
+  },
+  {
+    "name": "hexadecimal-int-literal",
+    "desc": "Parse hexadecimal integer literal",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const d = 0x1A;",
+    "expect": "pass"
+  },
+  {
+    "name": "decimal-float-literal",
+    "desc": "Parse decimal floating point literal",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const e = 1.23e4;",
+    "expect": "pass"
+  },
+  {
+    "name": "hexadecimal-float-literal",
+    "desc": "Parse hexadecimal floating point literal",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const f = 0x1.1p+3;",
+    "expect": "pass"
+  },
+  {
+    "name": "identifier-valid",
+    "desc": "Parse a valid identifier",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var g = 1;",
+    "expect": "pass"
+  },
+  {
+    "name": "identifier-with-unicode",
+    "desc": "Parse an identifier with Unicode characters",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var Δέλτα = 2;",
+    "expect": "pass"
+  },
+  {
+    "name": "identifier-keyword-disallowed",
+    "desc": "Identifiers cannot match a keyword",
+    "kind": "context",
+    "code": "var break = 3;",
+    "expect": "fail",
+    "note": "Keyword 'break' cannot be used as an identifier."
+  },
+  {
+    "name": "template-list-simple",
+    "desc": "Parse a simple template list",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<storage,read_write> h;",
+    "expect": "pass"
+  },
+  {
+    "name": "template-list-nested",
+    "desc": "Parse nested template lists",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var i = array<vec4<f32>>();",
+    "expect": "pass"
+  },
+  {
+    "name": "template-list-comparison-edge",
+    "desc": "Ensure no misinterpretation of < and > in expressions within template",
+    "kind": "context",
+    "code": "let func = select<vec3<f32>>(1, 2, a > b);",
+    "expect": "pass"
+  },
+  {
+    "name": "block-comment-nested",
+    "desc": "Tests a nested block comment",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const x = 5; /* This is a /* nested */ comment */ const y = 10;",
+    "expect": "pass"
+  },
+  {
+    "name": "line-ending-comment",
+    "desc": "Tests line-ending comment handling",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const a = 1; // This is a comment\nconst b = 2;",
+    "expect": "pass"
+  },
+  {
+    "name": "block-comment-unterminated",
+    "desc": "Tests an unterminated block comment",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const a = 1; /* Unterminated comment const b = 2;",
+    "expect": "fail"
+  },
+  {
+    "name": "literal-integer-valid",
+    "desc": "Tests a valid integer literal",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const num: i32 = 42;",
+    "expect": "pass"
+  },
+  {
+    "name": "literal-integer-invalid",
+    "desc": "Tests an invalid integer literal with leading zero",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const num: i32 = 012;",
+    "expect": "fail"
+  },
+  {
+    "name": "literal-float-valid",
+    "desc": "Tests a valid floating-point literal with exponent",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const num: f32 = 1.0e3f;",
+    "expect": "pass"
+  },
+  {
+    "name": "template-list-vector",
+    "desc": "Tests valid template list in vector declaration",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var v: vec3<f32>;",
+    "expect": "pass"
+  },
+  {
+    "name": "template-list-nested",
+    "desc": "Tests nested template lists",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var v: array<vec4<f32>>;",
+    "expect": "pass"
+  },
+  {
+    "name": "identifier-rejected",
+    "desc": "Tests an identifier that is a reserved keyword",
+    "kind": "context",
+    "code": "var struct: i32;",
+    "expect": "fail",
+    "note": "Identifiers cannot be keywords."
+  },
+  {
+    "name": "identifier-valid-unicode",
+    "desc": "Tests valid non-ASCII identifier",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var Δέλτα: f32;",
+    "expect": "pass"
+  }
+]

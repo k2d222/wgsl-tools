@@ -1,0 +1,246 @@
+[
+  {
+    "name": "use-keyword-as-identifier",
+    "desc": "using reserved keyword 'const' as an identifier name",
+    "kind": "context",
+    "code": "fn main() -> void { var const: i32 = 0; }",
+    "expect": "fail",
+    "note": "Keywords cannot be used as identifiers."
+  },
+  {
+    "name": "valid-if-statement",
+    "desc": "valid `if` statement syntax usage",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "if (true) {} else {}",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-reserved-word",
+    "desc": "using a reserved word as a global identifier",
+    "kind": "context",
+    "code": "alias myVar: i32 = 5;",
+    "expect": "fail",
+    "note": "Reserved words cannot be used in any identifier context."
+  },
+  {
+    "name": "syntax-with-template",
+    "desc": "using shift left operator as part of an expression",
+    "kind": "syntax",
+    "syntax": "expression",
+    "code": "1 << 2",
+    "expect": "pass"
+  },
+  {
+    "name": "operator-precedence-parsing",
+    "desc": "testing operator precedence with mixed operators",
+    "kind": "syntax",
+    "syntax": "expression",
+    "code": "a + b * c",
+    "expect": "pass"
+  },
+  {
+    "name": "syntax-equality-check",
+    "desc": "valid equality check using syntactic tokens",
+    "kind": "syntax",
+    "syntax": "expression",
+    "code": "x == y",
+    "expect": "pass"
+  },
+  {
+    "name": "break-in-loop",
+    "desc": "check valid 'break' statement usage within a loop",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "loop { break; }",
+    "expect": "pass"
+  },
+  {
+    "name": "disallowed-global-const-assert",
+    "desc": "check disallowed global scope const_assert",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const_assert true;",
+    "expect": "fail",
+    "note": "const_assert must be inside a function or loop construct."
+  },
+  {
+    "name": "comma-separator",
+    "desc": "using comma to separate expressions within braces",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "{ a = 1, b = 2; }",
+    "expect": "fail",
+    "note": "Commas are not valid separators in this context."
+  },
+  {
+    "name": "declare-function",
+    "desc": "tests the declaration of a basic function with fn keyword",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn myFunction() -> void {}",
+    "expect": "pass"
+  },
+  {
+    "name": "use-reserved-word",
+    "desc": "attempt to use a reserved word 'requires' as an identifier",
+    "kind": "context",
+    "code": "var requires: i32;",
+    "expect": "fail",
+    "note": "Reserved words cannot be used as identifiers"
+  },
+  {
+    "name": "for-loop-syntax",
+    "desc": "tests correct usage of for loop syntax",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "for(var i = 0; i < 10; i = i + 1) {}",
+    "expect": "pass"
+  },
+  {
+    "name": "mismatched-braces",
+    "desc": "detects mismatched braces in a block statement",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "{ let x = 10; ",
+    "expect": "fail"
+  },
+  {
+    "name": "unmatched-parens",
+    "desc": "test with mismatched parentheses in an expression",
+    "kind": "syntax",
+    "syntax": "expression",
+    "code": "(1 + 2",
+    "expect": "fail"
+  },
+  {
+    "name": "if-else-syntax",
+    "desc": "tests correct syntax for an if-else statement",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "if (true) {} else {}",
+    "expect": "pass"
+  },
+  {
+    "name": "binary-operation-eval",
+    "desc": "evaluates simple binary operation 3 + 2",
+    "kind": "eval",
+    "code": "3 + 2",
+    "eval": "5",
+    "expect": "pass"
+  },
+  {
+    "name": "const-declaration-attempt",
+    "desc": "attempts to declare a const outside a function, should fail",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const myConst: i32 = 10;",
+    "expect": "fail",
+    "note": "const-declarations are typically not at module-scope unless as pipeline-overrides"
+  },
+  {
+    "name": "while-loop-empty",
+    "desc": "tests parsing of an empty while loop",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "while (false) {}",
+    "expect": "pass"
+  },
+  {
+    "name": "complex-expression-eval",
+    "desc": "evaluates a complex arithmetic expression",
+    "kind": "eval",
+    "code": "3 * (4 + 5) / 2",
+    "eval": "13.5",
+    "expect": "pass"
+  },
+  {
+    "name": "let-declaration-scope-error",
+    "desc": "checks that let declarations are not allowed at module scope",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "let myVar: i32 = 1;",
+    "expect": "fail",
+    "note": "let declarations should be within function scope"
+  },
+  {
+    "name": "syntax-keyword-fn",
+    "desc": "parses a function declaration keyword",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn myFunction() {}",
+    "expect": "pass"
+  },
+  {
+    "name": "syntax-keyword-let",
+    "desc": "let-declarations not allowed at module scope",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "let myVar: i32 = 10;",
+    "expect": "fail"
+  },
+  {
+    "name": "syntax-keyword-var",
+    "desc": "parses a local variable declaration",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "{ var myVar: f32 = 1.0; }",
+    "expect": "pass"
+  },
+  {
+    "name": "syntax-token-equals",
+    "desc": "parses a basic assignment statement using the equals token",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "{ myVar = 2; }",
+    "expect": "pass"
+  },
+  {
+    "name": "syntax-token-if",
+    "desc": "parses an if statement",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "if (true) {}",
+    "expect": "pass"
+  },
+  {
+    "name": "reserved-word-error",
+    "desc": "uses a reserved word which should cause a syntax error",
+    "kind": "context",
+    "code": "reserved { var x: i32; }",
+    "expect": "fail",
+    "note": "This test assumes 'reserved' is a placeholder reserved word."
+  },
+  {
+    "name": "syntax-token-arrow",
+    "desc": "parses a function return annotation using arrow token",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn myFunction() -> f32 { return 0.0; }",
+    "expect": "pass"
+  },
+  {
+    "name": "syntax-complex-condition",
+    "desc": "parses an if statement with a complex logical condition",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "if (a > 0 && b < 10) {}",
+    "expect": "pass"
+  },
+  {
+    "name": "eval-addition",
+    "desc": "evaluation of a simple addition expression",
+    "kind": "eval",
+    "code": "1 + 2",
+    "eval": "3",
+    "expect": "pass"
+  },
+  {
+    "name": "eval-boolean-not",
+    "desc": "evaluation of a boolean negation",
+    "kind": "eval",
+    "code": "!true",
+    "eval": "false",
+    "expect": "pass"
+  }
+]

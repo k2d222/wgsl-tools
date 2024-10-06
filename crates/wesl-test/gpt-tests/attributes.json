@@ -1,0 +1,261 @@
+[
+  {
+    "name": "align-attribute-structure-member",
+    "desc": "Tests that align attribute is correctly applied to a structure member",
+    "kind": "context",
+    "code": "@align(16) var myStruct: struct { a: f32 } = struct { a: 0.0 };",
+    "expect": "pass"
+  },
+  {
+    "name": "align-attribute-variable",
+    "desc": "Tests that align attribute is incorrectly applied to a variable, not a structure member",
+    "kind": "context",
+    "code": "@align(16) var<private> myVar: i32 = 0;",
+    "expect": "fail"
+  },
+  {
+    "name": "binding-attribute-resource-variable",
+    "desc": "Tests that binding attribute is correctly applied to a resource variable",
+    "kind": "context",
+    "code": "@binding(0) var<storage, read> myVar: array<f32>;",
+    "expect": "pass"
+  },
+  {
+    "name": "binding-attribute-non-resource-variable",
+    "desc": "Tests that binding attribute is incorrectly applied to a non-resource variable",
+    "kind": "context",
+    "code": "@binding(0) var<private> myVar: i32 = 0;",
+    "expect": "fail"
+  },
+  {
+    "name": "blend-src-correct-context",
+    "desc": "Tests that blend_src attribute is correctly applied in allowed context",
+    "kind": "context",
+    "code": "struct FragmentOutput { @location(0) @blend_src(0) color: vec4<f32>; };",
+    "expect": "pass"
+  },
+  {
+    "name": "blend-src-invalid-context",
+    "desc": "Tests that blend_src attribute is incorrectly applied in a disallowed context",
+    "kind": "context",
+    "code": "struct NotAFragmentOutput { @blend_src(0) val: f32; };",
+    "expect": "fail"
+  },
+  {
+    "name": "builtin-attribute-parameter",
+    "desc": "Tests that builtin attribute is correctly applied to an entry point parameter",
+    "kind": "context",
+    "code": "fn myVertexMain(@builtin(vertex_index) vertexIdx: u32) -> void {}",
+    "expect": "pass"
+  },
+  {
+    "name": "builtin-attribute-invalid-usage",
+    "desc": "Tests that builtin attribute is incorrectly used on a non-entry point",
+    "kind": "context",
+    "code": "var<private> @builtin(instance_index) instanceIdx: u32;",
+    "expect": "fail"
+  },
+  {
+    "name": "const-attribute-disallowed-function",
+    "desc": "Tests that const attribute is incorrectly applied to a user-defined function",
+    "kind": "context",
+    "code": "@const fn myFunction() -> i32 { return 42; }",
+    "expect": "fail"
+  },
+  {
+    "name": "diagnostic-duplicate-trigger-rule",
+    "desc": "Tests that multiple diagnostic attributes must specify different triggering rules",
+    "kind": "context",
+    "code": "@diagnostic(off, foo) @diagnostic(error, foo) var x: i32;",
+    "expect": "fail"
+  },
+  {
+    "name": "group-attribute-resource-variable",
+    "desc": "Tests that group attribute is correctly applied to a resource variable",
+    "kind": "context",
+    "code": "@group(1) var<uniform> myUniform: mat4x4<f32>;",
+    "expect": "pass"
+  },
+  {
+    "name": "id-attribute-on-override-declaration",
+    "desc": "Tests that id attribute is correctly used with an override declaration",
+    "kind": "context",
+    "code": "@id(0) override myOverride: i32;",
+    "expect": "pass"
+  },
+  {
+    "name": "interpolate-attribute-valid",
+    "desc": "Tests correct usage of interpolate attribute on vertex output",
+    "kind": "context",
+    "code": "struct VertexOutput { @location(0) @interpolate(flat) position: vec4<f32>; };",
+    "expect": "pass"
+  },
+  {
+    "name": "location-attribute-entry-point",
+    "desc": "Tests correct application of location attribute on entry point function parameter",
+    "kind": "context",
+    "code": "fn fragmentMain(@location(0) fragColor: vec4<f32>) -> void {}",
+    "expect": "pass"
+  },
+  {
+    "name": "workgroup-size-attribute-on-compute",
+    "desc": "Tests application of workgroup_size attribute on a compute shader entry point",
+    "kind": "context",
+    "code": "@compute @workgroup_size(1, 1, 1) fn computeMain() {}",
+    "expect": "pass"
+  },
+  {
+    "name": "align-attr-valid",
+    "desc": "valid use of the align attribute on a struct member",
+    "kind": "context",
+    "code": "struct MyStruct { @align(16) myMember: f32; };",
+    "expect": "pass"
+  },
+  {
+    "name": "align-attr-invalid-type",
+    "desc": "align attribute used outside of a structure",
+    "kind": "context",
+    "code": "@align(16) var<private> myVar: f32;",
+    "expect": "fail"
+  },
+  {
+    "name": "align-attr-non-power-of-two",
+    "desc": "align attribute with non-power-of-two value",
+    "kind": "context",
+    "code": "struct MyStruct { @align(6) myMember: f32; };",
+    "expect": "fail"
+  },
+  {
+    "name": "binding-attr-on-resource-var",
+    "desc": "binding attribute correctly applied to resource variable",
+    "kind": "context",
+    "code": "var<uniform> @binding(0) myResource: texture_2d<f32>;",
+    "expect": "pass"
+  },
+  {
+    "name": "binding-attr-on-non-resource",
+    "desc": "binding attribute applied to non-resource variable",
+    "kind": "context",
+    "code": "var<private> @binding(0) myVar: f32;",
+    "expect": "fail"
+  },
+  {
+    "name": "blend-src-valid",
+    "desc": "valid use of blend_src attribute on fragment output",
+    "kind": "context",
+    "code": "struct FragOutput { @location(0), @blend_src(0) color: f32; };",
+    "expect": "pass"
+  },
+  {
+    "name": "builtin-valid-position",
+    "desc": "builtin attribute used correctly for position",
+    "kind": "context",
+    "code": "fn main(@builtin(position) pos: vec4<f32>) -> void { }",
+    "expect": "pass"
+  },
+  {
+    "name": "const-attr-on-user-function",
+    "desc": "const attribute incorrectly applied to user-defined function",
+    "kind": "context",
+    "code": "@const fn myFunc() -> void { }",
+    "expect": "fail"
+  },
+  {
+    "name": "workgroup-size-valid",
+    "desc": "correct workgroup_size attribute on compute shader",
+    "kind": "context",
+    "code": "@compute @workgroup_size(64) fn computeMain() { }",
+    "expect": "pass"
+  },
+  {
+    "name": "location-attr-on-invalid-type",
+    "desc": "location attribute incorrectly applied to non-numeric type",
+    "kind": "context",
+    "code": "struct MyOutput { @location(0) myMember: bool; };",
+    "expect": "fail"
+  },
+  {
+    "name": "invariant-valid",
+    "desc": "invariant attribute correctly applied to position",
+    "kind": "context",
+    "code": "fn main(@builtin(position) pos: vec4<f32>) -> void { }",
+    "expect": "pass"
+  },
+  {
+    "name": "align-attribute-valid",
+    "desc": "valid usage of align attribute in struct member with a power of 2",
+    "kind": "context",
+    "code": "struct MyStruct { @align(16) member: f32; };",
+    "expect": "pass"
+  },
+  {
+    "name": "align-attribute-invalid",
+    "desc": "invalid usage of align attribute with non-power of 2 value",
+    "kind": "context",
+    "code": "struct MyStruct { @align(3) member: f32; };",
+    "expect": "fail",
+    "note": "The attribute value must be a power of 2."
+  },
+  {
+    "name": "binding-attribute-valid",
+    "desc": "binding attribute applied correctly to a resource",
+    "kind": "context",
+    "code": "var<uniform> @binding(0) uniformBuffer: mat4x4<f32>;",
+    "expect": "pass"
+  },
+  {
+    "name": "binding-attribute-invalid",
+    "desc": "binding attribute used incorrectly on non-resource variable",
+    "kind": "context",
+    "code": "var<private> @binding(1) nonResourceVar: i32;",
+    "expect": "fail",
+    "note": "Binding must only be applied to resource variables."
+  },
+  {
+    "name": "invariant-attribute-incorrect-use",
+    "desc": "invariant attribute applied to non-position",
+    "kind": "context",
+    "code": "struct MyStruct { @invariant color: vec4<f32>; };",
+    "expect": "fail",
+    "note": "Invariant attribute is only allowed on position built-in value."
+  },
+  {
+    "name": "workgroup-size-parameter-range",
+    "desc": "workgroup_size attribute with non-positive parameter",
+    "kind": "context",
+    "code": "@compute @workgroup_size(0) fn main() {}",
+    "expect": "fail",
+    "note": "Workgroup dimensions must be positive."
+  },
+  {
+    "name": "workgroup-size-multiple-parameters",
+    "desc": "workgroup_size attribute with three valid parameters",
+    "kind": "context",
+    "code": "@compute @workgroup_size(8, 4, 2) fn main() {}",
+    "expect": "pass"
+  },
+  {
+    "name": "location-attribute-invalid-type",
+    "desc": "location attribute applied to non-scalar/vector type",
+    "kind": "context",
+    "code": "struct MyStruct { @location(0) var data: mat2x2<f32>; };",
+    "expect": "fail",
+    "note": "Location can only be applied to scalar or vector types."
+  },
+  {
+    "name": "size-attribute-exceeds-byte-size",
+    "desc": "size attribute applying less than required size",
+    "kind": "context",
+    "code": "struct MyStruct { @size(2) member: vec3<f32>; };",
+    "expect": "fail",
+    "note": "Size must be at least the byte-size of the member type."
+  },
+  {
+    "name": "shader-stage-multiple-attributes",
+    "desc": "function with multiple shader stage attributes",
+    "kind": "context",
+    "code": "@vertex @fragment fn main() {}",
+    "expect": "fail",
+    "note": "A function can only have one shader stage attribute."
+  }
+]

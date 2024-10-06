@@ -1,0 +1,240 @@
+[
+  {
+    "name": "declare-vertex-entry-point",
+    "desc": "Declare a vertex entry point with valid built-in outputs",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@vertex\nfn vert_main() -> @builtin(position) vec4<f32> {\n  return vec4<f32>(0.0, 0.0, 0.0, 1.0);\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "vertex-entry-point-invalid-output",
+    "desc": "Vertex entry point with invalid output type",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@vertex\nfn vert_main() -> @location(0) f32 {\n  return 1.0;\n}",
+    "expect": "fail"
+  },
+  {
+    "name": "fragment-entry-point-with-built-ins",
+    "desc": "Declare a fragment entry point with built-in inputs and outputs",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@fragment\nfn frag_main(@builtin(position) coord_in: vec4<f32>) -> @location(0) vec4<f32> {\n  return coord_in;\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "fragment-duplicate-builtin-error",
+    "desc": "Fragment entry point with duplicate built-in outputs",
+    "kind": "context",
+    "code": "@fragment\nfn frag_main(@builtin(position) coord_in: vec4<f32>, @builtin(position) pos_in: vec4<f32>) -> @location(0) vec4<f32> {\n  return coord_in;\n}",
+    "expect": "fail",
+    "note": "An entry point must not contain duplicated built-in inputs or outputs."
+  },
+  {
+    "name": "compute-entry-point-no-return",
+    "desc": "Compute entry point must not have a return value",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@compute @workgroup_size(1)\nfn comp_main() { }",
+    "expect": "pass"
+  },
+  {
+    "name": "compute-entry-point-with-return-error",
+    "desc": "Compute entry point incorrectly declaring a return type",
+    "kind": "context",
+    "code": "@compute @workgroup_size(1)\nfn comp_main() -> vec4<f32> { return vec4<f32>(1.0, 2.0, 3.0, 4.0); }",
+    "expect": "fail",
+    "note": "Compute entry points must not have a return type."
+  },
+  {
+    "name": "vertex-entry-point-input-structure",
+    "desc": "Using a structure to define vertex entry point inputs",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "struct VertexInput {\n  @location(0) position: vec4<f32>;\n  @location(1) color: vec4<f32>;\n}\n\n@vertex\nfn vert_main(input: VertexInput) -> @builtin(position) vec4<f32> {\n  return input.position;\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-nested-struct-input",
+    "desc": "Structure with user-defined IO nested in another structure",
+    "kind": "context",
+    "code": "struct Nested {\n  @location(0) param: f32;\n}\n\nstruct Wrapper {\n  nested: Nested;\n}\n\n@vertex\nfn vert_main(input: Wrapper) { }",
+    "expect": "fail",
+    "note": "Structures with user-defined IO cannot be nested."
+  },
+  {
+    "name": "fragment-entry-point-mismatched-locations",
+    "desc": "Fragment entry with output location conflict",
+    "kind": "context",
+    "code": "struct FragmentOutput {\n  @location(0) color: vec4<f32>;\n  @location(0) brightness: f32;\n}\n\n@fragment\nfn frag_main() -> FragmentOutput {\n  return FragmentOutput(vec4<f32>(1.0), 1.0);\n}",
+    "expect": "fail",
+    "note": "Outputs must not share the same location."
+  },
+  {
+    "name": "vertex-entry-point-builtin-and-user-defined",
+    "desc": "Vertex shader with both built-in and user-defined outputs",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "struct VertexOutput {\n  @builtin(position) pos: vec4<f32>;\n  @location(0) color: vec4<f32>;\n}\n\n@vertex\nfn vert_main() -> VertexOutput {\n  return VertexOutput(vec4<f32>(0.0), vec4<f32>(1.0));\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "entry-point-declaration-vertex",
+    "desc": "A valid vertex shader entry point with position output",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@vertex\nfn vert_main() -> @builtin(position) vec4<f32> {\n  return vec4<f32>(0.0, 0.0, 0.0, 1.0);\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "entry-point-declaration-fragment",
+    "desc": "A valid fragment shader entry point with position input and color output",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@fragment\nfn frag_main(@builtin(position) coord_in: vec4<f32>) -> @location(0) vec4<f32> {\n  return vec4<f32>(coord_in.x, coord_in.y, 0.0, 1.0);\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "entry-point-declaration-compute",
+    "desc": "A valid compute shader entry point with workgroup size attribute",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@compute @workgroup_size(1)\nfn comp_main() { }",
+    "expect": "pass"
+  },
+  {
+    "name": "entry-point-compute-missing-workgroup-size",
+    "desc": "Compute shaders must specify a workgroup size",
+    "kind": "context",
+    "code": "@compute\nfn bad_shader() { }",
+    "expect": "fail",
+    "note": "Missing @workgroup_size attribute"
+  },
+  {
+    "name": "entry-point-duplicate-builtin-inputs",
+    "desc": "Shaders must not use duplicate built-in inputs",
+    "kind": "context",
+    "code": "@vertex\nfn bad_vertex_main(@builtin(vertex_index) vi1: u32, @builtin(vertex_index) vi2: u32) -> @builtin(position) vec4<f32> {\n  return vec4<f32>();\n}",
+    "expect": "fail"
+  },
+  {
+    "name": "entry-point-duplicate-builtin-outputs",
+    "desc": "Shaders must not use duplicate built-in outputs",
+    "kind": "context",
+    "code": "@fragment\nfn bad_fragment_main() -> @builtin(frag_depth) f32 {\n  @builtin(frag_depth) f32;\n  return 1.0;\n}",
+    "expect": "fail"
+  },
+  {
+    "name": "entry-point-invalid-io-locations",
+    "desc": "Shader cannot have duplicate IO locations",
+    "kind": "context",
+    "code": "@fragment\nfn badFragShader(@location(0) in1: f32, @location(0) in2: f32) -> @location(0) vec4<f32> {\n return vec4<f32>();\n}",
+    "expect": "fail"
+  },
+  {
+    "name": "entry-point-forbidden-user-inputs-outputs-in-compute",
+    "desc": "Compute shaders must not have user-defined inputs or outputs",
+    "kind": "context",
+    "code": "@compute @workgroup_size(1)\nfn badComp(@location(0) input: f32) -> @location(0) vec4<f32> {\n  return vec4<f32>();\n}",
+    "expect": "fail",
+    "note": "Compute shaders cannot have user-defined input/output"
+  },
+  {
+    "name": "entry-point-interpolation-flat-integer",
+    "desc": "Integer user-defined IO must be flat",
+    "kind": "context",
+    "code": "struct MyInputs {\n  @location(0) @interpolate(perspective) myInt: i32,\n}\n\n@fragment\nfn fragShader(in: MyInputs) {\n}",
+    "expect": "fail",
+    "note": "Integer inputs must use flat interpolation"
+  },
+  {
+    "name": "entry-point-valid-flat-integer",
+    "desc": "Integer user-defined IO with valid flat interpolation",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "struct MyInputs {\n  @location(0) @interpolate(flat) myInt: i32,\n}\n\n@fragment\nfn fragShader(in: MyInputs) {\n}",
+    "expect": "pass",
+    "note": "Correct use of flat interpolation for integer types"
+  },
+  {
+    "name": "vertex-entry-point",
+    "desc": "Test declaration of a vertex entry point function with the correct return type",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@vertex\nfn main() -> @builtin(position) vec4<f32> {\n  return vec4<f32>(0.0, 0.0, 0.0, 1.0);\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "fragment-entry-point",
+    "desc": "Test declaration of a fragment entry point function with user-defined inputs and outputs",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@fragment\nfn frag_main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n  return color;\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "compute-entry-point-no-return",
+    "desc": "Compute shader entry points should not have a return type",
+    "kind": "context",
+    "code": "@compute @workgroup_size(1)\nfn compute_main() -> f32 {\n  return 1.0;\n}",
+    "expect": "fail",
+    "note": "Compute shaders must not declare a return type."
+  },
+  {
+    "name": "duplicate-vertex-output-location",
+    "desc": "Ensure error for duplicate output locations in vertex shader",
+    "kind": "context",
+    "code": "@vertex\nfn vert_main() -> struct { \n  @location(0) pos1: vec4<f32>; \n  @location(0) pos2: vec4<f32>; \n} {\n  return { vec4<f32>(0.0), vec4<f32>(1.0) };\n}",
+    "expect": "fail",
+    "note": "Cannot have duplicate location attributes."
+  },
+  {
+    "name": "missing-workgroup-size-compute",
+    "desc": "Ensure error when workgroup size is not specified for compute shaders",
+    "kind": "context",
+    "code": "@compute\nfn compute_main() {}\n",
+    "expect": "fail",
+    "note": "A workgroup size attribute is mandatory for compute shaders."
+  },
+  {
+    "name": "vertex-builtin-position",
+    "desc": "Vertex shader uses @builtin(position) correctly",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@vertex\nfn vs_main() -> @builtin(position) vec4<f32> {\n  return vec4<f32>(0.0, 0.0, 0.0, 1.0);\n}",
+    "expect": "pass"
+  },
+  {
+    "name": "fragment-invalid-builtin-input",
+    "desc": "Ensure error on invalid builtin input usage for fragment stage",
+    "kind": "context",
+    "code": "@fragment\nfn fs_main(@builtin(frag_depth) depth: f32) {}\n",
+    "expect": "fail",
+    "note": "frag_depth is an output, not input, for the fragment shader."
+  },
+  {
+    "name": "compute-valid-builtin-usage",
+    "desc": "Ensure valid usage of compute shader built-in values",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@compute @workgroup_size(1)\nfn compute_main(@builtin(local_invocation_id) id: vec3<u32>) {}\n",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-nested-io-structure",
+    "desc": "Disallow nested structures with user-defined IO",
+    "kind": "context",
+    "code": "struct Nested { inner: Inner; }\nstruct Inner { @location(0) color: vec4<f32>; }\n@vertex\nfn main(input: Nested) {}\n",
+    "expect": "fail",
+    "note": "User-defined IO cannot be nested in structures."
+  },
+  {
+    "name": "vertex-input-with-bool",
+    "desc": "Ensure that bool cannot be used for user-defined inputs",
+    "kind": "context",
+    "code": "@vertex\nfn main(@location(0) input: bool) {}\n",
+    "expect": "fail",
+    "note": "Bool type is only allowed for builtin input/output not user-defined."
+  }
+]

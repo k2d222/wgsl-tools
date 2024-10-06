@@ -1,0 +1,207 @@
+[
+  {
+    "name": "function-decl-simple",
+    "desc": "simple user-defined function declaration with no return type",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn simple() {}",
+    "expect": "pass"
+  },
+  {
+    "name": "function-decl-with-params",
+    "desc": "user-defined function with parameters and a return type",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn add(a: i32, b: i32) -> i32 { return a + b; }",
+    "expect": "pass"
+  },
+  {
+    "name": "duplicate-param-names",
+    "desc": "function with duplicate parameter names is invalid",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn invalid(a: i32, a: f32) {}",
+    "expect": "fail"
+  },
+  {
+    "name": "function-call-valid",
+    "desc": "valid function call with correct parameter types",
+    "kind": "eval",
+    "code": "add(1, 2)",
+    "eval": "3",
+    "expect": "pass",
+    "context": "fn add(a: i32, b: i32) -> i32 { return a + b; }"
+  },
+  {
+    "name": "function-call-invalid-arg-type",
+    "desc": "invalid function call due to argument type mismatch",
+    "kind": "context",
+    "code": "add(1, 2.0)",
+    "expect": "fail",
+    "note": "Argument '2.0' does not match parameter type 'i32'",
+    "context": "fn add(a: i32, b: i32) -> i32 { return a + b; }"
+  },
+  {
+    "name": "entry-point-calls",
+    "desc": "entry point function cannot be called",
+    "kind": "context",
+    "code": "fn main() {} main();",
+    "expect": "fail",
+    "note": "An entry point cannot be the target of a function call"
+  },
+  {
+    "name": "recursion-disallowed",
+    "desc": "function recursion is disallowed",
+    "kind": "context",
+    "code": "fn recurse() { recurse(); }",
+    "expect": "fail",
+    "note": "Recursion is disallowed in WGSL"
+  },
+  {
+    "name": "function-decl-return-point",
+    "desc": "function without specified return type using return statement",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn add() { return 5; }",
+    "expect": "fail",
+    "note": "Function missing return type yet has a return statement"
+  },
+  {
+    "name": "function-decl-simple",
+    "desc": "valid simple function declaration with two parameters",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn add_two(i: i32, b: f32) -> i32 { return i + 2; }",
+    "expect": "pass"
+  },
+  {
+    "name": "function-call-main",
+    "desc": "valid function call within an entry point",
+    "kind": "context",
+    "code": "@compute @workgroup_size(1) fn main() { let six: i32 = add_two(4, 5.0); } fn add_two(i: i32, b: f32) -> i32 { return i + 2; }",
+    "expect": "pass"
+  },
+  {
+    "name": "function-params-duplicate-names",
+    "desc": "error due to duplicate parameter names in a function",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn wrong_duplicate_params(i: i32, i: f32) { }",
+    "expect": "fail"
+  },
+  {
+    "name": "function-call-missing-param",
+    "desc": "function call with missing arguments",
+    "kind": "context",
+    "code": "fn less_args(i: i32) { } @compute fn main() { less_args(); }",
+    "expect": "fail"
+  },
+  {
+    "name": "const-expression-in-const-function",
+    "desc": "valid use of const function",
+    "kind": "eval",
+    "code": "firstLeadingBit(257)",
+    "eval": "8",
+    "expect": "pass"
+  },
+  {
+    "name": "function-recursion",
+    "desc": "error due to recursive function call",
+    "kind": "context",
+    "code": "fn recursive() { recursive(); }",
+    "expect": "fail"
+  },
+  {
+    "name": "alias-analysis-invalid",
+    "desc": "invalid aliasing due to write-read within aliased parameters",
+    "kind": "context",
+    "code": "fn aliased_write_read(p: ptr<function, i32>, q: ptr<function, i32>) { *p = *q; } fn main() { var a : i32 = 0; aliased_write_read(&a, &a); }",
+    "expect": "fail"
+  },
+  {
+    "name": "entry-point-no-function-call",
+    "desc": "error due to entry point being a function call target",
+    "kind": "context",
+    "code": "@compute fn entry() { } @compute fn main() { entry(); }",
+    "expect": "fail"
+  },
+  {
+    "name": "function-return-type-constructible",
+    "desc": "error function with non-constructible return type",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn invalid_return() -> void { return; }",
+    "expect": "fail"
+  },
+  {
+    "name": "formal-parameter-valid-type",
+    "desc": "valid formal parameter with constructible type",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn func_with_valid_param(p: i32) { }",
+    "expect": "pass"
+  },
+  {
+    "name": "valid-function-declaration",
+    "desc": "A simple valid function declaration with parameters and a return type",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "fn add_two(i: i32, b: f32) -> i32 { return i + 2; }",
+    "expect": "pass"
+  },
+  {
+    "name": "invalid-function-return-type-mismatch",
+    "desc": "Function return type mismatch with actual return",
+    "kind": "context",
+    "code": "fn wrong_return() -> i32 { return 1.0; }",
+    "expect": "fail",
+    "note": "Returning a float instead of an integer"
+  },
+  {
+    "name": "invalid-function-entry-point-call",
+    "desc": "Entry point function cannot be called by another function",
+    "kind": "context",
+    "code": "fn caller() { main(); } @compute @workgroup_size(1) fn main() {}",
+    "expect": "fail",
+    "note": "Entry points cannot be function call targets"
+  },
+  {
+    "name": "alias-analysis-valid-case",
+    "desc": "Valid alias analysis where pointers are only read",
+    "kind": "context",
+    "code": "fn f4(p1 : ptr<function, i32>, p2 : ptr<function, i32>) -> i32 { return *p1 + *p2; } fn valid_case() { var a : i32 = 0; let b = f4(&a, &a); }",
+    "expect": "pass"
+  },
+  {
+    "name": "alias-analysis-invalid-write-case",
+    "desc": "Invalid alias analysis with write access on same root identifier",
+    "kind": "context",
+    "code": "fn f1(p1 : ptr<function, i32>, p2 : ptr<function, i32>) { *p1 = *p2; } fn invalid_case() { var a : i32 = 0; f1(&a, &a); }",
+    "expect": "fail",
+    "note": "Cannot pass two pointer parameters with the same root identifier when writing"
+  },
+  {
+    "name": "vertex-shader-position-missing",
+    "desc": "Vertex shader missing position output",
+    "kind": "context",
+    "code": "@vertex fn missing_position() {}",
+    "expect": "fail",
+    "note": "Vertex shaders must return the built-in position output"
+  },
+  {
+    "name": "function-parameter-name-conflict",
+    "desc": "Function with two parameters having the same name",
+    "kind": "context",
+    "code": "fn duplicate_params(i: i32, i: f32) {}",
+    "expect": "fail",
+    "note": "Function parameters must not have the same name"
+  },
+  {
+    "name": "function-call-argument-mismatch",
+    "desc": "Function call with argument type mismatch",
+    "kind": "context",
+    "code": "fn add(i: i32, j: i32) -> i32 { return i + j; } fn caller() { let result = add(1.0, 2.0); }",
+    "expect": "fail",
+    "note": "Arguments must match the function's parameter types"
+  }
+]

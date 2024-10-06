@@ -1,0 +1,241 @@
+[
+  {
+    "name": "decl-module-scope-const",
+    "desc": "Checks module scope const with abstract and concrete types",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const a = 4; const b : i32 = 4;",
+    "expect": "pass"
+  },
+  {
+    "name": "decl-function-scope-let",
+    "desc": "let declarations are allowed only in function scope",
+    "kind": "context",
+    "code": "let row_size = 16u;",
+    "expect": "pass",
+    "note": "Assuming the context is within a function"
+  },
+  {
+    "name": "decl-module-scope-let",
+    "desc": "let-declarations are not allowed at module scope",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "let row_size = 16u;",
+    "expect": "fail"
+  },
+  {
+    "name": "decl-private-var-initialized",
+    "desc": "checks private var declaration with initializer",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<private> decibels: f32 = 0.0;",
+    "expect": "pass"
+  },
+  {
+    "name": "decl-function-scope-var-uninit",
+    "desc": "function-scope var without an initializer",
+    "kind": "context",
+    "code": "var count: u32;",
+    "expect": "pass",
+    "note": "Assuming the context is within a function"
+  },
+  {
+    "name": "invalid-module-scope-var-with-initializer",
+    "desc": "Module scope storage and workgroup variables cannot have initializers",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<workgroup> buffer: array<f32, 4> = array<f32, 4>(0.0, 0.0, 0.0, 0.0);",
+    "expect": "fail"
+  },
+  {
+    "name": "override-with-id",
+    "desc": "Valid pipeline-overridable with specified id",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@id(1200) override specular_param: f32 = 2.3;",
+    "expect": "pass"
+  },
+  {
+    "name": "duplicate-override-id",
+    "desc": "Override declarations must not have duplicate IDs",
+    "kind": "context",
+    "code": "@id(0) override height: f32; @id(0) override depth: f32;",
+    "expect": "fail"
+  },
+  {
+    "name": "context-const-in-func",
+    "desc": "const declaration is valid in function scope",
+    "kind": "context",
+    "code": "const local_limit: u32 = 100u;",
+    "expect": "pass",
+    "note": "Assuming the context is within a function"
+  },
+  {
+    "name": "invalid-storage-access-mode",
+    "desc": "Storage buffers without specified access modes should default to 'read'",
+    "kind": "context",
+    "code": "var<storage> buffer: array<f32>;",
+    "expect": "pass"
+  },
+  {
+    "name": "const-decl-abstract-int",
+    "desc": "declares a module scope const with an abstract integer.",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const a = 4;",
+    "expect": "pass"
+  },
+  {
+    "name": "const-decl-assignment-abstract-mismatch",
+    "desc": "fails when abstract type assignment does not match explicit type.",
+    "kind": "context",
+    "code": "const a: f32 = 4;",
+    "expect": "fail"
+  },
+  {
+    "name": "override-decl-id-duplicate",
+    "desc": "override declarations must have unique pipeline constant IDs.",
+    "kind": "context",
+    "code": "@id(0) override a: f32; @id(0) override b: f32;",
+    "expect": "fail"
+  },
+  {
+    "name": "let-decl-in-function-scope",
+    "desc": "declares a let inside a function scope",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "let blockSize: i32 = 1024;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-private-with-initializer",
+    "desc": "declares a private var with an initializer",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<private> decibels: f32 = 0.5;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-workgroup-without-initializer",
+    "desc": "declares a workgroup var without an initializer",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<workgroup> worklist: array<i32,10>;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-uniform-read-only",
+    "desc": "declares a uniform buffer variable",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@group(0) @binding(2) var<uniform> param: Params;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-storage-read-access",
+    "desc": "declares a storage buffer with read access mode",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@group(0) @binding(0) var<storage,read> buf1: Buffer;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-function-default-initial",
+    "desc": "function address space variable defaults to zero if uninitialized",
+    "kind": "eval",
+    "code": "var x: i32; x",
+    "eval": "0",
+    "context": "fn test() { var x: i32; var y = x; }",
+    "expect": "pass"
+  },
+  {
+    "name": "let-decl-in-global-scope",
+    "desc": "let-declarations are not allowed at module scope",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "let myVar: i32 = 0;",
+    "expect": "fail"
+  },
+  {
+    "name": "const-decl-module-scope",
+    "desc": "Declare 'const' at module scope with implicit type as AbstractInt",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const a = 4;",
+    "expect": "pass"
+  },
+  {
+    "name": "const-decl-module-scope-explicit-type",
+    "desc": "Declare 'const' at module scope with explicit type i32",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "const b: i32 = 4;",
+    "expect": "pass"
+  },
+  {
+    "name": "let-decl-function-scope",
+    "desc": "Declare 'let' inside a function scope",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "let row_size = 16u;",
+    "context": "fn main() {}",
+    "expect": "pass"
+  },
+  {
+    "name": "override-decl-module-scope-explicit-id",
+    "desc": "Declare 'override' with explicit id attribute at module scope",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "@id(0) override has_point_light: bool = true;",
+    "expect": "pass"
+  },
+  {
+    "name": "override-decl-module-scope-without-id",
+    "desc": "Declare 'override' without id attribute and provide initial value",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "override scaleFactor: f32 = 1.5;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-decl-private-initialized",
+    "desc": "Declare 'var' in private address space with initializer",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<private> myVar: i32 = 0;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-decl-workgroup-no-initializer",
+    "desc": "Declare 'var' in workgroup address space without initializer",
+    "kind": "syntax",
+    "syntax": "module",
+    "code": "var<workgroup> worklist: array<i32,10>;",
+    "expect": "pass"
+  },
+  {
+    "name": "var-decl-module-missing-address",
+    "desc": "Attempt to declare a module scope 'var' without specifying address space",
+    "kind": "context",
+    "code": "var myVar: f32;",
+    "expect": "fail",
+    "note": "Address space must be declared for module-scope variables"
+  },
+  {
+    "name": "duplicate-pipeline-constant-id",
+    "desc": "Two override declarations using the same pipeline constant ID",
+    "kind": "context",
+    "code": "@id(0) override gain: f32 = 2.3;\n@id(0) override height: f32 = 1.0;",
+    "expect": "fail",
+    "note": "The pipeline constant ID must be unique"
+  },
+  {
+    "name": "function-scope-let-decl",
+    "desc": "Function scope let-declaration with explicit type",
+    "kind": "syntax",
+    "syntax": "statement",
+    "code": "let blockSize: i32 = 1024;",
+    "context": "fn main() {}",
+    "expect": "pass"
+  }
+]
