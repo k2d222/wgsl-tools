@@ -2,12 +2,88 @@ use crate::span::Spanned;
 
 use super::syntax::*;
 
+impl TranslationUnit {
+    pub fn remove_voids(&mut self) {
+        self.global_declarations.retain_mut(|decl| match decl {
+            GlobalDeclaration::Void => false,
+            _ => {
+                decl.remove_voids();
+                true
+            }
+        })
+    }
+}
+
+impl GlobalDeclaration {
+    pub fn remove_voids(&mut self) {
+        match self {
+            GlobalDeclaration::Function(decl) => {
+                decl.body.remove_voids();
+            }
+            _ => (),
+        }
+    }
+}
+
+impl CompoundStatement {
+    pub fn remove_voids(&mut self) {
+        self.statements.retain_mut(|stat| match stat.node_mut() {
+            Statement::Void => false,
+            _ => {
+                stat.remove_voids();
+                true
+            }
+        })
+    }
+}
+
+impl Statement {
+    pub fn remove_voids(&mut self) {
+        match self {
+            Statement::Compound(stat) => {
+                stat.remove_voids();
+            }
+            Statement::If(stat) => {
+                stat.if_clause.body.remove_voids();
+                stat.else_if_clauses
+                    .iter_mut()
+                    .for_each(|clause| clause.body.remove_voids());
+                stat.else_clause
+                    .as_mut()
+                    .map(|clause| clause.body.remove_voids());
+            }
+            Statement::Switch(stat) => stat
+                .clauses
+                .iter_mut()
+                .for_each(|clause| clause.body.remove_voids()),
+            Statement::Loop(stat) => stat.body.remove_voids(),
+            Statement::For(stat) => stat.body.remove_voids(),
+            Statement::While(stat) => stat.body.remove_voids(),
+            _ => (),
+        }
+    }
+}
+
 impl From<String> for TypeExpression {
     fn from(name: String) -> Self {
         Self {
             name,
             template_args: None,
         }
+    }
+}
+
+impl From<ExpressionNode> for ReturnStatement {
+    fn from(expression: ExpressionNode) -> Self {
+        Self {
+            attributes: Default::default(),
+            expression: Some(expression),
+        }
+    }
+}
+impl From<Expression> for ReturnStatement {
+    fn from(expression: Expression) -> Self {
+        Self::from(ExpressionNode::from(expression))
     }
 }
 

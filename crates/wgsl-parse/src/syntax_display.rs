@@ -46,7 +46,7 @@ impl Display for TranslationUnit {
         let declarations = self
             .global_declarations
             .iter()
-            // .filter(|decl| !matches!(decl, GlobalDeclaration::Void))
+            .filter(|decl| !matches!(decl, GlobalDeclaration::Void))
             .format("\n\n");
         write!(f, "{declarations}\n")
     }
@@ -442,7 +442,7 @@ impl Display for CompoundStatement {
         let stmts = Indent(
             self.statements
                 .iter()
-                // .filter(|stmt| !matches!(stmt, Statement::Void))
+                .filter(|stmt| !matches!(stmt.node(), Statement::Void))
                 .format("\n"),
         );
         write!(f, "{{\n{stmts}\n}}")
@@ -583,7 +583,7 @@ impl Display for LoopStatement {
             self.body
                 .statements
                 .iter()
-                // .filter(|stmt| !matches!(stmt, Statement::Void))
+                .filter(|stmt| !matches!(stmt.node(), Statement::Void))
                 .format("\n"),
         );
         let continuing = self
@@ -604,7 +604,7 @@ impl Display for ContinuingStatement {
             self.body
                 .statements
                 .iter()
-                // .filter(|stmt| !matches!(stmt, Statement::Void))
+                .filter(|stmt| !matches!(stmt.node(), Statement::Void))
                 .format("\n"),
         );
         let break_if = self

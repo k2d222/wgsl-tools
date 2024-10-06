@@ -74,6 +74,15 @@ impl FromStr for syntax::GlobalDeclaration {
         parser.parse(lexer).map_err(Into::into)
     }
 }
+impl FromStr for syntax::Statement {
+    type Err = Error;
+
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
+        let lexer = Lexer::new(source);
+        let parser = wgsl::StatementParser::new();
+        parser.parse(lexer).map_err(Into::into)
+    }
+}
 impl FromStr for syntax::Expression {
     type Err = Error;
 

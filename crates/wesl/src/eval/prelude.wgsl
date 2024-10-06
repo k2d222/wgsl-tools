@@ -59,113 +59,113 @@ alias mat4x4h = mat4x4<f16>;
 @internal @generic(T) struct atomic_compare_exchange_result { old_value: T, exchanged: bool }
 
 // constructors
-fn array() @builtin {}
-fn bool() @builtin {}
-fn i32() @builtin {}
-fn u32() @builtin {}
-fn f32() @builtin {}
-fn f16() @builtin {}
-fn mat2x2() @builtin {}
-fn mat2x3() @builtin {}
-fn mat2x4() @builtin {}
-fn mat3x2() @builtin {}
-fn mat3x3() @builtin {}
-fn mat3x4() @builtin {}
-fn mat4x2() @builtin {}
-fn mat4x3() @builtin {}
-fn mat4x4() @builtin {}
-fn vec2() @builtin {}
-fn vec3() @builtin {}
-fn vec4() @builtin {}
+@const fn array() @builtin {}
+@const fn bool() @builtin {}
+@const fn i32() @builtin {}
+@const fn u32() @builtin {}
+@const fn f32() @builtin {}
+@const fn f16() @builtin {}
+@const fn mat2x2() @builtin {}
+@const fn mat2x3() @builtin {}
+@const fn mat2x4() @builtin {}
+@const fn mat3x2() @builtin {}
+@const fn mat3x3() @builtin {}
+@const fn mat3x4() @builtin {}
+@const fn mat4x2() @builtin {}
+@const fn mat4x3() @builtin {}
+@const fn mat4x4() @builtin {}
+@const fn vec2() @builtin {}
+@const fn vec3() @builtin {}
+@const fn vec4() @builtin {}
 
 // bitcast
-fn bitcast() @builtin {}
+@const fn bitcast() @builtin {}
 
 // logical
-fn all() @builtin {}
-fn any() @builtin {}
-fn select() @builtin {}
+@const fn all() @builtin {}
+@const fn any() @builtin {}
+@const fn select() @builtin {}
 
 // array
-fn arrayLength() @builtin {}
+@const fn arrayLength() @builtin {}
 
 // numeric
-fn abs() @builtin {}
-fn acos() @builtin {}
-fn acosh() @builtin {}
-fn asin() @builtin {}
-fn asinh() @builtin {}
-fn atan() @builtin {}
-fn atanh() @builtin {}
-fn atan2() @builtin {}
-fn ceil() @builtin {}
-fn clamp() @builtin {}
-fn cos() @builtin {}
-fn cosh() @builtin {}
-fn countLeadingZeros() @builtin {}
-fn countOneBits() @builtin {}
-fn countTrailingZeros() @builtin {}
-fn cross() @builtin {}
-fn degrees() @builtin {}
-fn determinant() @builtin {}
-fn distance() @builtin {}
-fn dot() @builtin {}
-fn dot4U8Packed() @builtin {}
-fn dot4I8Packed() @builtin {}
-fn exp() @builtin {}
-fn exp2() @builtin {}
-fn extractBits() @builtin {}
-fn faceForward() @builtin {}
-fn firstLeadingBit() @builtin {}
-fn firstTrailingBit() @builtin {}
-fn floor() @builtin {}
-fn fma() @builtin {}
-fn fract() @builtin {}
-fn frexp() @builtin {}
-fn insertBits() @builtin {}
-fn inverseSqrt() @builtin {}
-fn ldexp() @builtin {}
-fn length() @builtin {}
-fn log() @builtin {}
-fn log2() @builtin {}
-fn max() @builtin {}
-fn min() @builtin {}
-fn mix() @builtin {}
-fn modf() @builtin {}
-fn normalize() @builtin {}
-fn pow() @builtin {}
-fn quantizeToF16() @builtin {}
-fn radians() @builtin {}
-fn reflect() @builtin {}
-fn refract() @builtin {}
-fn reverseBits() @builtin {}
-fn round() @builtin {}
-fn saturate() @builtin {}
-fn sign() @builtin {}
-fn sin() @builtin {}
-fn sinh() @builtin {}
-fn smoothstep() @builtin {}
-fn sqrt() @builtin {}
-fn step() @builtin {}
-fn tan() @builtin {}
-fn tanh() @builtin {}
-fn transpose() @builtin {}
-fn trunc() @builtin {}
+@const fn abs() @builtin {}
+@const fn acos() @builtin {}
+@const fn acosh() @builtin {}
+@const fn asin() @builtin {}
+@const fn asinh() @builtin {}
+@const fn atan() @builtin {}
+@const fn atanh() @builtin {}
+@const fn atan2() @builtin {}
+@const fn ceil() @builtin {}
+@const fn clamp() @builtin {}
+@const fn cos() @builtin {}
+@const fn cosh() @builtin {}
+@const fn countLeadingZeros() @builtin {}
+@const fn countOneBits() @builtin {}
+@const fn countTrailingZeros() @builtin {}
+@const fn cross() @builtin {}
+@const fn degrees() @builtin {}
+@const fn determinant() @builtin {}
+@const fn distance() @builtin {}
+@const fn dot() @builtin {}
+@const fn dot4U8Packed() @builtin {}
+@const fn dot4I8Packed() @builtin {}
+@const fn exp() @builtin {}
+@const fn exp2() @builtin {}
+@const fn extractBits() @builtin {}
+@const fn faceForward() @builtin {}
+@const fn firstLeadingBit() @builtin {}
+@const fn firstTrailingBit() @builtin {}
+@const fn floor() @builtin {}
+@const fn fma() @builtin {}
+@const fn fract() @builtin {}
+@const fn frexp() @builtin {}
+@const fn insertBits() @builtin {}
+@const fn inverseSqrt() @builtin {}
+@const fn ldexp() @builtin {}
+@const fn length() @builtin {}
+@const fn log() @builtin {}
+@const fn log2() @builtin {}
+@const fn max() @builtin {}
+@const fn min() @builtin {}
+@const fn mix() @builtin {}
+@const fn modf() @builtin {}
+@const fn normalize() @builtin {}
+@const fn pow() @builtin {}
+@const fn quantizeToF16() @builtin {}
+@const fn radians() @builtin {}
+@const fn reflect() @builtin {}
+@const fn refract() @builtin {}
+@const fn reverseBits() @builtin {}
+@const fn round() @builtin {}
+@const fn saturate() @builtin {}
+@const fn sign() @builtin {}
+@const fn sin() @builtin {}
+@const fn sinh() @builtin {}
+@const fn smoothstep() @builtin {}
+@const fn sqrt() @builtin {}
+@const fn step() @builtin {}
+@const fn tan() @builtin {}
+@const fn tanh() @builtin {}
+@const fn transpose() @builtin {}
+@const fn trunc() @builtin {}
 
 // packing
-fn pack4x8snorm() @builtin {}
-fn pack4x8unorm() @builtin {}
-fn pack4xI8() @builtin {}
-fn pack4xU8() @builtin {}
-fn pack4xI8Clamp() @builtin {}
-fn pack4xU8Clamp() @builtin {}
-fn pack2x16snorm() @builtin {}
-fn pack2x16unorm() @builtin {}
-fn pack2x16float() @builtin {}
-fn unpack4x8snorm() @builtin {}
-fn unpack4x8unorm() @builtin {}
-fn unpack4xI8() @builtin {}
-fn unpack4xU8() @builtin {}
-fn unpack2x16snorm() @builtin {}
-fn unpack2x16unorm() @builtin {}
-fn unpack2x16float() @builtin {}
+@const fn pack4x8snorm() @builtin {}
+@const fn pack4x8unorm() @builtin {}
+@const fn pack4xI8() @builtin {}
+@const fn pack4xU8() @builtin {}
+@const fn pack4xI8Clamp() @builtin {}
+@const fn pack4xU8Clamp() @builtin {}
+@const fn pack2x16snorm() @builtin {}
+@const fn pack2x16unorm() @builtin {}
+@const fn pack2x16float() @builtin {}
+@const fn unpack4x8snorm() @builtin {}
+@const fn unpack4x8unorm() @builtin {}
+@const fn unpack4xI8() @builtin {}
+@const fn unpack4xU8() @builtin {}
+@const fn unpack2x16snorm() @builtin {}
+@const fn unpack2x16unorm() @builtin {}
+@const fn unpack2x16float() @builtin {}

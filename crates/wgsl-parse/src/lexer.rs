@@ -13,7 +13,11 @@ fn maybe_template_end(
         if lex.extras.depth == *depth {
             // found a ">" on the same nesting level as the opening "<"
             lex.extras.template_depths.pop();
-            lex.extras.lookahead = lookahead;
+            if lookahead == Some(Token::SymGreaterThan) && !lex.extras.template_depths.is_empty() {
+                lex.extras.lookahead = Some(Token::TemplateArgsEnd);
+            } else {
+                lex.extras.lookahead = lookahead;
+            }
             return Token::TemplateArgsEnd;
         }
     }
@@ -600,7 +604,10 @@ impl<'s> Lexer<'s> {
 /// assert_eq!(recognize_template_list("<(B!=C)>"), true);
 /// assert_eq!(recognize_template_list("<(B==C)>"), true);
 ///
-/// // false cases
+/// // more cases
+/// assert_eq!(recognize_template_list("<X<Y>>"), true);
+/// assert_eq!(recognize_template_list("<X<Y<Z>>>"), true);
+/// assert_eq!(recognize_template_list(""), false);
 /// assert_eq!(recognize_template_list(""), false);
 /// assert_eq!(recognize_template_list("<>"), false);
 /// assert_eq!(recognize_template_list("<b || c>d"), false);
@@ -626,6 +633,12 @@ pub fn recognize_template_list(source: &str) -> bool {
     lexer.token_stream.extras.template_depths.push(0);
     let parse = Parser::recognize_template_list(&mut lexer);
     parse.is_ok()
+}
+
+#[test]
+fn tmp_test() {
+    println!("-- {}", recognize_template_list("<X<Y>> foo"));
+    println!("-- {}", recognize_template_list("<X<Y> > foo"));
 }
 
 impl<'s> Iterator for Lexer<'s> {

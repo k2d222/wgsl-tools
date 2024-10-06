@@ -19,7 +19,7 @@ impl Span {
     }
 }
 
-#[derive(Default, Clone, Debug, PartialEq, Deref, DerefMut, AsRef, AsMut, From)]
+#[derive(Default, Clone, Debug, Deref, DerefMut, AsRef, AsMut, From)]
 pub struct Spanned<T> {
     pub span: Span,
     #[deref(forward)]
@@ -28,6 +28,13 @@ pub struct Spanned<T> {
     #[as_mut(T)]
     #[from(T)]
     pub node: Box<T>,
+}
+
+// we ignore the spans for equality comparison
+impl<T: PartialEq> PartialEq for Spanned<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.node.eq(&other.node)
+    }
 }
 
 impl<T> Spanned<T> {
@@ -57,11 +64,5 @@ impl<T> From<T> for Spanned<T> {
             span: Default::default(),
             node: Box::new(value),
         }
-    }
-}
-
-impl<T> From<Spanned<T>> for (Span, T) {
-    fn from(value: Spanned<T>) -> Self {
-        (value.span, *value.node)
     }
 }

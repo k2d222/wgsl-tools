@@ -96,8 +96,27 @@ struct GptTest {
     note: Option<String>,
 }
 
-fn printerr(e: impl std::error::Error) {
-    eprintln!("{e}")
+fn test_eval(
+    eval: &String,
+    expect: &Option<String>,
+    ctx: &Option<String>,
+) -> Result<bool, wesl::Error> {
+    let ctx = match ctx {
+        Some(code) => code
+            .parse::<TranslationUnit>()
+            .map_err(|e| wesl::Error::from(e.error))?,
+        None => TranslationUnit::default(),
+    };
+
+    let eval_inst = wesl::eval(eval, &ctx)?;
+
+    match expect {
+        Some(expect) => {
+            let expect_inst = wesl::eval(expect, &ctx)?;
+            Ok(eval_inst == expect_inst)
+        }
+        None => Ok(false),
+    }
 }
 
 #[test]
@@ -159,23 +178,10 @@ fn gpt_tests() {
                         }
                     }
                     GptTestKind::Eval { eval, context } => {
-                        let ctx = match context {
-                            Some(code) => code
-                                .parse::<TranslationUnit>()
-                                .map_err(|e| wesl::Error::from(e.error)),
-                            None => Ok(TranslationUnit::default()),
-                        };
-                        let res = ctx.and_then(|ctx| {
-                            wesl::eval(&test.code, &ctx).and_then(|inst| {
-                                inst.to_expr(&Context::new(&ctx))
-                                    .map_err(|e| wesl::Error::from(e))
-                            })
-                        });
-                        let eval_expr = eval.as_ref().map(|eval| eval.parse::<Expression>());
-                        let pass = (res.as_ref().ok().map(Ok)
-                            == eval_expr.as_ref().map(|x| x.as_ref()))
-                        .then_some(GptTestExpect::Pass)
-                        .unwrap_or(GptTestExpect::Fail);
+                        let res = test_eval(&test.code, eval, context);
+                        let pass = matches!(res, Ok(true))
+                            .then_some(GptTestExpect::Pass)
+                            .unwrap_or(GptTestExpect::Fail);
                         println!("{pass}");
                         if pass != test.expect {
                             println!(
@@ -205,8 +211,9 @@ fn gpt_tests() {
         }
     }
 
-    let total_pass = total_count - total_fails - total_todo;
-    println!("SUMMARY: {total_pass}/{total_count} Pass, {total_fails}/{total_count} Fails, {total_todo}/{total_count} TODO");
+    let count = total_count - total_todo;
+    let total_pass = count - total_fails;
+    println!("SUMMARY: {total_pass}/{count} Pass, {total_fails}/{count} Fails, {total_todo}/{total_count} TODO");
     assert!(total_fails == 0);
 }
 

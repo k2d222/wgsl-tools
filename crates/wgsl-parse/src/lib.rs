@@ -8,6 +8,8 @@
 //! let parsed = wgsl_parse::Parser::parse_str(source).unwrap();
 //!
 //! let compare = TranslationUnit {
+//!     #[cfg(feature = "imports")]
+//!     imports: vec![],
 //!     global_directives: vec![],
 //!     global_declarations: vec![GlobalDeclaration::Function(Function {
 //!         attributes: vec![Attribute {
@@ -18,21 +20,19 @@
 //!         parameters: vec![],
 //!         return_attributes: vec![Attribute {
 //!             name: "location".to_string(),
-//!             arguments: Some(vec![Expression::Literal(LiteralExpression::AbstractInt(0))])
+//!             arguments: Some(vec![Expression::Literal(LiteralExpression::AbstractInt(0)).into()])
 //!         }],
-//!         return_type: Some(TypeExpression {
-//!             name: "vec4f".to_string(),
-//!             template_args: None
-//!         }),
+//!         return_type: Some("vec4f".to_string().into()),
 //!         body: CompoundStatement {
 //!             attributes: vec![],
-//!             statements: vec![Statement::Return(Some(Expression::FunctionCall(
-//!                 FunctionCallExpression {
-//!                     name: "vec4".to_string(),
-//!                     template_args: None,
-//!                     arguments: vec![Expression::Literal(LiteralExpression::AbstractInt(1))]
-//!                 }
-//!             )))]
+//!             statements: vec![
+//!                 Statement::Return(ReturnStatement::from(Expression::FunctionCall(
+//!                     FunctionCallExpression {
+//!                         ty: "vec4".to_string().into(),
+//!                         arguments: vec![Expression::Literal(LiteralExpression::AbstractInt(1)).into()]
+//!                     }
+//!                 ))).into()
+//!             ]
 //!         }
 //!     })]
 //! };
