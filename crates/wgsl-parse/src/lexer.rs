@@ -143,6 +143,25 @@ fn parse_hex_f16(lex: &mut logos::Lexer<Token>) -> Option<f32> {
         .map(|(x, _)| x)
 }
 
+fn parse_block_comment(lex: &mut logos::Lexer<Token>) -> logos::Skip {
+    let mut depth = 1;
+    while depth > 0 {
+        let rem = lex.remainder();
+        if rem.is_empty() {
+            break;
+        } else if rem.starts_with("/*") {
+            lex.bump(2);
+            depth += 1;
+        } else if rem.starts_with("*/") {
+            lex.bump(2);
+            depth -= 1;
+        } else {
+            lex.bump(1);
+        }
+    }
+    logos::Skip
+}
+
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct LexerState {
     depth: i32,
@@ -154,11 +173,14 @@ pub struct LexerState {
 #[derive(Logos, Clone, Debug, PartialEq)]
 #[logos(
     skip r"\s+",
-    skip r"//[^\n\r]*[\n\r]*", // line comment
-    skip r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/", // block comment
+    // see line breaks: https://www.w3.org/TR/WGSL/#line-break
+    skip r"//[^\n\v\f\r\u0085\u2028\u2029]*", // line comment
     extras = LexerState,
     error = CustomLalrError)]
 pub enum Token {
+    // comments. This variant is never produced.
+    #[token("/*", parse_block_comment, priority = 2)]
+    Ignored,
     // syntactic tokens
     // https://www.w3.org/TR/WGSL/#syntactic-tokens
     #[token("&")]
@@ -463,6 +485,7 @@ impl Token {
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Token::Ignored => unreachable!(),
             Token::SymAnd => f.write_str("&"),
             Token::SymAndAnd => f.write_str("&&"),
             Token::SymArrow => f.write_str("->"),
