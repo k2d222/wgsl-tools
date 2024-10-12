@@ -37,15 +37,15 @@ fn webgpu_samples() {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum GptTestSyntaxKind {
-    Module,
+    Declaration,
     Statement,
     Expression,
 }
 
-#[derive(Deserialize)]
+#[derive(PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[serde(tag = "kind")]
 enum GptTestKind {
@@ -129,7 +129,7 @@ fn gpt_tests() {
     for entry in dir {
         let entry = entry.expect("error reading entry");
         let path = entry.path();
-        if path.extension().unwrap() == "json" {
+        if path.extension().is_some_and(|path| path == "json") {
             let mut fails = 0;
             println!("testing gpt-tests `{}`", path.display());
 
@@ -140,6 +140,10 @@ fn gpt_tests() {
                 .expect("invalid json test file");
 
             for test in &json {
+                if test.kind == GptTestKind::Context {
+                    total_todo += 1;
+                    continue;
+                }
                 print!(
                     " * `{}` kind: {}, expect: {}, result: ",
                     test.name, test.kind, test.expect
@@ -148,7 +152,7 @@ fn gpt_tests() {
                 match &test.kind {
                     GptTestKind::Syntax { syntax } => {
                         let res = match syntax {
-                            GptTestSyntaxKind::Module => {
+                            GptTestSyntaxKind::Declaration => {
                                 test.code.parse::<TranslationUnit>().map(|_| ())
                             }
                             GptTestSyntaxKind::Statement => {
