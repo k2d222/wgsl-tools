@@ -1,192 +1,9 @@
-use crate::{with_stage, Context, Eval, EvalError, Exec, Instance};
+use crate::{with_stage, Context, Eval, EvalError, Exec};
 use wgsl_parse::{span::Spanned, syntax::*};
 
-use super::{
-    ArrayInstance, EvalStage, LiteralInstance, MatInstance, StructInstance, SyntaxUtil, Ty, Type,
-    VecInstance,
-};
+use super::{to_expr::ToExpr, EvalStage, EXPR_TRUE};
 
 type E = EvalError;
-
-const EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::Bool(true));
-const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false));
-
-pub trait ToExpr {
-    fn to_expr(&self, ctx: &Context) -> Result<Expression, E>;
-}
-
-impl ToExpr for Instance {
-    fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
-        match self {
-            Instance::Literal(inst) => inst.to_expr(ctx),
-            Instance::Struct(inst) => inst.to_expr(ctx),
-            Instance::Array(inst) => inst.to_expr(ctx),
-            Instance::Vec(inst) => inst.to_expr(ctx),
-            Instance::Mat(inst) => inst.to_expr(ctx),
-            Instance::Type(inst) => inst.to_expr(ctx),
-            Instance::Ptr(_) | Instance::Ref(_) | Instance::Void => {
-                Err(E::NotConstructible(self.ty()))
-            }
-        }
-    }
-}
-
-impl ToExpr for LiteralInstance {
-    fn to_expr(&self, _ctx: &Context) -> Result<Expression, E> {
-        Ok(match self {
-            LiteralInstance::Bool(lit) => LiteralExpression::Bool(*lit),
-            LiteralInstance::AbstractInt(lit) => LiteralExpression::AbstractInt(*lit),
-            LiteralInstance::AbstractFloat(lit) => LiteralExpression::AbstractFloat(*lit),
-            LiteralInstance::I32(lit) => LiteralExpression::I32(*lit),
-            LiteralInstance::U32(lit) => LiteralExpression::U32(*lit),
-            LiteralInstance::F32(lit) => LiteralExpression::F32(*lit),
-            LiteralInstance::F16(lit) => LiteralExpression::F16(lit.to_f32()),
-        }
-        .into())
-    }
-}
-
-impl ToExpr for StructInstance {
-    fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
-        let decl = ctx
-            .source
-            .decl_struct(&self.name)
-            .expect("struct declaration not found");
-        Ok(Expression::FunctionCall(FunctionCall {
-            ty: TypeExpression {
-                name: self.name.clone(),
-                template_args: None,
-            },
-            arguments: decl
-                .members
-                .iter()
-                .map(|m| {
-                    self.members
-                        .get(&m.name)
-                        .expect("struct member not found")
-                        .to_expr(ctx)
-                        .map(Spanned::from)
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        }))
-    }
-}
-
-impl ToExpr for ArrayInstance {
-    fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
-        Ok(Expression::FunctionCall(FunctionCall {
-            ty: TypeExpression {
-                name: format!("array"),
-                template_args: None,
-            },
-            arguments: self
-                .components
-                .iter()
-                .map(|c| c.to_expr(ctx).map(Spanned::from))
-                .collect::<Result<Vec<_>, _>>()?,
-        }))
-    }
-}
-
-impl ToExpr for VecInstance {
-    fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
-        Ok(Expression::FunctionCall(FunctionCall {
-            ty: TypeExpression {
-                name: format!("vec{}", self.n()),
-                template_args: None,
-            },
-            arguments: self
-                .iter()
-                .map(|c| c.to_expr(ctx).map(Spanned::from))
-                .collect::<Result<Vec<_>, _>>()?,
-        }))
-    }
-}
-
-impl ToExpr for MatInstance {
-    fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
-        Ok(Expression::FunctionCall(FunctionCall {
-            ty: TypeExpression {
-                name: format!("mat{}x{}", self.c(), self.r()),
-                template_args: None,
-            },
-            arguments: self
-                .iter()
-                .map(|c| c.to_expr(ctx).map(Spanned::from))
-                .collect::<Result<Vec<_>, _>>()?,
-        }))
-    }
-}
-
-impl ToExpr for Type {
-    fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
-        match self {
-            Type::Bool => Ok(TypeExpression {
-                name: format!("bool"),
-                template_args: None,
-            }),
-            Type::AbstractInt => Err(E::NotConstructible(Type::AbstractInt)),
-            Type::AbstractFloat => Err(E::NotConstructible(Type::AbstractFloat)),
-            Type::I32 => Ok(TypeExpression {
-                name: format!("i32"),
-                template_args: None,
-            }),
-            Type::U32 => Ok(TypeExpression {
-                name: format!("u32"),
-                template_args: None,
-            }),
-            Type::F32 => Ok(TypeExpression {
-                name: format!("f32"),
-                template_args: None,
-            }),
-            Type::F16 => Ok(TypeExpression {
-                name: format!("f16"),
-                template_args: None,
-            }),
-            Type::Struct(s) => Ok(TypeExpression {
-                name: format!("{s}"),
-                template_args: None,
-            }),
-            Type::Array(n, ty) => Ok(TypeExpression {
-                name: format!("array"),
-                template_args: Some(vec![
-                    TemplateArg {
-                        expression: Expression::TypeOrIdentifier(n.to_string().into()).into(),
-                    },
-                    TemplateArg {
-                        expression: ty.to_expr(ctx)?.into(),
-                    },
-                ]),
-            }),
-            Type::Vec(n, ty) => Ok(TypeExpression {
-                name: format!("vec{n}"),
-                template_args: Some(vec![TemplateArg {
-                    expression: ty.to_expr(ctx)?.into(),
-                }]),
-            }),
-            Type::Mat(c, r, ty) => Ok(TypeExpression {
-                name: format!("mat{c}x{r}"),
-                template_args: Some(vec![TemplateArg {
-                    expression: ty.to_expr(ctx)?.into(),
-                }]),
-            }),
-            Type::Atomic(a) => Ok(TypeExpression {
-                name: format!("atomic"),
-                template_args: Some(vec![TemplateArg {
-                    expression: a.to_expr(ctx)?.into(),
-                }]),
-            }),
-            Type::Ptr(p) => Ok(TypeExpression {
-                name: format!("ptr"),
-                template_args: Some(vec![TemplateArg {
-                    expression: p.to_expr(ctx)?.into(),
-                }]),
-            }),
-            Type::Void => Err(E::NotConstructible(Type::Void)),
-        }
-        .map(Into::into)
-    }
-}
 
 pub trait Lower {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E>;
@@ -225,7 +42,7 @@ impl Lower for Expression {
 }
 
 impl Lower for FunctionCall {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         // todo!()
         Ok(())
     }
@@ -254,17 +71,32 @@ impl Lower for TypeExpression {
 impl Lower for Attributes {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
         for attr in self {
-            match attr.name.as_str() {
-                // those are the build-in attributes that take const-expressions
-                "align" | "binding" | "blend_src" | "group" | "id" | "location" | "size"
-                | "workgroup_size" => {
-                    if let Some(args) = &mut attr.arguments {
-                        for arg in args {
-                            arg.lower(ctx)?;
-                        }
+            match attr {
+                Attribute::Align(expr)
+                | Attribute::Binding(expr)
+                | Attribute::BlendSrc(expr)
+                | Attribute::Group(expr)
+                | Attribute::Id(expr)
+                | Attribute::Location(expr)
+                | Attribute::Size(expr) => {
+                    expr.lower(ctx)?;
+                }
+                #[cfg(feature = "condcomp")]
+                Attribute::If(expr) => {
+                    expr.lower(ctx)?;
+                }
+                Attribute::WorkgroupSize(attr) => {
+                    attr.x.lower(ctx)?;
+                    if let Some(y) = &mut attr.y {
+                        y.lower(ctx)?
+                    }
+                    if let Some(z) = &mut attr.z {
+                        z.lower(ctx)?
                     }
                 }
-                // we ignore the unknown attributes and those that do not take const-expressions
+                Attribute::Custom(_) => {
+                    // we ignore unknown attributes for now. We don't know how they are implemented.
+                }
                 _ => (),
             }
         }
@@ -304,6 +136,9 @@ impl Lower for Struct {
 
 impl Lower for Function {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        if self.attributes.contains(&Attribute::Const) {
+            return Ok(());
+        }
         self.attributes.lower(ctx)?;
         for p in &mut self.parameters {
             p.attributes.lower(ctx)?;
@@ -318,8 +153,15 @@ impl Lower for Function {
     }
 }
 
+impl Lower for ConstAssert {
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.exec(ctx).map(|_| ())
+    }
+}
+
 impl Lower for Statement {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.exec(ctx)?;
         match self {
             Statement::Void => (),
             Statement::Compound(stat) => {
@@ -446,62 +288,56 @@ impl Lower for SwitchStatement {
 }
 
 impl Lower for LoopStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for ForStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for WhileStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for BreakStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for ContinueStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for ReturnStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for DiscardStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for FunctionCallStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        Ok(())
-    }
-}
-
-impl Lower for ConstAssertStatement {
-    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
         Ok(())
     }
 }
 
 impl Lower for TranslationUnit {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        // self.global_directives.retain_mut(|directive| true);
+        self.exec(ctx)?;
         for decl in &mut self.global_declarations {
             match decl {
                 GlobalDeclaration::Void => Ok(()),
@@ -509,7 +345,7 @@ impl Lower for TranslationUnit {
                 GlobalDeclaration::TypeAlias(decl) => decl.lower(ctx),
                 GlobalDeclaration::Struct(decl) => decl.lower(ctx),
                 GlobalDeclaration::Function(decl) => decl.lower(ctx),
-                GlobalDeclaration::ConstAssert(decl) => decl.exec(ctx).map(|_| ()),
+                GlobalDeclaration::ConstAssert(decl) => decl.lower(ctx),
             }
             .inspect_err(|_| ctx.set_err_decl_ctx(decl.name()))?;
         }

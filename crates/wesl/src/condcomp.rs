@@ -102,7 +102,10 @@ fn eval_if_attr(
         let if_attr = node
             .attributes_mut()
             .iter_mut()
-            .find_map(|attr| (attr.name == "if").then_some(attr.arguments.as_mut()?.first_mut()?));
+            .find_map(|attr| match attr {
+                Attribute::If(expr) => Some(expr),
+                _ => None,
+            });
 
         if let Some(if_attr) = if_attr {
             let expr = eval_attr(if_attr, features)?;
@@ -124,10 +127,10 @@ fn eval_if_attributes(
     let retains = nodes
         .iter()
         .map(|node| {
-            let if_attr = node
-                .attributes()
-                .iter()
-                .find_map(|attr| (attr.name == "if").then_some(attr.arguments.as_ref()?.first()?));
+            let if_attr = node.attributes().iter().find_map(|attr| match attr {
+                Attribute::If(expr) => Some(expr),
+                _ => None,
+            });
 
             if let Some(expr) = if_attr {
                 eval_attr(expr, features)
@@ -141,9 +144,13 @@ fn eval_if_attributes(
         .iter_mut()
         .zip(retains.into_iter())
         .map(|(node, expr)| {
-            let if_attr = node.attributes_mut().iter_mut().find_map(|attr| {
-                (attr.name == "if").then_some(attr.arguments.as_mut()?.first_mut()?)
-            });
+            let if_attr = node
+                .attributes_mut()
+                .iter_mut()
+                .find_map(|attr| match attr {
+                    Attribute::If(expr) => Some(expr),
+                    _ => None,
+                });
             if let Some(if_attr) = if_attr {
                 let keep = !(expr == EXPR_FALSE);
                 **if_attr = expr;
@@ -256,14 +263,9 @@ pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondCo
     // 2. remove attributes that evaluate to true
 
     for attrs in query_attributes(wesl) {
-        attrs.retain(|attr| {
-            attr.name != "if" || {
-                attr.arguments
-                    .as_ref()
-                    .and_then(|args| args.first())
-                    .map(|expr| **expr != EXPR_TRUE)
-                    .unwrap_or(true)
-            }
+        attrs.retain(|attr| match attr {
+            Attribute::If(expr) => **expr != EXPR_TRUE,
+            _ => true,
         })
     }
     Ok(())

@@ -17,48 +17,17 @@ pub fn lower_sourcemap(
     }
     if cfg!(feature = "attributes") {
         for attrs in query_attributes(wesl) {
-            attrs.retain(|attr| match attr.name.as_str() {
-                "generic" => false,
+            attrs.retain(|attr| match attr {
+                Attribute::Custom(CustomAttribute { name, .. }) if name == "generic" => false,
                 _ => true,
             })
         }
     }
-    {
-        // eliminate all type aliases.
-        // Naga doesn't like this: `alias T = u32; vec<T>`
-        let take_next_alias = |wesl: &mut TranslationUnit| {
-            let index = wesl
-                .global_declarations
-                .iter()
-                .position(|decl| matches!(decl, GlobalDeclaration::TypeAlias(_)));
-            index.map(|index| {
-                let decl = wesl.global_declarations.swap_remove(index);
-                match decl {
-                    GlobalDeclaration::TypeAlias(alias) => alias,
-                    _ => unreachable!(),
-                }
-            })
-        };
 
-        while let Some(alias) = take_next_alias(wesl) {
-            fn rec(ty: &mut TypeExpression, alias: &TypeAlias) {
-                if ty.template_args.is_none() && ty.name == alias.name {
-                    *ty = alias.ty.clone();
-                    return;
-                }
-                let ty_ = ty.clone();
-                for ty in ty.uses_mut() {
-                    // println!("{alias}: {ty_} -> {ty}");
-                    rec(ty, alias);
-                }
-            }
+    remove_type_aliases(wesl);
 
-            for ty in wesl.uses_mut() {
-                rec(ty, &alias)
-            }
-        }
-    }
     if cfg!(feature = "eval") {
+        // TODO
         // let mut ctx = Context::new(wesl);
         // let mut new_wesl = wesl.clone();
         // new_wesl
@@ -73,4 +42,38 @@ pub fn lower_sourcemap(
 /// catch errors early and perform optimizations.
 pub fn lower(wesl: &mut TranslationUnit) -> Result<(), Error> {
     lower_sourcemap(wesl, &NoSourceMap)
+}
+
+// Eliminate all type aliases.
+// Naga doesn't like this: `alias T = u32; vec<T>`
+pub fn remove_type_aliases(wesl: &mut TranslationUnit) {
+    let take_next_alias = |wesl: &mut TranslationUnit| {
+        let index = wesl
+            .global_declarations
+            .iter()
+            .position(|decl| matches!(decl, GlobalDeclaration::TypeAlias(_)));
+        index.map(|index| {
+            let decl = wesl.global_declarations.swap_remove(index);
+            match decl {
+                GlobalDeclaration::TypeAlias(alias) => alias,
+                _ => unreachable!(),
+            }
+        })
+    };
+
+    while let Some(alias) = take_next_alias(wesl) {
+        fn rec(ty: &mut TypeExpression, alias: &TypeAlias) {
+            if ty.template_args.is_none() && ty.name == alias.name {
+                *ty = alias.ty.clone();
+                return;
+            }
+            for ty in ty.uses_mut() {
+                rec(ty, alias);
+            }
+        }
+
+        for ty in wesl.uses_mut() {
+            rec(ty, &alias)
+        }
+    }
 }

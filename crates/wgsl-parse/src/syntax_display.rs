@@ -250,13 +250,84 @@ impl Display for ConstAssert {
     }
 }
 
+impl Display for BuiltinValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::VertexIndex => write!(f, "vertex_index"),
+            Self::InstanceIndex => write!(f, "instance_index"),
+            Self::Position => write!(f, "position"),
+            Self::FrontFacing => write!(f, "front_facing"),
+            Self::FragDepth => write!(f, "frag_depth"),
+            Self::SampleIndex => write!(f, "sample_index"),
+            Self::SampleMask => write!(f, "sample_mask"),
+            Self::LocalInvocationId => write!(f, "local_invocation_id"),
+            Self::LocalInvocationIndex => write!(f, "local_invocation_index"),
+            Self::GlobalInvocationId => write!(f, "global_invocation_id"),
+            Self::WorkgroupId => write!(f, "workgroup_id"),
+            Self::NumWorkgroups => write!(f, "num_workgroups"),
+        }
+    }
+}
+
+impl Display for InterpolationType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            InterpolationType::Perspective => write!(f, "perspective"),
+            InterpolationType::Linear => write!(f, "linear"),
+            InterpolationType::Flat => write!(f, "flat"),
+        }
+    }
+}
+
+impl Display for InterpolationSampling {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Center => write!(f, "center"),
+            Self::Centroid => write!(f, "centroid"),
+            Self::Sample => write!(f, "sample"),
+            Self::First => write!(f, "first"),
+            Self::Either => write!(f, "either"),
+        }
+    }
+}
+
 impl Display for Attribute {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let name = &self.name;
-        let args = self.arguments.iter().format_with("", |args, f| {
-            f(&format_args!("({})", args.iter().format(", ")))
-        });
-        write!(f, "@{name}{args}")
+        match self {
+            Attribute::Align(e1) => write!(f, "@align({e1})"),
+            Attribute::Binding(e1) => write!(f, "@binding({e1})"),
+            Attribute::BlendSrc(e1) => write!(f, "@blend_src({e1})"),
+            Attribute::Builtin(e1) => write!(f, "@builtin({e1})"),
+            Attribute::Const => write!(f, "@const"),
+            Attribute::Diagnostic(DiagnosticAttribute { severity, rule }) => {
+                write!(f, "@diagnostic({severity}, {rule})")
+            }
+            Attribute::Group(e1) => write!(f, "@group({e1})"),
+            Attribute::Id(e1) => write!(f, "@id({e1})"),
+            Attribute::Interpolate(InterpolateAttribute { ty, sampling }) => {
+                write!(f, "@interpolate({ty}, {sampling})")
+            }
+            Attribute::Invariant => write!(f, "@invariant"),
+            Attribute::Location(e1) => write!(f, "@location({e1})"),
+            Attribute::MustUse => write!(f, "@must_use"),
+            Attribute::Size(e1) => write!(f, "@size({e1})"),
+            Attribute::WorkgroupSize(WorkgroupSizeAttribute { x, y, z }) => {
+                let xyz = std::iter::once(x).chain(y).chain(z).format(", ");
+                write!(f, "@workgroup_size({xyz})")
+            }
+            Attribute::Vertex => write!(f, "@vertex"),
+            Attribute::Fragment => write!(f, "@fragment"),
+            Attribute::Compute => write!(f, "@compute"),
+            #[cfg(feature = "condcomp")]
+            Attribute::If(e1) => write!(f, "@if({e1})"),
+            Attribute::Custom(custom) => {
+                let name = &custom.name;
+                let args = custom.arguments.iter().format_with("", |args, f| {
+                    f(&format_args!("({})", args.iter().format(", ")))
+                });
+                write!(f, "@{name}{args}")
+            }
+        }
     }
 }
 

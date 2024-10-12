@@ -3,8 +3,8 @@ use itertools::Itertools;
 use num_traits::{FromPrimitive, ToPrimitive};
 
 use super::{
-    Instance, LiteralInstance, MatInner, MatInstance, SyntaxUtil, Ty, Type, VecInner, VecInstance,
-    PRELUDE,
+    ArrayInstance, Instance, LiteralInstance, MatInner, MatInstance, SyntaxUtil, Ty, Type,
+    VecInner, VecInstance, PRELUDE,
 };
 
 pub trait Convert: Sized + Clone + Ty {
@@ -45,39 +45,6 @@ impl Type {
     }
 }
 
-// impl Convert for LiteralInstance {
-//     fn convert_to(&self, ty: &Type) -> Option<Self> {
-//         if ty == &self.ty() {
-//             return Some(self.clone());
-//         }
-//         // TODO: check that these conversions are correctly implemented.
-//         // I think they are correct.
-//         // reference: https://www.w3.org/TR/WGSL/#floating-point-conversion
-//         match (self, ty) {
-//             (Self::AbstractInt(n), Type::AbstractFloat) => f64::from(n).map(Self::AbstractFloat),
-//             (Self::AbstractInt(n), Type::I32) => i32::try_from(*n).ok().map(Self::I32),
-//             (Self::AbstractInt(n), Type::U32) => u32::try_from(*n).ok().map(Self::U32),
-//             (Self::AbstractInt(n), Type::F32) => Some(*n as f32).map(Self::F32),
-//             (Self::AbstractInt(n), Type::F16) => {
-//                 // TODO: this is incorrect because it is stored in a f32.
-//                 let n = *n as f32;
-//                 n.is_finite().then_some(n)
-//             }
-//             .map(Self::F16),
-//             (Self::AbstractFloat(n), Type::F32) => {
-//                 let n = *n as f32;
-//                 n.is_finite().then_some(n)
-//             }
-//             .map(Self::F32),
-//             (Self::AbstractFloat(n), Type::F16) => {
-//                 let n = *n as f32;
-//                 n.is_finite().then_some(n)
-//             }
-//             .map(Self::F16),
-//             _ => None,
-//         }
-//     }
-// }
 impl LiteralInstance {
     fn is_infinite(&self) -> bool {
         match self {
@@ -118,16 +85,11 @@ impl Convert for LiteralInstance {
     }
 }
 
-impl<const N: usize> Convert for VecInner<N> {
+impl Convert for ArrayInstance {
     fn convert_to(&self, ty: &Type) -> Option<Self> {
-        if let Type::Vec(n, c_ty) = ty {
-            if *n == N as u8 {
-                let components = self
-                    .components
-                    .iter()
-                    .map(|c| c.convert_to(c_ty))
-                    .collect::<Option<Vec<_>>>()?;
-                Some(VecInner::new(components))
+        if let Type::Array(n, c_ty) = ty {
+            if *n == self.n() {
+                self.convert_inner_to(c_ty)
             } else {
                 None
             }
@@ -136,8 +98,34 @@ impl<const N: usize> Convert for VecInner<N> {
         }
     }
     fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
-        let ty = Type::Vec(N as u8, ty.clone().into());
-        self.convert_to(&ty)
+        let components = self
+            .components
+            .iter()
+            .map(|c| c.convert_to(ty))
+            .collect::<Option<Vec<_>>>()?;
+        Some(ArrayInstance::new(components))
+    }
+}
+
+impl<const N: usize> Convert for VecInner<N> {
+    fn convert_to(&self, ty: &Type) -> Option<Self> {
+        if let Type::Vec(n, c_ty) = ty {
+            if *n == N as u8 {
+                self.convert_inner_to(c_ty)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
+        let components = self
+            .components
+            .iter()
+            .map(|c| c.convert_to(ty))
+            .collect::<Option<Vec<_>>>()?;
+        Some(VecInner::new(components))
     }
 }
 
@@ -162,12 +150,7 @@ impl<const C: usize, const R: usize> Convert for MatInner<C, R> {
     fn convert_to(&self, ty: &Type) -> Option<Self> {
         if let Type::Mat(c, r, c_ty) = ty {
             if *c == C as u8 && *r == R as u8 {
-                let components = self
-                    .components
-                    .iter()
-                    .map(|c| c.convert_to(c_ty))
-                    .collect::<Option<Vec<_>>>()?;
-                Some(MatInner::new(components))
+                self.convert_inner_to(c_ty)
             } else {
                 None
             }
@@ -176,8 +159,12 @@ impl<const C: usize, const R: usize> Convert for MatInner<C, R> {
         }
     }
     fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
-        let ty = Type::Mat(C as u8, R as u8, ty.clone().into());
-        self.convert_to(&ty)
+        let components = self
+            .components
+            .iter()
+            .map(|c| c.convert_inner_to(ty))
+            .collect::<Option<Vec<_>>>()?;
+        Some(MatInner::new(components))
     }
 }
 
@@ -217,14 +204,14 @@ impl Convert for Instance {
         }
         match self {
             Self::Literal(l) => Some(Self::Literal(l.convert_to(ty)?)),
-            Self::Struct(_) => todo!(),
-            Self::Array(_) => todo!(),
-            Self::Vec(_) => todo!(),
-            Self::Mat(_) => todo!(),
-            Self::Ref(_) => todo!(),
-            Self::Ptr(_) => todo!(),
-            Self::Type(_) => todo!(),
-            Self::Void => todo!(),
+            Self::Struct(_) => None,
+            Self::Array(a) => a.convert_to(ty).map(Self::Array),
+            Self::Vec(v) => v.convert_to(ty).map(Self::Vec),
+            Self::Mat(m) => m.convert_to(ty).map(Self::Mat),
+            Self::Ptr(_) => None,
+            Self::Ref(_) => None, // conversion from Ref<T> to T exists, but is not handled here.
+            Self::Type(_) => None, // TODO: should it be converted?
+            Self::Void => None,
         }
     }
 }

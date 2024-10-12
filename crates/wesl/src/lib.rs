@@ -22,7 +22,7 @@ pub use condcomp::{run as run_condcomp, CondCompError};
 pub use import::{resolve, ImportError, Module};
 
 #[cfg(feature = "eval")]
-pub use eval::{Context, Eval, EvalError, Exec, Instance};
+use eval::{Context, Eval, EvalError, Exec, Instance};
 
 pub use mangle::{
     CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE,
@@ -172,6 +172,7 @@ pub fn compile_with_sourcemap(
     (comp, sourcemap)
 }
 
+#[cfg(feature = "eval")]
 impl Error {
     pub fn to_diagnostic(self, ctx: &Context, sourcemap: &impl SourceMap) -> Diagnostic<Error> {
         let mut diagnostic = Diagnostic::new(self);

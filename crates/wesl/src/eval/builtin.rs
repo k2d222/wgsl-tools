@@ -4,7 +4,10 @@ use std::{collections::HashMap, iter::zip};
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use wgsl_parse::syntax::{Attribute, GlobalDeclaration, TranslationUnit, TypeExpression};
+use wgsl_parse::syntax::{
+    Attribute, CustomAttribute, Expression, GlobalDeclaration, LiteralExpression, TranslationUnit,
+    TypeExpression,
+};
 
 use crate::{Context, Eval};
 
@@ -16,30 +19,30 @@ use super::{
 
 type E = EvalError;
 
-// TODO: when we have the wgsl! macro, we can refactor this.
+// TODO: when we have the wgsl! macro, we can refactor the consts.
+
+pub const EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::Bool(true));
+pub const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false));
+
 lazy_static! {
-    pub static ref ATTR_CONST: Attribute = Attribute {
-        name: "const".to_string(),
+    pub static ref ATTR_INTRINSIC: Attribute = Attribute::Custom(CustomAttribute {
+        name: "__intrinsic".to_string(),
         arguments: None
-    };
-    pub static ref ATTR_BUILTIN: Attribute = Attribute {
-        name: "__builtin".to_string(),
-        arguments: None
-    };
+    });
     pub static ref PRELUDE: TranslationUnit = {
         let mut prelude = include_str!("prelude.wgsl")
             .parse::<TranslationUnit>()
             .inspect_err(|e| eprintln!("{e}"))
             .unwrap();
 
-        let attr_internal = Attribute {
+        let attr_internal = Attribute::Custom(CustomAttribute {
             name: "internal".to_string(),
             arguments: None,
-        };
-        let attr_builtin = Attribute {
-            name: "builtin".to_string(),
+        });
+        let attr_intrinsic = Attribute::Custom(CustomAttribute {
+            name: "intrinsic".to_string(),
             arguments: None,
-        };
+        });
 
         for decl in &mut prelude.global_declarations {
             match decl {
@@ -53,9 +56,9 @@ lazy_static! {
                         .body
                         .attributes
                         .iter_mut()
-                        .find(|attr| **attr == attr_builtin)
+                        .find(|attr| **attr == attr_intrinsic)
                     {
-                        attr.name = "__builtin".to_string();
+                        *attr = ATTR_INTRINSIC.clone();
                     }
                 }
                 _ => (),

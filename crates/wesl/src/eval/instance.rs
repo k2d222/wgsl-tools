@@ -602,18 +602,3 @@ impl MemView {
         }
     }
 }
-
-// #[derive(Clone, Debug, PartialEq, Eq)]
-// pub struct Address {
-//     pub ptr: usize,
-//     pub view: MemView,
-// }
-
-// impl Address {
-//     pub fn new(ptr: usize) -> Self {
-//         Self {
-//             ptr,
-//             view: MemView::Whole,
-//         }
-//     }
-// }

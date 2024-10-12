@@ -16,8 +16,6 @@ pub enum EvalError {
     UnknownFunction(String),
     #[error("no declaration named `{0}` in scope")]
     NoDecl(String),
-    #[error("cannot convert from `{0}` to `{1}`")]
-    ConversionFailure(Type, Type),
     #[error("`{0}` is not constructible")]
     NotConstructible(Type),
     #[error("expected a scalar type, got `{0}`")]
@@ -38,6 +36,8 @@ pub enum EvalError {
     NotReadWrite,
 
     // conversions
+    #[error("cannot convert from `{0}` to `{1}`")]
+    ConversionFailure(Type, Type),
     #[error("overflow while converting `{0}` to `{1}`")]
     ConvOverflow(LiteralInstance, Type),
 
@@ -95,7 +95,7 @@ pub enum EvalError {
     ParamCount(String, usize, usize),
     #[error("invalid parameter type, expected `{0}`, got `{1}`")]
     ParamType(Type, Type),
-    #[error("invalid return type, expected `{0}`, got `{1}`")]
+    #[error("returned a `{0}` from a function that returns `{1}`")]
     ReturnType(Type, Type),
     #[error("calling non-const function `{0}` in const context")]
     NotConst(String),

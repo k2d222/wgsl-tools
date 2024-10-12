@@ -22,6 +22,8 @@ pub enum ParseError {
     ExtraToken(Token),
     #[error("invalid diagnostic severity")]
     DiagnosticSeverity,
+    #[error("invalid `{0}` attribute, {1}")]
+    Attribute(&'static str, &'static str),
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -29,6 +31,7 @@ pub enum CustomLalrError {
     #[default]
     LexerError,
     DiagnosticSeverity,
+    Attribute(&'static str, &'static str),
 }
 
 type LalrError = lalrpop_util::ParseError<usize, Token, (usize, CustomLalrError, usize)>;
@@ -80,6 +83,9 @@ impl From<LalrError> for Error {
                 let error = match error {
                     CustomLalrError::DiagnosticSeverity => ParseError::DiagnosticSeverity,
                     CustomLalrError::LexerError => ParseError::InvalidToken,
+                    CustomLalrError::Attribute(attr, expected) => {
+                        ParseError::Attribute(attr, expected)
+                    }
                 };
                 Self { span, error }
             }

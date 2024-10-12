@@ -4,8 +4,7 @@ use crate::eval::MatInstance;
 
 use super::{
     call_builtin, AccessMode, Context, Convert, EvalError, EvalStage, EvalTy, Exec, Flow, Instance,
-    LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_BUILTIN,
-    ATTR_CONST,
+    LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_INTRINSIC,
 };
 
 use half::f16;
@@ -285,11 +284,11 @@ impl Eval for FunctionCall {
             .decl_function(&ty.name)
             .ok_or_else(|| E::UnknownFunction(ty.name.clone()))?;
 
-        if !decl.attributes.contains(&ATTR_CONST) && ctx.stage == EvalStage::Const {
+        if !decl.attributes.contains(&Attribute::Const) && ctx.stage == EvalStage::Const {
             return Err(E::NotConst(decl.name.clone()));
         }
 
-        if decl.body.attributes.contains(&ATTR_BUILTIN) {
+        if decl.body.attributes.contains(&ATTR_INTRINSIC) {
             return call_builtin(&ty, args, ctx);
         }
 
@@ -305,21 +304,25 @@ impl Eval for FunctionCall {
             .return_type
             .as_ref()
             .map(|e| e.eval_ty(ctx))
-            .unwrap_or(Ok(Type::Void))?;
+            .unwrap_or(Ok(Type::Void))
+            .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
 
         ctx.scope.push();
         let flow = {
-            for (a, p) in zip(&args, &decl.parameters) {
-                let p_ty = p.ty.eval_ty(ctx)?;
-                let a_ty = a.ty();
-
-                if &a_ty != &p_ty {
-                    return Err(E::ParamType(a_ty, p_ty));
-                }
-            }
+            let args = args
+                .iter()
+                .zip(&decl.parameters)
+                .map(|(a, p)| {
+                    let p_ty = p.ty.eval_ty(ctx)?;
+                    a.convert_inner_to(&p_ty)
+                        .ok_or_else(|| E::ParamType(p_ty.clone(), a.ty()))
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
 
             for (a, p) in zip(args, &decl.parameters) {
-                ctx.scope.add(p.name.clone(), a, AccessMode::Read);
+                ctx.scope
+                    .add(p.name.clone(), a, AccessMode::Read, ctx.stage);
             }
 
             let flow = decl
@@ -335,7 +338,8 @@ impl Eval for FunctionCall {
             Flow::Break | Flow::Continue => Err(E::FlowInFunction(flow)),
             Flow::Return(inst) => inst
                 .convert_to(&ret_ty)
-                .ok_or(E::ReturnType(ret_ty, inst.ty())),
+                .ok_or(E::ReturnType(inst.ty(), ret_ty))
+                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name)),
         };
         inst
     }

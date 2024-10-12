@@ -139,9 +139,13 @@ impl Exec for CompoundStatement {
 impl Exec for AssignmentStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         let lhs = self.lhs.eval(ctx)?;
+        let ty = lhs.ty();
 
         if let Instance::Ref(mut r) = lhs {
             let rhs = self.rhs.eval_value(ctx)?;
+            let rhs = rhs
+                .convert_to(&ty)
+                .ok_or_else(|| E::AssignType(rhs.ty(), ty))?;
             match self.operator {
                 AssignmentOperator::Equal => {
                     let _ = r.write(rhs)?;
@@ -485,8 +489,6 @@ impl Exec for ConstAssertStatement {
 }
 
 // TODO: implement address space
-// TODO: implement access mode / const-ness
-// TODO: implement evaluating module scope
 impl Exec for Declaration {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         if ctx.scope.has(&self.name) {
@@ -508,7 +510,8 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), ty))?;
                 }
 
-                ctx.scope.add(self.name.clone(), inst, AccessMode::Read);
+                ctx.scope
+                    .add(self.name.clone(), inst, AccessMode::Read, EvalStage::Const);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Function) => Err(E::OverrideInFn),
@@ -528,7 +531,8 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), inst.ty().concretize()))?
                 };
 
-                ctx.scope.add(self.name.clone(), inst, AccessMode::Read);
+                ctx.scope
+                    .add(self.name.clone(), inst, AccessMode::Read, ctx.stage);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Var, ScopeKind::Function) => {
@@ -552,7 +556,7 @@ impl Exec for Declaration {
                 }?;
 
                 ctx.scope
-                    .add(self.name.clone(), inst, AccessMode::ReadWrite);
+                    .add(self.name.clone(), inst, AccessMode::ReadWrite, ctx.stage);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Module) => {

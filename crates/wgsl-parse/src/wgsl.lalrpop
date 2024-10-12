@@ -113,6 +113,37 @@ extern {
     }
 }
 
+// these are context-dependent names. e.g. the @const attribute.
+#[cfg(not(feature = "imports"))]
+Keyword: String = {
+    "alias" => <>.to_string(),
+    "break" => <>.to_string(),
+    "case" => <>.to_string(),
+    "const" => <>.to_string(),
+    "const_assert" => <>.to_string(),
+    "continue" => <>.to_string(),
+    "continuing" => <>.to_string(),
+    "default" => <>.to_string(),
+    "diagnostic" => <>.to_string(),
+    "discard" => <>.to_string(),
+    "else" => <>.to_string(),
+    "enable" => <>.to_string(),
+    "false" => <>.to_string(),
+    "fn" => <>.to_string(),
+    "for" => <>.to_string(),
+    "if" => <>.to_string(),
+    "let" => <>.to_string(),
+    "loop" => <>.to_string(),
+    "override" => <>.to_string(),
+    "requires" => <>.to_string(),
+    "return" => <>.to_string(),
+    "struct" => <>.to_string(),
+    "switch" => <>.to_string(),
+    "true" => <>.to_string(),
+    "var" => <>.to_string(),
+    "while" => <>.to_string(),
+};
+
 // the grammar rules are layed out in the same order as in the spec.
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
 
@@ -880,14 +911,14 @@ Param: FormalParameter = {
 // 11. ATTRIBUTES
 // https://www.w3.org/TR/WGSL/#attributes
 
-// TODO: maybe parse the well-known attributes.
-#[cfg(not(feature = "attributes"))]
 Attribute: Attribute = {
-    "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> => Attribute {
-        name, arguments
-    }
-    "@" "const" <arguments: ArgumentExpressionList?> => Attribute {
-        name: "const".to_string(), arguments
+    <l: @L> "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> <r: @R> =>? {
+        parse_attribute(name, arguments)
+            .map_err(|e| lalrpop_util::ParseError::User{ error: (l, e, r) })
+    },
+    <l: @L> "@" <name: Keyword> <arguments: ArgumentExpressionList?> <r: @R> =>? {
+        parse_attribute(name, arguments)
+            .map_err(|e| lalrpop_util::ParseError::User{ error: (l, e, r) })
     },
 };
 
@@ -990,36 +1021,6 @@ ImportCollection: Vec<Import> = {
 // https://github.com/wgsl-tooling-wg/wesl-spec/pull/19
 // date: 2024-09-14, hash: b1446356ff206e5826a58812895bc6d3d64a2220
 
-#[cfg(not(feature = "imports"))]
-Keyword: String = {
-    "alias" => <>.to_string(),
-    "break" => <>.to_string(),
-    "case" => <>.to_string(),
-    "const" => <>.to_string(),
-    "const_assert" => <>.to_string(),
-    "continue" => <>.to_string(),
-    "continuing" => <>.to_string(),
-    "default" => <>.to_string(),
-    "diagnostic" => <>.to_string(),
-    "discard" => <>.to_string(),
-    "else" => <>.to_string(),
-    "enable" => <>.to_string(),
-    "false" => <>.to_string(),
-    "fn" => <>.to_string(),
-    "for" => <>.to_string(),
-    "if" => <>.to_string(),
-    "let" => <>.to_string(),
-    "loop" => <>.to_string(),
-    "override" => <>.to_string(),
-    "requires" => <>.to_string(),
-    "return" => <>.to_string(),
-    "struct" => <>.to_string(),
-    "switch" => <>.to_string(),
-    "true" => <>.to_string(),
-    "var" => <>.to_string(),
-    "while" => <>.to_string(),
-};
-
 #[cfg(feature = "imports")]
 Keyword: String = {
     "alias" => <>.to_string(),
@@ -1050,16 +1051,6 @@ Keyword: String = {
     "while" => <>.to_string(),
     "as" => <>.to_string(),
     "import" => <>.to_string(),
-};
-
-#[cfg(feature = "attributes")]
-Attribute: Attribute = {
-    "@" <name: IdentPatternToken> <arguments: ArgumentExpressionList?> => Attribute {
-        name, arguments
-    },
-    "@" <name: Keyword> <arguments: ArgumentExpressionList?> => Attribute {
-        name, arguments
-    },
 };
 
 #[cfg(feature = "attributes")]

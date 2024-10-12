@@ -171,11 +171,87 @@ pub struct ConstAssert {
     pub expression: ExpressionNode,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BuiltinValue {
+    VertexIndex,
+    InstanceIndex,
+    Position,
+    FrontFacing,
+    FragDepth,
+    SampleIndex,
+    SampleMask,
+    LocalInvocationId,
+    LocalInvocationIndex,
+    GlobalInvocationId,
+    WorkgroupId,
+    NumWorkgroups,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum InterpolationType {
+    Perspective,
+    Linear,
+    Flat,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum InterpolationSampling {
+    Center,
+    Centroid,
+    Sample,
+    First,
+    Either,
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct Attribute {
+pub struct DiagnosticAttribute {
+    pub severity: DiagnosticSeverity,
+    pub rule: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InterpolateAttribute {
+    pub ty: InterpolationType,
+    pub sampling: InterpolationSampling,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorkgroupSizeAttribute {
+    pub x: ExpressionNode,
+    pub y: Option<ExpressionNode>,
+    pub z: Option<ExpressionNode>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CustomAttribute {
     pub name: String,
     pub arguments: Option<Vec<ExpressionNode>>,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Attribute {
+    Align(ExpressionNode),
+    Binding(ExpressionNode),
+    BlendSrc(ExpressionNode),
+    Builtin(BuiltinValue),
+    Const,
+    Diagnostic(DiagnosticAttribute),
+    Group(ExpressionNode),
+    Id(ExpressionNode),
+    Interpolate(InterpolateAttribute),
+    Invariant,
+    Location(ExpressionNode),
+    MustUse,
+    Size(ExpressionNode),
+    WorkgroupSize(WorkgroupSizeAttribute),
+    Vertex,
+    Fragment,
+    Compute,
+    #[cfg(feature = "condcomp")]
+    If(ExpressionNode),
+    Custom(CustomAttribute),
+}
+
 pub type Attributes = Vec<Attribute>;
 
 #[derive(Clone, Debug, PartialEq, From)]

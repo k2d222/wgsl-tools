@@ -10,9 +10,8 @@ use std::{
 
 use serde::Deserialize;
 use wesl::{
-    eval::ToExpr,
     syntax::{Expression, Statement, TranslationUnit},
-    CompileOptions, Context, Resource, VirtualFileResolver, MANGLER_HASH,
+    CompileOptions, Resource, VirtualFileResolver, MANGLER_HASH,
 };
 
 #[test]

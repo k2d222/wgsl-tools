@@ -22,30 +22,50 @@ impl IterUses for GlobalDeclaration {
     fn uses_mut(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
         query_mut!(self.{
             GlobalDeclaration::Declaration.{
-                attributes.[].arguments.[].[].(IterUses::uses_mut),
+                attributes.[].(IterUses::uses_mut),
                 template_args.[].[].(IterUses::uses_mut),
                 ty.[],
                 initializer.[].(IterUses::uses_mut),
             },
             GlobalDeclaration::TypeAlias.ty,
             GlobalDeclaration::Struct.members.[].{
-                attributes.[].arguments.[].[].(IterUses::uses_mut),
+                attributes.[].(IterUses::uses_mut),
                 ty,
             },
             GlobalDeclaration::Function.{
-                attributes.[].arguments.[].[].(IterUses::uses_mut),
+                attributes.[].(IterUses::uses_mut),
                 parameters.[].{
-                    attributes.[].arguments.[].[].(IterUses::uses_mut),
+                    attributes.[].(IterUses::uses_mut),
                     ty,
                 },
-                return_attributes.[].arguments.[].[].(IterUses::uses_mut),
+                return_attributes.[].(IterUses::uses_mut),
                 return_type.[],
                 body.{
-                    attributes.[].arguments.[].[].(IterUses::uses_mut),
+                    attributes.[].(IterUses::uses_mut),
                     statements.(IterUses::uses_mut)
                 }
             },
             GlobalDeclaration::ConstAssert.expression.(IterUses::uses_mut),
+        })
+    }
+}
+
+impl IterUses for Attribute {
+    fn uses_mut(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
+        query_mut!(self.{
+            Attribute::Align.(IterUses::uses_mut),
+            Attribute::Binding.(IterUses::uses_mut),
+            Attribute::BlendSrc.(IterUses::uses_mut),
+            Attribute::Group.(IterUses::uses_mut),
+            Attribute::Id.(IterUses::uses_mut),
+            Attribute::Location.(IterUses::uses_mut),
+            Attribute::Size.(IterUses::uses_mut),
+            Attribute::WorkgroupSize.{
+                x.(IterUses::uses_mut),
+                y.[].(IterUses::uses_mut),
+                z.[].(IterUses::uses_mut),
+            },
+            Attribute::Custom.arguments.[].[].(IterUses::uses_mut)
         })
     }
 }
@@ -115,23 +135,23 @@ impl IterUses for Vec<StatementNode> {
                     }
                     Statement::If(stat) => {
                         let it = query_mut!(stat.{
-                            attributes.[].arguments.[].[].(IterUses::uses_mut),
+                            attributes.[].(IterUses::uses_mut),
                             if_clause.{
                                 expression.(IterUses::uses_mut),
                                 body.{
-                                    attributes.[].arguments.[].[].(IterUses::uses_mut),
+                                    attributes.[].(IterUses::uses_mut),
                                     statements.(x => rec(x).0)
                                 }
                             },
                             else_if_clauses.[].{
                                 expression.(IterUses::uses_mut),
                                 body.{
-                                    attributes.[].arguments.[].[].(IterUses::uses_mut),
+                                    attributes.[].(IterUses::uses_mut),
                                     statements.(x => rec(x).0)
                                 }
                             },
                             else_clause.[].body.{
-                                attributes.[].arguments.[].[].(IterUses::uses_mut),
+                                attributes.[].(IterUses::uses_mut),
                                 statements.(x => rec(x).0)
                             },
                         });
@@ -139,13 +159,13 @@ impl IterUses for Vec<StatementNode> {
                     }
                     Statement::Switch(stat) => {
                         let it = query_mut!(stat.{
-                            attributes.[].arguments.[].[].(IterUses::uses_mut),
+                            attributes.[].(IterUses::uses_mut),
                             expression.(IterUses::uses_mut),
-                            body_attributes.[].arguments.[].[].(IterUses::uses_mut),
+                            body_attributes.[].(IterUses::uses_mut),
                             clauses.[].{
                                 case_selectors.[].CaseSelector::Expression.(IterUses::uses_mut),
                                 body.{
-                                    attributes.[].arguments.[].[].(IterUses::uses_mut),
+                                    attributes.[].(IterUses::uses_mut),
                                     statements.(x => rec(x).0)
                                 }
                             },
@@ -153,11 +173,10 @@ impl IterUses for Vec<StatementNode> {
                         names.extend(it.filter(|ty| !scope.contains(&ty.name)));
                     }
                     Statement::Loop(stat) => {
-                        let it =
-                            query_mut!(stat.attributes.[].arguments.[].[].(IterUses::uses_mut));
+                        let it = query_mut!(stat.attributes.[].(IterUses::uses_mut));
                         names.extend(it.filter(|ty| !scope.contains(&ty.name)));
 
-                        let it = query_mut!(stat.body.attributes.[].arguments.[].[].(IterUses::uses_mut));
+                        let it = query_mut!(stat.body.attributes.[].(IterUses::uses_mut));
                         names.extend(it.filter(|ty| !scope.contains(&ty.name)));
 
                         // these ones have to be handled separatly, because the continuing statement
@@ -166,7 +185,7 @@ impl IterUses for Vec<StatementNode> {
                         names.extend(it.into_iter().filter(|ty| !scope.contains(&ty.name)));
 
                         if let Some(stat) = &mut stat.continuing {
-                            let it = query_mut!(stat.body.attributes.[].arguments.[].[].(IterUses::uses_mut));
+                            let it = query_mut!(stat.body.attributes.[].(IterUses::uses_mut));
                             names.extend(it.filter(|ty| !scope.contains(&ty.name)));
 
                             let (it, cont_scope) = rec(&mut stat.body.statements);
@@ -179,8 +198,7 @@ impl IterUses for Vec<StatementNode> {
                         }
                     }
                     Statement::For(stat) => {
-                        let it =
-                            query_mut!(stat.attributes.[].arguments.[].[].(IterUses::uses_mut));
+                        let it = query_mut!(stat.attributes.[].(IterUses::uses_mut));
                         names.extend(it.filter(|ty| !scope.contains(&ty.name)));
 
                         // these ones have to be handled separatly, because the for initializer
@@ -201,17 +219,17 @@ impl IterUses for Vec<StatementNode> {
                         }
 
                         let it = query_mut!(stat.body.{
-                            attributes.[].arguments.[].[].(IterUses::uses_mut),
+                            attributes.[].(IterUses::uses_mut),
                             statements.(x => rec(x).0)
                         });
                         names.extend(it.filter(|ty| !body_scope.contains(&ty.name)));
                     }
                     Statement::While(stat) => {
                         let it = query_mut!(stat.{
-                            attributes.[].arguments.[].[].(IterUses::uses_mut),
+                            attributes.[].(IterUses::uses_mut),
                             condition.(IterUses::uses_mut),
                             body.{
-                                attributes.[].arguments.[].[].(IterUses::uses_mut),
+                                attributes.[].(IterUses::uses_mut),
                                 statements.(x => rec(x).0)
                             }
                         });
@@ -238,7 +256,7 @@ impl IterUses for Vec<StatementNode> {
                     Statement::Declaration(stat) => {
                         scope.insert(stat.name.clone());
                         let it = query_mut!(stat.{
-                            attributes.[].arguments.[].[].(IterUses::uses_mut),
+                            attributes.[].(IterUses::uses_mut),
                             template_args.[].[].(IterUses::uses_mut),
                             ty.[],
                             initializer.[].(IterUses::uses_mut),
@@ -307,7 +325,10 @@ pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &str> {
                 .attributes
                 .iter()
                 .find(|attr| {
-                    attr.name == "vertex" || attr.name == "fragment" || attr.name == "compute"
+                    matches!(
+                        attr,
+                        Attribute::Vertex | Attribute::Fragment | Attribute::Compute
+                    )
                 })
                 .is_some()
                 .then_some(decl.name.as_str()),

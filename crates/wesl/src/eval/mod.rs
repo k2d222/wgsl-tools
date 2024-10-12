@@ -7,6 +7,7 @@ mod exec;
 mod instance;
 mod lower;
 mod ops;
+mod to_expr;
 mod ty;
 
 pub use builtin::*;
@@ -16,6 +17,7 @@ pub use eval::*;
 pub use exec::*;
 pub use instance::*;
 pub use lower::*;
+pub use to_expr::*;
 pub use ty::*;
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -23,8 +25,20 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
+pub struct Variable {
+    reference: RefInstance,
+    stage: EvalStage,
+}
+
+impl Variable {
+    pub fn new(reference: RefInstance, stage: EvalStage) -> Self {
+        Self { reference, stage }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Scope {
-    stack: Vec<HashMap<String, RefInstance>>,
+    stack: Vec<HashMap<String, Variable>>,
 }
 
 impl Scope {
@@ -42,9 +56,10 @@ impl Scope {
         self.stack.pop().expect("failed to pop scope");
     }
 
-    pub fn add(&mut self, name: String, value: Instance, access: AccessMode) {
+    pub fn add(&mut self, name: String, value: Instance, access: AccessMode, stage: EvalStage) {
         let r = RefInstance::new(Rc::new(RefCell::new(value)), access);
-        if self.stack.last_mut().unwrap().insert(name, r).is_some() {
+        let v = Variable::new(r, stage);
+        if self.stack.last_mut().unwrap().insert(name, v).is_some() {
             panic!("duplicate variable insertion")
         }
     }
@@ -53,7 +68,7 @@ impl Scope {
         self.stack
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).cloned())
+            .find_map(|scope| scope.get(name).map(|v| v.reference.clone()))
     }
 
     pub fn has(&self, name: &str) -> bool {
