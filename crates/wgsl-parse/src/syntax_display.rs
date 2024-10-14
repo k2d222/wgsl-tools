@@ -157,7 +157,6 @@ impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let kind = &self.kind;
-        let tplt = fmt_template(&self.template_args);
         let name = &self.name;
         let typ = self
             .ty
@@ -167,17 +166,46 @@ impl Display for Declaration {
             .initializer
             .iter()
             .format_with("", |ty, f| f(&format_args!(" = {}", ty)));
-        write!(f, "{kind}{tplt} {name}{typ}{init};")
+        write!(f, "{kind} {name}{typ}{init};")
     }
 }
 
 impl Display for DeclarationKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            DeclarationKind::Const => write!(f, "const"),
-            DeclarationKind::Override => write!(f, "override"),
-            DeclarationKind::Let => write!(f, "let"),
-            DeclarationKind::Var => write!(f, "var"),
+            Self::Const => write!(f, "const"),
+            Self::Override => write!(f, "override"),
+            Self::Let => write!(f, "let"),
+            Self::Var(addr_space) => match addr_space {
+                Some(addr_space) => write!(f, "var<{addr_space}>"),
+                None => write!(f, "var"),
+            },
+        }
+    }
+}
+
+impl Display for AddressSpace {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Function => write!(f, "function"),
+            Self::Private => write!(f, "private"),
+            Self::Workgroup => write!(f, "workgroup"),
+            Self::Uniform => write!(f, "uniform"),
+            Self::Storage(access_mode) => match access_mode {
+                Some(access_mode) => write!(f, "storage, {access_mode}"),
+                None => write!(f, "storage"),
+            },
+            Self::Handle => write!(f, "handle"),
+        }
+    }
+}
+
+impl Display for AccessMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Read => write!(f, "read"),
+            Self::Write => write!(f, "write"),
+            Self::ReadWrite => write!(f, "read_write"),
         }
     }
 }

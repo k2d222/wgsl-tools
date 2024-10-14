@@ -23,7 +23,6 @@ impl IterUses for GlobalDeclaration {
         query_mut!(self.{
             GlobalDeclaration::Declaration.{
                 attributes.[].(IterUses::uses_mut),
-                template_args.[].[].(IterUses::uses_mut),
                 ty.[],
                 initializer.[].(IterUses::uses_mut),
             },
@@ -257,7 +256,6 @@ impl IterUses for Vec<StatementNode> {
                         scope.insert(stat.name.clone());
                         let it = query_mut!(stat.{
                             attributes.[].(IterUses::uses_mut),
-                            template_args.[].[].(IterUses::uses_mut),
                             ty.[],
                             initializer.[].(IterUses::uses_mut),
                         });

@@ -34,6 +34,49 @@ pub(crate) fn apply_components(
     })
 }
 
+impl FromStr for DeclarationKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "const" => Ok(Self::Const),
+            "override" => Ok(Self::Override),
+            "let" => Ok(Self::Let),
+            "var" => Ok(Self::Var(None)),
+            _ => Err(()),
+        }
+    }
+}
+
+impl FromStr for AddressSpace {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "function" => Ok(Self::Function),
+            "private" => Ok(Self::Private),
+            "workgroup" => Ok(Self::Workgroup),
+            "uniform" => Ok(Self::Uniform),
+            "storage" => Ok(Self::Storage(None)),
+            "handle" => Ok(Self::Handle),
+            _ => Err(()),
+        }
+    }
+}
+
+impl FromStr for AccessMode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(Self::Read),
+            "write" => Ok(Self::Write),
+            "read_write" => Ok(Self::ReadWrite),
+            _ => Err(()),
+        }
+    }
+}
+
 impl FromStr for DiagnosticSeverity {
     type Err = ();
 
@@ -253,5 +296,43 @@ pub(crate) fn parse_attribute(
             None => Err(E::Attribute("if", "expected 1 argument")),
         },
         _ => Ok(Attribute::Custom(CustomAttribute { name, arguments })),
+    }
+}
+
+pub(crate) fn parse_var_template(template_args: TemplateArgs) -> Result<Option<AddressSpace>, E> {
+    fn ident(expr: ExpressionNode) -> Option<String> {
+        match expr.into_inner() {
+            Expression::TypeOrIdentifier(TypeExpression {
+                name,
+                template_args: None,
+            }) => Some(name),
+            _ => None,
+        }
+    }
+    match template_args {
+        Some(tplt) => {
+            let mut it = tplt.into_iter();
+            match (it.next(), it.next(), it.next()) {
+                (Some(e1), e2, None) => {
+                    let mut addr_space = ident(e1.expression)
+                        .and_then(|name| name.parse().ok())
+                        .ok_or(E::VarTemplate("invalid address space"))?;
+                    if let Some(e2) = e2 {
+                        if let AddressSpace::Storage(access_mode) = &mut addr_space {
+                            *access_mode = Some(
+                                ident(e2.expression)
+                                    .and_then(|name| name.parse().ok())
+                                    .ok_or(E::VarTemplate("invalid access mode"))?,
+                            );
+                        } else {
+                            return Err(E::VarTemplate("only variables with `storage` address space can have an access mode"));
+                        }
+                    }
+                    Ok(Some(addr_space))
+                }
+                _ => Err(E::VarTemplate("template is empty")),
+            }
+        }
+        None => Ok(None),
     }
 }

@@ -347,7 +347,6 @@ VariableOrValueStatement: Declaration = {
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Let,
-            template_args: None,
             name,
             ty,
             initializer: Some(initializer),
@@ -358,7 +357,6 @@ VariableOrValueStatement: Declaration = {
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Const,
-            template_args: None,
             name,
             ty,
             initializer: Some(initializer),
@@ -368,16 +366,17 @@ VariableOrValueStatement: Declaration = {
 
 #[cfg(not(feature = "attributes"))]
 VariableDecl: Declaration = {
-    "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
+    <l: @L> "var" <template_args: TemplateList?> <r: @R> <ident: OptionallyTypedIdent> =>? {
         let (name, ty) = ident;
-        Declaration {
+        let address_space = parse_var_template(template_args)
+            .map_err(|e| lalrpop_util::ParseError::User{ error: (l, e, r) })?;
+        Ok(Declaration {
             attributes: Vec::new(),
-            kind: DeclarationKind::Var,
-            template_args,
+            kind: DeclarationKind::Var(address_space),
             name,
             ty,
             initializer: None,
-        }
+        })
     },
 };
 
@@ -401,7 +400,6 @@ GlobalValueDecl: Declaration = {
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Const,
-            template_args: None,
             name,
             ty,
             initializer: Some(initializer),
@@ -412,7 +410,6 @@ GlobalValueDecl: Declaration = {
         Declaration {
             attributes,
             kind: DeclarationKind::Override,
-            template_args: None,
             name,
             ty,
             initializer: initializer.map(Into::into),
@@ -1101,7 +1098,6 @@ VariableOrValueStatement: Declaration = {
         Declaration {
             attributes,
             kind: DeclarationKind::Let,
-            template_args: None,
             name,
             ty,
             initializer: Some(initializer),
@@ -1112,7 +1108,6 @@ VariableOrValueStatement: Declaration = {
         Declaration {
             attributes,
             kind: DeclarationKind::Const,
-            template_args: None,
             name,
             ty,
             initializer: Some(initializer),
@@ -1122,16 +1117,17 @@ VariableOrValueStatement: Declaration = {
 
 #[cfg(feature = "attributes")]
 VariableDecl: Declaration = {
-    <attributes: Attribute*> "var" /* DisambiguateTemplate */ <template_args: TemplateList?> <ident: OptionallyTypedIdent> => {
+    <attributes: Attribute*> <l: @L> "var" <template_args: TemplateList?> <r: @R> <ident: OptionallyTypedIdent> =>? {
         let (name, ty) = ident;
-        Declaration {
+        let address_space = parse_var_template(template_args)
+            .map_err(|e| lalrpop_util::ParseError::User{ error: (l, e, r) })?;
+        Ok(Declaration {
             attributes,
-            kind: DeclarationKind::Var,
-            template_args,
+            kind: DeclarationKind::Var(address_space),
             name,
             ty,
             initializer: None,
-        }
+        })
     },
 };
 
@@ -1150,7 +1146,6 @@ GlobalValueDecl: Declaration = {
         Declaration {
             attributes,
             kind: DeclarationKind::Const,
-            template_args: None,
             name,
             ty,
             initializer: Some(initializer),
@@ -1161,7 +1156,6 @@ GlobalValueDecl: Declaration = {
         Declaration {
             attributes,
             kind: DeclarationKind::Override,
-            template_args: None,
             name,
             ty,
             initializer: initializer.map(Into::into),

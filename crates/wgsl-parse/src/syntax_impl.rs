@@ -64,6 +64,15 @@ impl Statement {
     }
 }
 
+impl AccessMode {
+    pub fn is_read(&self) -> bool {
+        matches!(self, Self::Read | Self::ReadWrite)
+    }
+    pub fn is_write(&self) -> bool {
+        matches!(self, Self::Write | Self::ReadWrite)
+    }
+}
+
 impl From<String> for TypeExpression {
     fn from(name: String) -> Self {
         Self {

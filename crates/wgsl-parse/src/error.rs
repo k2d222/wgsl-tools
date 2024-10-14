@@ -24,6 +24,8 @@ pub enum ParseError {
     DiagnosticSeverity,
     #[error("invalid `{0}` attribute, {1}")]
     Attribute(&'static str, &'static str),
+    #[error("invalid `var` template arguments, {0}")]
+    VarTemplate(&'static str),
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -32,6 +34,7 @@ pub enum CustomLalrError {
     LexerError,
     DiagnosticSeverity,
     Attribute(&'static str, &'static str),
+    VarTemplate(&'static str),
 }
 
 type LalrError = lalrpop_util::ParseError<usize, Token, (usize, CustomLalrError, usize)>;
@@ -86,6 +89,7 @@ impl From<LalrError> for Error {
                     CustomLalrError::Attribute(attr, expected) => {
                         ParseError::Attribute(attr, expected)
                     }
+                    CustomLalrError::VarTemplate(reason) => ParseError::VarTemplate(reason),
                 };
                 Self { span, error }
             }

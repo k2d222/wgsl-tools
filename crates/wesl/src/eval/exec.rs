@@ -535,7 +535,8 @@ impl Exec for Declaration {
                     .add(self.name.clone(), inst, AccessMode::Read, ctx.stage);
                 Ok(Flow::Next)
             }
-            (DeclarationKind::Var, ScopeKind::Function) => {
+            (DeclarationKind::Var(addr_space), ScopeKind::Function) => {
+                // TODO: implement  address space
                 let inst = match (&self.ty, &self.initializer) {
                     (None, None) => Err(E::UntypedDecl),
                     (None, Some(init)) => {
@@ -570,7 +571,8 @@ impl Exec for Declaration {
                 }
             }
             (DeclarationKind::Let, ScopeKind::Module) => Err(E::LetInMod),
-            (DeclarationKind::Var, ScopeKind::Module) => {
+            (DeclarationKind::Var(addr_space), ScopeKind::Module) => {
+                // TODO: implement  address space
                 if ctx.stage == EvalStage::Const {
                     // in const contexts we just ignore var declarations since they cannot be
                     // used in const eval contexts. But we could at least store the ident to

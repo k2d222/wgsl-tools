@@ -158,19 +158,7 @@ alias mat4x4h = mat4x4<f16>;
 @const @must_use fn trunc() @intrinsic {}
 
 // packing
-@const @must_use fn pack4x8snorm() {
-    let x = (e & 0xFFu) as i32;
-    let y = ((e >> 8u) & 0xFFu) as i32;
-    let z = ((e >> 16u) & 0xFFu) as i32;
-    let w = ((e >> 24u) & 0xFFu) as i32;
-
-    return vec4<f32>(
-        max(f32(x) / 127.0, -1.0),
-        max(f32(y) / 127.0, -1.0),
-        max(f32(z) / 127.0, -1.0),
-        max(f32(w) / 127.0, -1.0)
-    );
-}
+@const @must_use fn pack4x8snorm() @intrinsic { }
 @const @must_use fn pack4x8unorm() @intrinsic {}
 @const @must_use fn pack4xI8() @intrinsic {}
 @const @must_use fn pack4xU8() @intrinsic {}

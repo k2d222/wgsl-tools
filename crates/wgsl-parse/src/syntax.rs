@@ -110,7 +110,6 @@ pub enum GlobalDeclaration {
 pub struct Declaration {
     pub attributes: Attributes,
     pub kind: DeclarationKind,
-    pub template_args: TemplateArgs,
     pub name: String,
     pub ty: Option<TypeExpression>,
     pub initializer: Option<ExpressionNode>,
@@ -121,7 +120,24 @@ pub enum DeclarationKind {
     Const,
     Override,
     Let,
-    Var,
+    Var(Option<AddressSpace>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AddressSpace {
+    Function,
+    Private,
+    Workgroup,
+    Uniform,
+    Storage(Option<AccessMode>),
+    Handle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AccessMode {
+    Read,
+    Write,
+    ReadWrite,
 }
 
 #[derive(Clone, Debug, PartialEq)]

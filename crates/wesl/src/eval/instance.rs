@@ -9,6 +9,7 @@ use std::{
 use derive_more::derive::From;
 use half::f16;
 use itertools::Itertools;
+use wgsl_parse::syntax::AccessMode;
 
 use crate::eval::Ty;
 
@@ -413,21 +414,6 @@ impl MatInstance {
             MatInstance::Mat4x3(m) => Box::new(m.iter_mut()),
             MatInstance::Mat4x4(m) => Box::new(m.iter_mut()),
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AccessMode {
-    Read,
-    Write,
-    ReadWrite,
-}
-impl AccessMode {
-    pub fn is_read(&self) -> bool {
-        matches!(self, Self::Read | Self::ReadWrite)
-    }
-    pub fn is_write(&self) -> bool {
-        matches!(self, Self::Write | Self::ReadWrite)
     }
 }
 

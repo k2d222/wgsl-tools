@@ -40,3 +40,5 @@ fn main() -> array<u32, 2> {
     //     fib_iter(10),
     // );
 }
+@group(0) @binding(0)
+var<storage, read> foo: u32;
