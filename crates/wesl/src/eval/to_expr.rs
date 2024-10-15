@@ -172,14 +172,27 @@ impl ToExpr for Type {
                     expression: a.to_expr(ctx)?.into(),
                 }]),
             }),
-            Type::Ptr(p) => Ok(TypeExpression {
+            Type::Ptr(space, p) => Ok(TypeExpression {
                 name: format!("ptr"),
-                template_args: Some(vec![TemplateArg {
-                    expression: p.to_expr(ctx)?.into(),
-                }]),
+                template_args: Some(vec![
+                    TemplateArg {
+                        expression: space.to_expr(ctx)?.into(),
+                    },
+                    TemplateArg {
+                        expression: p.to_expr(ctx)?.into(),
+                    },
+                ]),
             }),
             Type::Void => Err(E::NotConstructible(Type::Void)),
         }
         .map(Into::into)
+    }
+}
+
+impl ToExpr for AddressSpace {
+    fn to_expr(&self, _ctx: &Context) -> Result<Expression, E> {
+        Ok(Expression::TypeOrIdentifier(TypeExpression::from(
+            self.to_string(),
+        )))
     }
 }

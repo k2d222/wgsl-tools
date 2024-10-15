@@ -2,7 +2,7 @@ use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::syntax::*;
 
-use super::{Flow, Instance, LiteralInstance, MemView, Ty, Type};
+use super::{Flow, Instance, LiteralInstance, MemView, ScopeKind, Ty, Type};
 
 #[derive(Clone, Debug, Error)]
 pub enum EvalError {
@@ -115,6 +115,8 @@ pub enum EvalError {
     DuplicateDecl(String),
     #[error("a declaration must have an explicit type or an initializer")]
     UntypedDecl,
+    #[error("`{0}` declarations are forbidden in `{1}` scope")]
+    ForbiddenDecl(DeclarationKind, ScopeKind),
 
     // statements
     #[error("expected a reference, got value `{0}`")]

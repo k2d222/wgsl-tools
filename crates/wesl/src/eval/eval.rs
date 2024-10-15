@@ -321,8 +321,7 @@ impl Eval for FunctionCall {
                 .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
 
             for (a, p) in zip(args, &decl.parameters) {
-                ctx.scope
-                    .add(p.name.clone(), a, AccessMode::Read, ctx.stage);
+                ctx.scope.add_val(p.name.clone(), a, ctx.stage);
             }
 
             let flow = decl

@@ -496,7 +496,7 @@ impl Exec for Declaration {
         }
 
         match (self.kind, ctx.kind) {
-            (DeclarationKind::Const, _) => {
+            (DeclarationKind::Const, scope) => {
                 let mut inst = self
                     .initializer
                     .as_ref()
@@ -510,8 +510,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), ty))?;
                 }
 
-                ctx.scope
-                    .add(self.name.clone(), inst, AccessMode::Read, EvalStage::Const);
+                ctx.scope.add_val(self.name.clone(), inst, EvalStage::Const);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Function) => Err(E::OverrideInFn),
@@ -531,12 +530,14 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::ConversionFailure(inst.ty(), inst.ty().concretize()))?
                 };
 
-                ctx.scope
-                    .add(self.name.clone(), inst, AccessMode::Read, ctx.stage);
+                ctx.scope.add_val(self.name.clone(), inst, ctx.stage);
                 Ok(Flow::Next)
             }
-            (DeclarationKind::Var(addr_space), ScopeKind::Function) => {
-                // TODO: implement  address space
+            (DeclarationKind::Var(space), ScopeKind::Function) => {
+                match space {
+                    Some(AddressSpace::Function) | None => (),
+                    _ => return Err(E::ForbiddenDecl(self.kind, ctx.kind)),
+                }
                 let inst = match (&self.ty, &self.initializer) {
                     (None, None) => Err(E::UntypedDecl),
                     (None, Some(init)) => {
@@ -556,8 +557,13 @@ impl Exec for Declaration {
                     }
                 }?;
 
-                ctx.scope
-                    .add(self.name.clone(), inst, AccessMode::ReadWrite, ctx.stage);
+                ctx.scope.add_var(
+                    self.name.clone(),
+                    inst,
+                    AddressSpace::Function,
+                    AccessMode::ReadWrite,
+                    ctx.stage,
+                );
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Module) => {

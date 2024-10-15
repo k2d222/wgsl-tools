@@ -9,7 +9,7 @@ use std::{
 use derive_more::derive::From;
 use half::f16;
 use itertools::Itertools;
-use wgsl_parse::syntax::AccessMode;
+use wgsl_parse::syntax::{AccessMode, AddressSpace};
 
 use crate::eval::Ty;
 
@@ -420,18 +420,20 @@ impl MatInstance {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PtrInstance {
     pub ty: Type,
+    pub access: AccessMode,
+    pub space: AddressSpace,
     pub view: MemView,
     pub ptr: Rc<RefCell<Instance>>,
-    pub access: AccessMode,
 }
 
 impl From<RefInstance> for PtrInstance {
     fn from(r: RefInstance) -> Self {
         Self {
             ty: r.ty.clone(),
+            space: r.space,
+            access: r.access,
             view: r.view.clone(),
             ptr: r.ptr.clone(),
-            access: r.access,
         }
     }
 }
@@ -439,19 +441,21 @@ impl From<RefInstance> for PtrInstance {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RefInstance {
     pub ty: Type,
+    pub space: AddressSpace,
+    pub access: AccessMode,
     pub view: MemView,
     pub ptr: Rc<RefCell<Instance>>,
-    pub access: AccessMode,
 }
 
 impl RefInstance {
-    pub fn new(ptr: Rc<RefCell<Instance>>, access: AccessMode) -> Self {
+    pub fn new(ptr: Rc<RefCell<Instance>>, space: AddressSpace, access: AccessMode) -> Self {
         let ty = ptr.borrow().ty();
         Self {
             ty,
+            space,
+            access,
             view: MemView::Whole,
             ptr,
-            access,
         }
     }
 }
@@ -460,9 +464,10 @@ impl From<PtrInstance> for RefInstance {
     fn from(p: PtrInstance) -> Self {
         Self {
             ty: p.ty.clone(),
+            space: p.space,
+            access: p.access,
             view: p.view.clone(),
             ptr: p.ptr.clone(),
-            access: p.access,
         }
     }
 }
@@ -513,9 +518,10 @@ impl RefInstance {
         let inst = inst.view(&self.view)?;
         Ok(Self {
             ty: inst.ty(),
+            space: self.space,
+            access: self.access,
             view,
             ptr: self.ptr.clone(),
-            access: self.access,
         })
     }
     pub fn view_index(&self, index: usize) -> Result<Self, E> {
@@ -528,9 +534,10 @@ impl RefInstance {
         let inst = inst.view(&self.view)?;
         Ok(Self {
             ty: inst.ty(),
+            space: self.space,
+            access: self.access,
             view,
             ptr: self.ptr.clone(),
-            access: self.access,
         })
     }
 

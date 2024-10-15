@@ -10,6 +10,7 @@ use std::{
 
 use serde::Deserialize;
 use wesl::{
+    eval::Instance,
     syntax::{Expression, Statement, TranslationUnit},
     CompileOptions, Resource, VirtualFileResolver, MANGLER_HASH,
 };
@@ -52,8 +53,8 @@ enum GptTestKind {
         syntax: GptTestSyntaxKind,
     },
     Eval {
-        eval: Option<String>,
-        context: Option<String>,
+        eval: String,
+        result: Option<String>,
     },
     Context,
 }
@@ -97,24 +98,21 @@ struct GptTest {
 
 fn test_eval(
     eval: &String,
-    expect: &Option<String>,
-    ctx: &Option<String>,
-) -> Result<bool, wesl::Error> {
-    let ctx = match ctx {
-        Some(code) => code
-            .parse::<TranslationUnit>()
-            .map_err(|e| wesl::Error::from(e.error))?,
-        None => TranslationUnit::default(),
-    };
+    result: &Option<String>,
+    code: &String,
+) -> Result<(bool, Instance), wesl::Error> {
+    let ctx = code
+        .parse::<TranslationUnit>()
+        .map_err(|e| wesl::Error::from(e.error))?;
 
     let eval_inst = wesl::eval(eval, &ctx)?;
 
-    match expect {
+    match result {
         Some(expect) => {
             let expect_inst = wesl::eval(expect, &ctx)?;
-            Ok(eval_inst == expect_inst)
+            Ok((eval_inst == expect_inst, eval_inst))
         }
-        None => Ok(false),
+        None => Ok((false, eval_inst)),
     }
 }
 
@@ -180,15 +178,15 @@ fn gpt_tests() {
                             fails += 1;
                         }
                     }
-                    GptTestKind::Eval { eval, context } => {
-                        let res = test_eval(&test.code, eval, context);
-                        let pass = matches!(res, Ok(true))
+                    GptTestKind::Eval { eval, result } => {
+                        let res = test_eval(&eval, &result, &test.code);
+                        let pass = matches!(res, Ok((true, _)))
                             .then_some(GptTestExpect::Pass)
                             .unwrap_or(GptTestExpect::Fail);
                         println!("{pass}");
                         if pass != test.expect {
                             println!(
-                                "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * eval:`{:?}`\n   * result: {:?}\n",
+                                "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * eval:`{:?}`\n   * expected: {:?}\n   * result: {:?}\n",
                                 test.desc,
                                 test.note
                                     .as_ref()
@@ -196,7 +194,8 @@ fn gpt_tests() {
                                     .unwrap_or_default(),
                                 test.code,
                                 eval,
-                                res.map(|expr| expr.to_string())
+                                result,
+                                res.map(|(_, inst)| inst.to_string())
                             );
                             fails += 1;
                         }

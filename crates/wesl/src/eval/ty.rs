@@ -1,7 +1,7 @@
 use super::{
     ArrayInstance, ArrayTemplate, Context, Eval, EvalError, Instance, LiteralInstance, MatInner,
-    MatInstance, PtrInstance, RefInstance, StructInstance, SyntaxUtil, VecInner, VecInstance,
-    VecTemplate,
+    MatInstance, MatTemplate, PtrInstance, PtrTemplate, RefInstance, StructInstance, SyntaxUtil,
+    VecInner, VecInstance, VecTemplate,
 };
 
 use wgsl_parse::syntax::*;
@@ -20,7 +20,7 @@ pub enum Type {
     Vec(u8, Box<Type>),
     Mat(u8, u8, Box<Type>),
     Atomic(Box<Type>),
-    Ptr(Box<Type>),
+    Ptr(AddressSpace, Box<Type>),
     Void,
 }
 
@@ -73,6 +73,24 @@ impl Type {
     pub fn is_concrete(&self) -> bool {
         !self.is_abstract()
     }
+
+    /// reference: https://www.w3.org/TR/WGSL/#storable-types
+    pub fn is_storable(&self) -> bool {
+        self.is_concrete()
+            && match self {
+                Type::Bool
+                | Type::I32
+                | Type::U32
+                | Type::F32
+                | Type::F16
+                | Type::Struct(_)
+                | Type::Array(_, _)
+                | Type::Vec(_, _)
+                | Type::Mat(_, _, _)
+                | Type::Atomic(_) => true,
+                _ => false,
+            }
+    }
 }
 
 pub trait Ty {
@@ -102,11 +120,11 @@ impl Ty for Type {
             Type::F32 => self.clone(),
             Type::F16 => self.clone(),
             Type::Struct(_) => self.clone(),
-            Type::Array(_, ty) => ty.inner_ty(),
-            Type::Vec(_, ty) => ty.inner_ty(),
+            Type::Array(_, ty) => ty.ty(),
+            Type::Vec(_, ty) => ty.ty(),
             Type::Mat(_, _, ty) => ty.inner_ty(),
-            Type::Atomic(ty) => ty.inner_ty(),
-            Type::Ptr(_) => self.clone(),
+            Type::Atomic(ty) => ty.ty(),
+            Type::Ptr(_, ty) => ty.ty(),
             Type::Void => self.clone(),
         }
     }
@@ -208,7 +226,7 @@ impl Ty for MatInstance {
 
 impl Ty for PtrInstance {
     fn ty(&self) -> Type {
-        Type::Ptr(Box::new(self.ty.clone()))
+        Type::Ptr(self.space, Box::new(self.ty.clone()))
     }
 }
 
@@ -257,32 +275,24 @@ impl EvalTy for TypeExpression {
         if let Some(tplt) = &self.template_args {
             match self.name.as_str() {
                 "array" => {
-                    let tplt = tplt
-                        .iter()
-                        .map(|e| e.eval_value(ctx))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let tplt = ArrayTemplate::parse(&tplt)?;
-                    Ok(Type::Array(tplt.n, Box::new(tplt.ty)))
+                    let tplt = ArrayTemplate::parse(&tplt, ctx)?;
+                    Ok(tplt.ty())
                 }
                 "vec2" | "vec3" | "vec4" => {
-                    let tplt = tplt
-                        .iter()
-                        .map(|e| e.eval_value(ctx))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let tplt = VecTemplate::parse(&tplt)?;
+                    let tplt = VecTemplate::parse(&tplt, ctx)?;
                     let n = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
-                    Ok(Type::Vec(n, Box::new(tplt.ty)))
+                    Ok(tplt.ty(n))
                 }
                 "mat2x2" | "mat2x3" | "mat2x4" | "mat3x2" | "mat3x3" | "mat3x4" | "mat4x2"
                 | "mat4x3" | "mat4x4" => {
-                    let tplt = tplt
-                        .iter()
-                        .map(|e| e.eval_value(ctx))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let tplt = VecTemplate::parse(&tplt)?;
+                    let tplt = MatTemplate::parse(&tplt, ctx)?;
                     let c = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
                     let r = self.name.chars().nth(5).unwrap().to_digit(10).unwrap() as u8;
                     Ok(Type::Mat(c, r, Box::new(tplt.ty)))
+                }
+                "ptr" => {
+                    let tplt = PtrTemplate::parse(&tplt, ctx)?;
+                    Ok(tplt.ty())
                 }
                 _ => {
                     if let Some(ty) = ctx.source.resolve_alias(&self.name) {

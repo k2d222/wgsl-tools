@@ -20,18 +20,18 @@ pub use lower::*;
 pub use to_expr::*;
 pub use ty::*;
 
+use derive_more::Display;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
 use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
 pub struct Variable {
-    reference: RefInstance,
+    reference: Instance,
     stage: EvalStage,
 }
 
 impl Variable {
-    pub fn new(reference: RefInstance, stage: EvalStage) -> Self {
+    pub fn new(reference: Instance, stage: EvalStage) -> Self {
         Self { reference, stage }
     }
 }
@@ -56,15 +56,29 @@ impl Scope {
         self.stack.pop().expect("failed to pop scope");
     }
 
-    pub fn add(&mut self, name: String, value: Instance, access: AccessMode, stage: EvalStage) {
-        let r = RefInstance::new(Rc::new(RefCell::new(value)), access);
-        let v = Variable::new(r, stage);
+    pub fn add_val(&mut self, name: String, value: Instance, stage: EvalStage) {
+        let v = Variable::new(value, stage);
         if self.stack.last_mut().unwrap().insert(name, v).is_some() {
             panic!("duplicate variable insertion")
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<RefInstance> {
+    pub fn add_var(
+        &mut self,
+        name: String,
+        value: Instance,
+        space: AddressSpace,
+        access: AccessMode,
+        stage: EvalStage,
+    ) {
+        let r = RefInstance::new(Rc::new(RefCell::new(value)), space, access);
+        let v = Variable::new(r.into(), stage);
+        if self.stack.last_mut().unwrap().insert(name, v).is_some() {
+            panic!("duplicate variable insertion")
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<Instance> {
         self.stack
             .iter()
             .rev()
@@ -82,9 +96,11 @@ impl Default for Scope {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display)]
 pub enum ScopeKind {
+    #[display("module")]
     Module,
+    #[display("function")]
     Function,
 }
 

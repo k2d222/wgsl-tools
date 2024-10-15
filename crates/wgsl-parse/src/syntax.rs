@@ -123,7 +123,7 @@ pub enum DeclarationKind {
     Var(Option<AddressSpace>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AddressSpace {
     Function,
     Private,
@@ -133,7 +133,7 @@ pub enum AddressSpace {
     Handle,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AccessMode {
     Read,
     Write,

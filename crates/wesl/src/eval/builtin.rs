@@ -5,8 +5,8 @@ use std::{collections::HashMap, iter::zip};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use wgsl_parse::syntax::{
-    Attribute, CustomAttribute, Expression, GlobalDeclaration, LiteralExpression, TranslationUnit,
-    TypeExpression,
+    AccessMode, AddressSpace, Attribute, CustomAttribute, Expression, GlobalDeclaration,
+    LiteralExpression, TemplateArg, TranslationUnit, TypeExpression,
 };
 
 use crate::{Context, Eval};
@@ -90,7 +90,7 @@ impl Instance {
             Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
             Type::Mat(c, r, m_ty) => MatInstance::zero_value(*c, *r, m_ty).map(Into::into),
             Type::Atomic(_) => Err(E::NotConstructible(ty.clone())),
-            Type::Ptr(_) => Err(E::NotConstructible(ty.clone())),
+            Type::Ptr(_, _) => Err(E::NotConstructible(ty.clone())),
             Type::Void => Ok(Instance::Void),
         }
     }
@@ -174,22 +174,14 @@ pub fn call_builtin(
     args: Vec<Instance>,
     ctx: &mut Context,
 ) -> Result<Instance, E> {
-    let tplt = match &ty.template_args {
-        Some(tplt) => Some(
-            tplt.iter()
-                .map(|arg| arg.eval_value(ctx))
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
-        None => None,
-    };
     match (
         ty.name.as_str(),
-        tplt.as_ref().map(|tplt| tplt.as_slice()),
+        ty.template_args.as_ref().map(|tplt| tplt.as_slice()),
         args.as_slice(),
     ) {
         // constructors
-        ("array", Some(t), []) => Instance::zero_value(&ArrayTemplate::parse(t)?.ty(), ctx),
-        ("array", Some(t), a) => call_array_t(ArrayTemplate::parse(t)?, a),
+        ("array", Some(t), []) => Instance::zero_value(&ArrayTemplate::parse(t, ctx)?.ty(), ctx),
+        ("array", Some(t), a) => call_array_t(ArrayTemplate::parse(t, ctx)?, a),
         ("array", None, a) => call_array(a),
         ("bool", None, []) => Instance::zero_value(&Type::Bool, ctx),
         ("bool", None, [a1]) => call_bool_1(a1),
@@ -210,17 +202,17 @@ pub fn call_builtin(
         ("mat4x2", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
         ("mat4x3", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
         ("mat4x4", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("vec2", Some(t), []) => Instance::zero_value(&VecTemplate::parse(t)?.ty(2), ctx),
-        ("vec2", Some(t), a) => call_vec_t(2, VecTemplate::parse(t)?, a),
+        ("vec2", Some(t), []) => Instance::zero_value(&VecTemplate::parse(t, ctx)?.ty(2), ctx),
+        ("vec2", Some(t), a) => call_vec_t(2, VecTemplate::parse(t, ctx)?, a),
         ("vec2", None, a) => call_vec(2, a),
-        ("vec3", Some(t), []) => Instance::zero_value(&VecTemplate::parse(t)?.ty(3), ctx),
-        ("vec3", Some(t), a) => call_vec_t(3, VecTemplate::parse(t)?, a),
+        ("vec3", Some(t), []) => Instance::zero_value(&VecTemplate::parse(t, ctx)?.ty(3), ctx),
+        ("vec3", Some(t), a) => call_vec_t(3, VecTemplate::parse(t, ctx)?, a),
         ("vec3", None, a) => call_vec(3, a),
-        ("vec4", Some(t), []) => Instance::zero_value(&VecTemplate::parse(t)?.ty(4), ctx),
-        ("vec4", Some(t), a) => call_vec_t(4, VecTemplate::parse(t)?, a),
+        ("vec4", Some(t), []) => Instance::zero_value(&VecTemplate::parse(t, ctx)?.ty(4), ctx),
+        ("vec4", Some(t), a) => call_vec_t(4, VecTemplate::parse(t, ctx)?, a),
         ("vec4", None, a) => call_vec(4, a),
         // bitcast
-        ("bitcast", Some([t1]), [a1]) => call_bitcast_t(t1, a1),
+        ("bitcast", Some(t), [a1]) => call_bitcast_t(BitcastTemplate::parse(t, ctx)?, a1),
         // logical
         ("all", None, [a]) => call_all(a),
         ("any", None, [a]) => call_any(a),
@@ -316,22 +308,27 @@ pub struct ArrayTemplate {
     pub ty: Type,
 }
 impl ArrayTemplate {
-    pub fn parse(tplt: &[Instance]) -> Result<ArrayTemplate, E> {
-        match tplt {
-            [t1, t2] => Self::parse_2(t1, t2),
-            [_] => Err(E::Builtin(
+    pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<ArrayTemplate, E> {
+        let tplt = tplt
+            .iter()
+            .map(|arg| arg.eval_value(ctx))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut it = tplt.into_iter();
+        match (it.next(), it.next(), it.next()) {
+            (Some(t1), Some(t2), None) => Self::parse_2(t1, t2),
+            (Some(_), _, _) => Err(E::Builtin(
                 "runtime-sized arrays are not supported in const contexts",
             )),
             _ => Err(E::TemplateArgs("array")),
         }
     }
-    pub fn parse_2(t1: &Instance, t2: &Instance) -> Result<ArrayTemplate, E> {
+    pub fn parse_2(t1: Instance, t2: Instance) -> Result<ArrayTemplate, E> {
         match (t1, t2) {
             (Instance::Type(ty), Instance::Literal(n)) => {
-                let count = match n {
-                    LiteralInstance::AbstractInt(n) => (*n > 0).then_some(*n as usize),
-                    LiteralInstance::I32(n) => (*n > 0).then_some(*n as usize),
-                    LiteralInstance::U32(n) => (*n > 0).then_some(*n as usize),
+                let n = match n {
+                    LiteralInstance::AbstractInt(n) => (n > 0).then_some(n as usize),
+                    LiteralInstance::I32(n) => (n > 0).then_some(n as usize),
+                    LiteralInstance::U32(n) => (n > 0).then_some(n as usize),
                     _ => None,
                 }
                 .ok_or_else(|| {
@@ -339,18 +336,172 @@ impl ArrayTemplate {
                         "the array element count must evaluate to a `u32` or a `i32` greater than `0`",
                     )
                 })?;
-                Ok(ArrayTemplate {
-                    n: count,
-                    ty: ty.clone(),
-                })
+                Ok(ArrayTemplate { n, ty })
             }
             _ => Err(E::TemplateArgs("array")),
         }
     }
-}
-impl Ty for ArrayTemplate {
-    fn ty(&self) -> Type {
+    pub fn ty(&self) -> Type {
         Type::Array(self.n, Box::new(self.ty.clone()))
+    }
+}
+
+pub struct VecTemplate {
+    pub ty: Type,
+}
+impl VecTemplate {
+    pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<VecTemplate, E> {
+        let tplt = tplt
+            .iter()
+            .map(|arg| arg.eval_value(ctx))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut it = tplt.into_iter();
+        match (it.next(), it.next()) {
+            (Some(Instance::Type(ty)), None) => {
+                if !ty.is_scalar() || ty.is_abstract() {
+                    return Err(EvalError::Builtin(
+                        "vector template type must be a concrete scalar type",
+                    ));
+                }
+                Ok(VecTemplate { ty })
+            }
+            _ => Err(E::TemplateArgs("vector")),
+        }
+    }
+    pub fn ty(&self, n: u8) -> Type {
+        Type::Vec(n, self.ty.clone().into())
+    }
+}
+
+pub struct MatTemplate {
+    pub ty: Type,
+}
+
+impl MatTemplate {
+    pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<MatTemplate, E> {
+        let tplt = tplt
+            .iter()
+            .map(|arg| arg.eval_value(ctx))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut it = tplt.into_iter();
+        match (it.next(), it.next()) {
+            (Some(Instance::Type(ty)), None) => {
+                if !ty.is_scalar() || ty.is_abstract() {
+                    return Err(EvalError::Builtin(
+                        "matrix template type must be a concrete scalar type",
+                    ));
+                }
+                Ok(MatTemplate { ty })
+            }
+            _ => Err(E::TemplateArgs("matrix")),
+        }
+    }
+
+    pub fn ty(&self, c: u8, r: u8) -> Type {
+        Type::Mat(c, r, self.ty.clone().into())
+    }
+}
+
+pub struct PtrTemplate {
+    pub space: AddressSpace,
+    pub ty: Type,
+    pub access: AccessMode,
+}
+impl PtrTemplate {
+    pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<PtrTemplate, E> {
+        let mut it = tplt.iter().map(|t| t.expression.node());
+        match (it.next(), it.next(), it.next(), it.next()) {
+            (
+                Some(Expression::TypeOrIdentifier(TypeExpression {
+                    name: e1,
+                    template_args: None,
+                })),
+                Some(Expression::TypeOrIdentifier(e2)),
+                e3,
+                None,
+            ) => {
+                let mut space = e1
+                    .parse()
+                    .map_err(|()| EvalError::Builtin("invalid pointer storage space"))?;
+                let ty = e2.eval_ty(ctx)?;
+                if !ty.is_storable() {
+                    return Err(EvalError::Builtin("pointer type must be storable"));
+                }
+                let access = if let Some(e3) = e3 {
+                    match e3 {
+                        Expression::TypeOrIdentifier(TypeExpression {
+                            name,
+                            template_args: None,
+                        }) => Some(
+                            name.parse()
+                                .map_err(|()| EvalError::Builtin("invalid pointer access mode"))?,
+                        ),
+                        _ => Err(EvalError::Builtin("invalid pointer access mode"))?,
+                    }
+                } else {
+                    None
+                };
+                // selecting the default access mode per address space.
+                // reference: https://www.w3.org/TR/WGSL/#address-space
+                let access = match (&mut space, access) {
+                    (AddressSpace::Function, Some(access))
+                    | (AddressSpace::Private, Some(access))
+                    | (AddressSpace::Workgroup, Some(access)) => access,
+                    (AddressSpace::Function, None)
+                    | (AddressSpace::Private, None)
+                    | (AddressSpace::Workgroup, None) => AccessMode::ReadWrite,
+                    (AddressSpace::Uniform, Some(AccessMode::Read) | None) => AccessMode::Read,
+                    (AddressSpace::Uniform, _) => {
+                        return Err(EvalError::Builtin(
+                            "pointer in uniform address space must have a `read` access mode",
+                        ))
+                    }
+                    (AddressSpace::Storage(a1), Some(a2)) => {
+                        *a1 = Some(a2);
+                        a2
+                    }
+                    (AddressSpace::Storage(None), None) => AccessMode::Read,
+                    (AddressSpace::Storage(_), _) => unreachable!(),
+                    (AddressSpace::Handle, _) => {
+                        unreachable!("handle address space cannot be spelled")
+                    }
+                };
+                Ok(PtrTemplate { space, ty, access })
+            }
+            _ => Err(E::TemplateArgs("pointer")),
+        }
+    }
+
+    pub fn ty(&self) -> Type {
+        Type::Ptr(self.space, self.ty.clone().into())
+    }
+}
+
+pub struct BitcastTemplate {
+    pub ty: Type,
+}
+impl BitcastTemplate {
+    pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<BitcastTemplate, E> {
+        let tplt = tplt
+            .iter()
+            .map(|arg| arg.eval_value(ctx))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut it = tplt.into_iter();
+        match (it.next(), it.next()) {
+            (Some(Instance::Type(ty)), None) => {
+                let inner = ty.inner_ty();
+                if !inner.is_scalar()
+                    || inner.is_abstract()
+                    || !(ty.is_scalar() || matches!(ty, Type::Vec(_, _)))
+                {
+                    return Err(EvalError::Builtin(
+                        "bitcast template type must be a concrete scalar or concrete scalar vector",
+                    ));
+                }
+                Ok(BitcastTemplate { ty: ty.clone() })
+            }
+            _ => Err(E::TemplateArgs("bitcast")),
+        }
     }
 }
 
@@ -483,29 +634,6 @@ fn call_f16_1(a1: &Instance) -> Result<Instance, E> {
     }
 }
 
-pub struct VecTemplate {
-    pub ty: Type,
-}
-impl VecTemplate {
-    pub fn parse(tplt: &[Instance]) -> Result<VecTemplate, E> {
-        match tplt {
-            [Instance::Type(ty)] => {
-                if !ty.is_scalar() || ty.is_abstract() {
-                    return Err(EvalError::Builtin(
-                        "vector template type must be a concrete scalar type",
-                    ));
-                }
-                Ok(VecTemplate { ty: ty.clone() })
-            }
-            _ => Err(E::TemplateArgs("vector")),
-        }
-    }
-
-    pub fn ty(&self, n: u8) -> Type {
-        Type::Vec(n, self.ty.clone().into())
-    }
-}
-
 // TODO: constructor that takes another vec
 fn call_vec_t(n: usize, tplt: VecTemplate, args: &[Instance]) -> Result<Instance, E> {
     if args.len() != n {
@@ -550,7 +678,7 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
 // -------
 // reference: https://www.w3.org/TR/WGSL/#bit-reinterp-builtin-functions
 
-fn call_bitcast_t(_t1: &Instance, _a1: &Instance) -> Result<Instance, E> {
+fn call_bitcast_t(_tplt: BitcastTemplate, _a1: &Instance) -> Result<Instance, E> {
     Err(E::NotImpl("bitcast".to_string()))
 }
 
