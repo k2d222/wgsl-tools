@@ -138,7 +138,7 @@ impl StructInstance {
 }
 
 impl ArrayInstance {
-    /// zero-value initialize a struct instance.
+    /// zero-value initialize an array instance.
     pub fn zero_value(n: usize, ty: &Type, ctx: &mut Context) -> Result<Self, E> {
         let zero = Instance::zero_value(ty, ctx)?;
         let comps = (0..n).map(|_| zero.clone()).collect_vec();
@@ -147,7 +147,7 @@ impl ArrayInstance {
 }
 
 impl VecInstance {
-    /// zero-value initialize a struct instance.
+    /// zero-value initialize a vec instance.
     pub fn zero_value(n: u8, ty: &Type) -> Result<Self, E> {
         let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
         let comps = (0..n).map(|_| zero.clone()).collect_vec();
@@ -156,7 +156,7 @@ impl VecInstance {
 }
 
 impl MatInstance {
-    /// zero-value initialize a struct instance.
+    /// zero-value initialize a mat instance.
     pub fn zero_value(c: u8, r: u8, ty: &Type) -> Result<Self, E> {
         let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
         let zero_col = Instance::Vec(VecInstance::new((0..r).map(|_| zero.clone()).collect_vec()));
@@ -361,7 +361,7 @@ impl VecTemplate {
             (Some(Instance::Type(ty)), None) => {
                 if !ty.is_scalar() || ty.is_abstract() {
                     return Err(EvalError::Builtin(
-                        "vector template type must be a concrete scalar type",
+                        "vector template type must be a concrete scalar",
                     ));
                 }
                 Ok(VecTemplate { ty })
@@ -389,7 +389,7 @@ impl MatTemplate {
             (Some(Instance::Type(ty)), None) => {
                 if !ty.is_scalar() || ty.is_abstract() {
                     return Err(EvalError::Builtin(
-                        "matrix template type must be a concrete scalar type",
+                        "matrix template type must be a concrete scalar",
                     ));
                 }
                 Ok(MatTemplate { ty })
@@ -537,9 +537,7 @@ fn call_bool_1(a1: &Instance) -> Result<Instance, E> {
             let zero = LiteralInstance::zero_value(&l.ty())?;
             Ok(LiteralInstance::Bool(*l != zero).into())
         }
-        _ => Err(E::Builtin(
-            "bool constructor expects a scalar type as argument",
-        )),
+        _ => Err(E::Builtin("bool constructor expects a scalar argument")),
     }
 }
 
@@ -559,9 +557,7 @@ fn call_i32_1(a1: &Instance) -> Result<Instance, E> {
             .ok_or_else(|| E::ConvOverflow(*l, Type::I32))?;
             Ok(LiteralInstance::I32(val).into())
         }
-        _ => Err(E::Builtin(
-            "i32 constructor expects a scalar type as argument",
-        )),
+        _ => Err(E::Builtin("i32 constructor expects a scalar argument")),
     }
 }
 
@@ -581,9 +577,7 @@ fn call_u32_1(a1: &Instance) -> Result<Instance, E> {
             .ok_or_else(|| E::ConvOverflow(*l, Type::U32))?;
             Ok(LiteralInstance::U32(val).into())
         }
-        _ => Err(E::Builtin(
-            "u32 constructor expects a scalar type as argument",
-        )),
+        _ => Err(E::Builtin("u32 constructor expects a scalar argument")),
     }
 }
 
@@ -605,9 +599,7 @@ fn call_f32_1(a1: &Instance) -> Result<Instance, E> {
             .ok_or_else(|| E::ConvOverflow(*l, Type::F32))?;
             Ok(LiteralInstance::F32(val).into())
         }
-        _ => Err(E::Builtin(
-            "f32 constructor expects a scalar type as argument",
-        )),
+        _ => Err(E::Builtin("f32 constructor expects a scalar argument")),
     }
 }
 
@@ -629,9 +621,7 @@ fn call_f16_1(a1: &Instance) -> Result<Instance, E> {
             .ok_or_else(|| E::ConvOverflow(*l, Type::F16))?;
             Ok(LiteralInstance::F16(val).into())
         }
-        _ => Err(E::Builtin(
-            "f16 constructor expects a scalar type as argument",
-        )),
+        _ => Err(E::Builtin("f16 constructor expects a scalar argument")),
     }
 }
 
@@ -660,6 +650,10 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
 
     let comps =
         convert_all(&args).ok_or_else(|| E::Builtin("vector components are not compatible"))?;
+
+    if !comps[0].ty().is_scalar() {
+        return Err(E::Builtin("vec constructor expects scalar arguments"));
+    }
 
     Ok(VecInstance::new(comps).into())
 }

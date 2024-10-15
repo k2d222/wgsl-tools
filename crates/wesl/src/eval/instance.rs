@@ -84,14 +84,14 @@ impl Instance {
                 }
                 _ => Err(E::Component(ty, m.clone())),
             },
-            MemView::Index(i, v) => match self {
+            MemView::Index(i, view) => match self {
                 Instance::Array(a) => {
                     let n = a.n();
                     let inst = a
                         .components
                         .get_mut(*i)
                         .ok_or_else(|| E::OutOfBounds(*i, ty, n))?;
-                    inst.view_mut(v)
+                    inst.view_mut(view)
                 }
                 Instance::Vec(v) => {
                     let n = v.n();
@@ -199,7 +199,7 @@ impl VecInstance {
     pub(crate) fn new(components: Vec<Instance>) -> Self {
         assert!((2..=4).contains(&components.len()));
         let components = ArrayInstance::new(components);
-        assert!(components.ty().is_scalar());
+        assert!(components.inner_ty().is_scalar());
         Self { components }
     }
     pub fn n(&self) -> usize {
@@ -388,7 +388,7 @@ impl RefInstance {
         let mut view = self.view.clone();
         view.append_member(comp);
         let inst = self.ptr.borrow();
-        let inst = inst.view(&self.view)?;
+        let inst = inst.view(&view)?;
         Ok(Self {
             ty: inst.ty(),
             space: self.space,
@@ -405,7 +405,7 @@ impl RefInstance {
         let mut view = self.view.clone();
         view.append_index(index);
         let inst = self.ptr.borrow();
-        let inst = inst.view(&self.view)?;
+        let inst = inst.view(&view)?;
         Ok(Self {
             ty: inst.ty(),
             space: self.space,

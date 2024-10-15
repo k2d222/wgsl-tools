@@ -43,9 +43,9 @@
 // @group(0) @binding(0)
 // var<storage, read> foo: u32;
 
-@const fn arrayReferenceTest() -> i32 {
-    var nums = array<i32, 4>(0, 10, 20, 30);
-    var ref = &nums[1];
-    *ref = 15;
-    return nums[1];
+@const fn arrayReferenceTest() -> vec3f {
+    var v: vec2f;
+    var e1 = vec3(v, v, v);
+    e1.x = -1;
+    return e1;
 }
