@@ -76,7 +76,6 @@ impl ToExpr for ArrayInstance {
                 template_args: None,
             },
             arguments: self
-                .components
                 .iter()
                 .map(|c| c.to_expr(ctx).map(Spanned::from))
                 .collect::<Result<Vec<_>, _>>()?,

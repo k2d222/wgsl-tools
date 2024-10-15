@@ -51,7 +51,7 @@ impl Display for StructInstance {
 
 impl Display for ArrayInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let comps = self.components.iter().format(", ");
+        let comps = self.iter().format(", ");
         write!(f, "array({comps})")
     }
 }

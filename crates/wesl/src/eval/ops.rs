@@ -2,10 +2,7 @@ use std::iter::zip;
 
 use crate::EvalError;
 
-use super::{
-    convert, convert_inner, Instance, LiteralInstance, MatInner, MatInstance, Ty, VecInner,
-    VecInstance,
-};
+use super::{convert, convert_inner, Instance, LiteralInstance, MatInstance, Ty, VecInstance};
 
 use wgsl_parse::syntax::*;
 
@@ -37,65 +34,17 @@ pub trait Compwise: Clone + Sized {
     }
 }
 
-impl<const N: usize> Compwise for VecInner<N> {
-    fn compwise_unary_mut<F>(&mut self, f: F) -> Result<(), E>
-    where
-        F: Fn(&LiteralInstance) -> Result<LiteralInstance, E>,
-    {
-        self.iter_mut()
-            .map(|c| {
-                *c = f(c)?;
-                Ok(())
-            })
-            .collect::<Result<_, _>>()
-    }
-
-    fn compwise_binary_mut<F>(&mut self, rhs: &Self, f: F) -> Result<(), E>
-    where
-        F: Fn(&LiteralInstance, &LiteralInstance) -> Result<LiteralInstance, E>,
-    {
-        zip(self.iter_mut(), rhs.iter())
-            .map(|(a, b)| {
-                *a = f(a, b)?;
-                Ok(())
-            })
-            .collect::<Result<_, _>>()
-    }
-}
-
 impl Compwise for VecInstance {
     fn compwise_unary_mut<F>(&mut self, f: F) -> Result<(), E>
     where
         F: Fn(&LiteralInstance) -> Result<LiteralInstance, E>,
     {
-        match self {
-            VecInstance::Vec2(v) => v.compwise_unary_mut(f),
-            VecInstance::Vec3(v) => v.compwise_unary_mut(f),
-            VecInstance::Vec4(v) => v.compwise_unary_mut(f),
-        }
-    }
-
-    fn compwise_binary_mut<F>(&mut self, rhs: &Self, f: F) -> Result<(), E>
-    where
-        F: Fn(&LiteralInstance, &LiteralInstance) -> Result<LiteralInstance, E>,
-    {
-        match (self, rhs) {
-            (VecInstance::Vec2(lhs), VecInstance::Vec2(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (VecInstance::Vec3(lhs), VecInstance::Vec3(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (VecInstance::Vec4(lhs), VecInstance::Vec4(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (lhs @ _, _) => Err(E::CompwiseBinary(lhs.ty(), rhs.ty())),
-        }
-    }
-}
-
-impl<const C: usize, const R: usize> Compwise for MatInner<C, R> {
-    fn compwise_unary_mut<F>(&mut self, f: F) -> Result<(), E>
-    where
-        F: Fn(&LiteralInstance) -> Result<LiteralInstance, E>,
-    {
         self.iter_mut()
             .map(|c| {
-                *c = f(c)?;
+                match c {
+                    Instance::Literal(c) => *c = f(c)?,
+                    _ => unreachable!("vec must contain literal instances"),
+                };
                 Ok(())
             })
             .collect::<Result<_, _>>()
@@ -105,9 +54,15 @@ impl<const C: usize, const R: usize> Compwise for MatInner<C, R> {
     where
         F: Fn(&LiteralInstance, &LiteralInstance) -> Result<LiteralInstance, E>,
     {
+        if self.n() != rhs.n() {
+            return Err(E::CompwiseBinary(self.ty(), rhs.ty()));
+        }
         zip(self.iter_mut(), rhs.iter())
             .map(|(a, b)| {
-                *a = f(a, b)?;
+                match (a, b) {
+                    (Instance::Literal(a), Instance::Literal(b)) => *a = f(a, b)?,
+                    _ => unreachable!("vec must contain literal instances"),
+                };
                 Ok(())
             })
             .collect::<Result<_, _>>()
@@ -119,35 +74,38 @@ impl Compwise for MatInstance {
     where
         F: Fn(&LiteralInstance) -> Result<LiteralInstance, E>,
     {
-        match self {
-            MatInstance::Mat2x2(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat2x3(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat2x4(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat3x2(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat3x3(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat3x4(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat4x2(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat4x3(m) => m.compwise_unary_mut(f),
-            MatInstance::Mat4x4(m) => m.compwise_unary_mut(f),
-        }
+        self.iter_mut()
+            .flat_map(|col| col.unwrap_vec_mut().iter_mut())
+            .map(|c| {
+                match c {
+                    Instance::Literal(c) => *c = f(c)?,
+                    _ => unreachable!("mat must contain literal instances"),
+                };
+                Ok(())
+            })
+            .collect::<Result<_, _>>()
     }
 
     fn compwise_binary_mut<F>(&mut self, rhs: &Self, f: F) -> Result<(), E>
     where
         F: Fn(&LiteralInstance, &LiteralInstance) -> Result<LiteralInstance, E>,
     {
-        match (self, rhs) {
-            (MatInstance::Mat2x2(lhs), MatInstance::Mat2x2(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat2x3(lhs), MatInstance::Mat2x3(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat2x4(lhs), MatInstance::Mat2x4(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat3x2(lhs), MatInstance::Mat3x2(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat3x3(lhs), MatInstance::Mat3x3(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat3x4(lhs), MatInstance::Mat3x4(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat4x2(lhs), MatInstance::Mat4x2(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat4x3(lhs), MatInstance::Mat4x3(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (MatInstance::Mat4x4(lhs), MatInstance::Mat4x4(rhs)) => lhs.compwise_binary_mut(rhs, f),
-            (lhs @ _, _) => Err(E::CompwiseBinary(lhs.ty(), rhs.ty())),
+        if self.c() != rhs.c() || self.r() != rhs.r() {
+            return Err(E::CompwiseBinary(self.ty(), rhs.ty()));
         }
+        zip(
+            self.iter_mut()
+                .flat_map(|col| col.unwrap_vec_mut().iter_mut()),
+            rhs.iter().flat_map(|col| col.unwrap_vec_ref().iter()),
+        )
+        .map(|(a, b)| {
+            match (a, b) {
+                (Instance::Literal(a), Instance::Literal(b)) => *a = f(a, b)?,
+                _ => unreachable!("mat must contain literal instances"),
+            };
+            Ok(())
+        })
+        .collect::<Result<_, _>>()
     }
 }
 
@@ -400,30 +358,6 @@ impl LiteralInstance {
     }
 }
 
-impl<const N: usize> VecInner<N> {
-    fn op_add(&self, rhs: &Self) -> Result<Self, E> {
-        let (lhs, rhs) = convert(self, rhs)
-            .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_add(&r))
-    }
-    fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<VecInner<N>, E> {
-        let (vec, sca) = convert_inner(self, rhs)
-            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
-        vec.compwise_unary(|k| k.op_mul(&sca))
-    }
-    fn op_mul_mat<const C: usize>(&self, rhs: &MatInner<C, N>) -> Result<VecInner<C>, E> {
-        // TODO must be float
-        let (vec, mat) = convert_inner(self, rhs)
-            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
-        let mat = mat.transpose();
-
-        Ok(zip(&vec.components, &mat.components)
-            .map(|(s, v)| v.op_mul_sca(s))
-            .reduce(|a, b| a?.op_add(&b?))
-            .unwrap()?)
-    }
-}
-
 impl VecInstance {
     pub fn op_neg(&self) -> Result<Self, E> {
         self.compwise_unary(|c| c.op_neg())
@@ -479,197 +413,66 @@ impl VecInstance {
         lhs.compwise_unary(|l| l.op_rem(&rhs)).map(Into::into)
     }
     pub fn op_mul_mat(&self, rhs: &MatInstance) -> Result<Self, E> {
-        match (self, rhs) {
-            (Self::Vec2(lhs), MatInstance::Mat2x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec2),
-            (Self::Vec2(lhs), MatInstance::Mat3x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec3),
-            (Self::Vec2(lhs), MatInstance::Mat4x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec4),
-            (Self::Vec3(lhs), MatInstance::Mat2x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec2),
-            (Self::Vec3(lhs), MatInstance::Mat3x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec3),
-            (Self::Vec3(lhs), MatInstance::Mat4x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec4),
-            (Self::Vec4(lhs), MatInstance::Mat2x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec2),
-            (Self::Vec4(lhs), MatInstance::Mat3x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec3),
-            (Self::Vec4(lhs), MatInstance::Mat4x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Vec4),
-            _ => Err(E::Binary(
-                BinaryOperator::Multiplication,
-                self.ty(),
-                rhs.ty(),
-            )),
-        }
+        // TODO must be float
+        let (vec, mat) = convert_inner(self, rhs)
+            .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
+        let mat = mat.transpose();
+
+        Ok(zip(vec.iter(), mat.iter())
+            .map(|(s, v)| v.unwrap_vec_ref().op_mul_sca(s.unwrap_literal_ref()))
+            .reduce(|a, b| a?.op_add(&b?))
+            .unwrap()?)
     }
 }
 
-impl<const C: usize, const R: usize> MatInner<C, R> {
-    pub fn op_add_mat(&self, rhs: &Self) -> Result<Self, E> {
+impl MatInstance {
+    pub fn op_add(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_add(&r))
     }
 
-    pub fn op_sub_mat(&self, rhs: &Self) -> Result<Self, E> {
+    pub fn op_sub(&self, rhs: &Self) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
         lhs.compwise_binary(&rhs, |l, r| l.op_sub(&r))
     }
 
-    pub fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<MatInner<C, R>, E> {
+    pub fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<MatInstance, E> {
         // TODO must be float
         let (lhs, rhs) = convert_inner(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         lhs.compwise_unary(|l| l.op_mul(&rhs))
     }
 
-    pub fn op_mul_vec(&self, rhs: &VecInner<C>) -> Result<VecInner<R>, E> {
+    pub fn op_mul_vec(&self, rhs: &VecInstance) -> Result<VecInstance, E> {
         // TODO must be float
         let (lhs, rhs) = convert_inner(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
 
-        Ok(zip(&lhs.components, &rhs.components)
-            .map(|(l, r)| l.op_mul_sca(r))
+        Ok(zip(lhs.iter(), rhs.iter())
+            .map(|(l, r)| l.unwrap_vec_ref().op_mul_sca(r.unwrap_literal_ref()))
             .reduce(|l, r| l?.op_add(&r?))
             .unwrap()?)
     }
 
-    pub fn op_mul_mat<const K: usize>(&self, rhs: &MatInner<K, C>) -> Result<MatInner<K, R>, E> {
+    pub fn op_mul(&self, rhs: &Self) -> Result<MatInstance, E> {
         // TODO must be float
         let (lhs, rhs) = convert_inner(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         let lhs = lhs.transpose();
 
-        Ok(MatInner::new(
-            rhs.components
-                .iter()
-                .map(|l| {
-                    Ok(VecInner::new(
-                        lhs.components
-                            .iter()
-                            .map(|r| l.dot(r))
+        Ok(MatInstance::new(
+            rhs.iter()
+                .map(|col| {
+                    Ok(Instance::Vec(VecInstance::new(
+                        lhs.iter()
+                            .map(|r| col.unwrap_vec_ref().dot(r.unwrap_vec_ref()).map(Into::into))
                             .collect::<Result<_, _>>()?,
-                    ))
+                    )))
                 })
                 .collect::<Result<_, _>>()?,
         ))
-    }
-}
-
-impl MatInstance {
-    pub fn op_add(&self, rhs: &Self) -> Result<Self, E> {
-        match (self, rhs) {
-            both!(Self::Mat2x2, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat2x2),
-            both!(Self::Mat2x3, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat2x3),
-            both!(Self::Mat2x4, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat2x4),
-            both!(Self::Mat3x2, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat3x2),
-            both!(Self::Mat3x3, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat3x3),
-            both!(Self::Mat3x4, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat3x4),
-            both!(Self::Mat4x2, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat4x2),
-            both!(Self::Mat4x3, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat4x3),
-            both!(Self::Mat4x4, lhs, rhs) => lhs.op_add_mat(rhs).map(Self::Mat4x4),
-            (lhs @ _, rhs @ _) => Err(E::Binary(BinaryOperator::Addition, lhs.ty(), rhs.ty())),
-        }
-    }
-    pub fn op_sub_mat(&self, rhs: &Self) -> Result<Self, E> {
-        match (self, rhs) {
-            both!(Self::Mat2x2, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat2x2),
-            both!(Self::Mat2x3, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat2x3),
-            both!(Self::Mat2x4, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat2x4),
-            both!(Self::Mat3x2, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat3x2),
-            both!(Self::Mat3x3, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat3x3),
-            both!(Self::Mat3x4, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat3x4),
-            both!(Self::Mat4x2, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat4x2),
-            both!(Self::Mat4x3, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat4x3),
-            both!(Self::Mat4x4, lhs, rhs) => lhs.op_sub_mat(rhs).map(Self::Mat4x4),
-            (lhs @ _, rhs @ _) => Err(E::Binary(BinaryOperator::Subtraction, lhs.ty(), rhs.ty())),
-        }
-    }
-    pub fn op_mul_sca(&self, rhs: &LiteralInstance) -> Result<MatInstance, E> {
-        match self {
-            Self::Mat2x2(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat2x2),
-            Self::Mat2x3(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat2x3),
-            Self::Mat2x4(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat2x4),
-            Self::Mat3x2(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat3x2),
-            Self::Mat3x3(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat3x3),
-            Self::Mat3x4(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat3x4),
-            Self::Mat4x2(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat4x2),
-            Self::Mat4x3(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat4x3),
-            Self::Mat4x4(lhs) => lhs.op_mul_sca(rhs).map(Self::Mat4x4),
-        }
-    }
-    pub fn op_mul_vec(&self, rhs: &VecInstance) -> Result<VecInstance, E> {
-        match (self, rhs) {
-            (Self::Mat2x2(lhs), VecInstance::Vec2(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec2)
-            }
-            (Self::Mat2x3(lhs), VecInstance::Vec2(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec3)
-            }
-            (Self::Mat2x4(lhs), VecInstance::Vec2(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec4)
-            }
-
-            (Self::Mat3x2(lhs), VecInstance::Vec3(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec2)
-            }
-            (Self::Mat3x3(lhs), VecInstance::Vec3(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec3)
-            }
-            (Self::Mat3x4(lhs), VecInstance::Vec3(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec4)
-            }
-
-            (Self::Mat4x2(lhs), VecInstance::Vec4(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec2)
-            }
-            (Self::Mat4x3(lhs), VecInstance::Vec4(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec3)
-            }
-            (Self::Mat4x4(lhs), VecInstance::Vec4(rhs)) => {
-                lhs.op_mul_vec(rhs).map(VecInstance::Vec4)
-            }
-
-            (lhs @ _, rhs @ _) => Err(E::Binary(
-                BinaryOperator::Multiplication,
-                lhs.ty(),
-                rhs.ty(),
-            )),
-        }
-    }
-    pub fn op_mul(&self, rhs: &Self) -> Result<MatInstance, E> {
-        match (self, rhs) {
-            (Self::Mat2x2(lhs), Self::Mat2x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x2),
-            (Self::Mat2x2(lhs), Self::Mat3x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x2),
-            (Self::Mat2x2(lhs), Self::Mat4x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x2),
-            (Self::Mat2x3(lhs), Self::Mat2x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x3),
-            (Self::Mat2x3(lhs), Self::Mat3x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x3),
-            (Self::Mat2x3(lhs), Self::Mat4x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x3),
-            (Self::Mat2x4(lhs), Self::Mat2x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x4),
-            (Self::Mat2x4(lhs), Self::Mat3x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x4),
-            (Self::Mat2x4(lhs), Self::Mat4x2(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x4),
-
-            (Self::Mat3x2(lhs), Self::Mat2x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x2),
-            (Self::Mat3x2(lhs), Self::Mat3x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x2),
-            (Self::Mat3x2(lhs), Self::Mat4x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x2),
-            (Self::Mat3x3(lhs), Self::Mat2x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x3),
-            (Self::Mat3x3(lhs), Self::Mat3x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x3),
-            (Self::Mat3x3(lhs), Self::Mat4x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x3),
-            (Self::Mat3x4(lhs), Self::Mat2x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x4),
-            (Self::Mat3x4(lhs), Self::Mat3x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x4),
-            (Self::Mat3x4(lhs), Self::Mat4x3(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x4),
-
-            (Self::Mat4x2(lhs), Self::Mat2x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x2),
-            (Self::Mat4x2(lhs), Self::Mat3x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x2),
-            (Self::Mat4x2(lhs), Self::Mat4x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x2),
-            (Self::Mat4x3(lhs), Self::Mat2x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x3),
-            (Self::Mat4x3(lhs), Self::Mat3x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x3),
-            (Self::Mat4x3(lhs), Self::Mat4x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x3),
-            (Self::Mat4x4(lhs), Self::Mat2x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat2x4),
-            (Self::Mat4x4(lhs), Self::Mat3x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat3x4),
-            (Self::Mat4x4(lhs), Self::Mat4x4(rhs)) => lhs.op_mul_mat(rhs).map(Self::Mat4x4),
-
-            (lhs @ _, rhs @ _) => Err(E::Binary(
-                BinaryOperator::Multiplication,
-                lhs.ty(),
-                rhs.ty(),
-            )),
-        }
     }
 }
 
@@ -697,7 +500,7 @@ impl Instance {
             (Self::Vec(lhs), Self::Literal(rhs)) => lhs.op_sub_sca(rhs).map(Into::into),
             (Self::Literal(lhs), Self::Vec(rhs)) => lhs.op_sub_vec(rhs).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_sub(rhs).map(Into::into),
-            both!(Self::Mat, lhs, rhs) => lhs.op_sub_mat(rhs).map(Into::into),
+            both!(Self::Mat, lhs, rhs) => lhs.op_sub(rhs).map(Into::into),
             _ => Err(E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty())),
         }
     }

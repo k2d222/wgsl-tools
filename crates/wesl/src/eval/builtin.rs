@@ -13,8 +13,9 @@ use crate::{Context, Eval};
 
 use super::{
     conv::{convert_all, Convert},
-    ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInner, MatInstance,
-    StructInstance, SyntaxUtil, Ty, Type, VecInner, VecInstance,
+    ops::Compwise,
+    ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, StructInstance,
+    SyntaxUtil, Ty, Type, VecInstance,
 };
 
 type E = EvalError;
@@ -148,7 +149,7 @@ impl ArrayInstance {
 impl VecInstance {
     /// zero-value initialize a struct instance.
     pub fn zero_value(n: u8, ty: &Type) -> Result<Self, E> {
-        let zero = LiteralInstance::zero_value(ty)?;
+        let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
         let comps = (0..n).map(|_| zero.clone()).collect_vec();
         Ok(VecInstance::new(comps))
     }
@@ -157,8 +158,8 @@ impl VecInstance {
 impl MatInstance {
     /// zero-value initialize a struct instance.
     pub fn zero_value(c: u8, r: u8, ty: &Type) -> Result<Self, E> {
-        let zero = LiteralInstance::zero_value(ty)?;
-        let zero_col = (0..r).map(|_| zero.clone()).collect_vec();
+        let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
+        let zero_col = Instance::Vec(VecInstance::new((0..r).map(|_| zero.clone()).collect_vec()));
         let comps = (0..c).map(|_| zero_col.clone()).collect_vec();
         Ok(MatInstance::new(comps))
     }
@@ -640,19 +641,15 @@ fn call_vec_t(n: usize, tplt: VecTemplate, args: &[Instance]) -> Result<Instance
         return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
     }
 
-    let args = args
+    let comps = args
         .iter()
         .map(|a| {
             a.convert_inner_to(&tplt.ty)
                 .ok_or_else(|| E::ParamType(tplt.ty.clone(), a.ty()))
-                .and_then(|a| match a {
-                    Instance::Literal(l) => Ok(l),
-                    _ => unreachable!("vec type should be concrete scalar"),
-                })
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(VecInstance::new(args).into())
+    Ok(VecInstance::new(comps).into())
 }
 
 // TODO: constructor that takes another vec
@@ -661,16 +658,10 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
         return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
     }
 
-    let args = convert_all(&args)
-        .ok_or_else(|| E::Builtin("vector components are not compatible"))?
-        .into_iter()
-        .map(|a| match a {
-            Instance::Literal(l) => Ok(l),
-            _ => unreachable!("vec type should be concrete scalar"),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let comps =
+        convert_all(&args).ok_or_else(|| E::Builtin("vector components are not compatible"))?;
 
-    Ok(VecInstance::new(args).into())
+    Ok(VecInstance::new(comps).into())
 }
 
 // -------
@@ -1031,53 +1022,27 @@ fn call_unpack2x16float(_a1: &Instance) -> Result<Instance, E> {
     Err(E::NotImpl("unpack2x16float".to_string()))
 }
 
-impl<const N: usize> VecInner<N> {
-    pub fn dot(&self, rhs: &VecInner<N>) -> Result<LiteralInstance, E> {
-        zip(self.iter(), rhs.iter())
-            .map(|(a, b)| a.op_mul(b))
+impl VecInstance {
+    pub fn dot(&self, rhs: &VecInstance) -> Result<LiteralInstance, E> {
+        self.compwise_binary(rhs, |a, b| a.op_mul(b))?
+            .into_iter()
+            .map(|c| Ok(c.unwrap_literal()))
             .reduce(|a, b| a?.op_add(&b?))
             .unwrap()
     }
 }
 
-impl VecInstance {
-    pub fn dot(&self, rhs: &VecInstance) -> Result<LiteralInstance, E> {
-        match (self, rhs) {
-            (VecInstance::Vec2(lhs), VecInstance::Vec2(rhs)) => lhs.dot(rhs),
-            (VecInstance::Vec3(lhs), VecInstance::Vec3(rhs)) => lhs.dot(rhs),
-            (VecInstance::Vec4(lhs), VecInstance::Vec4(rhs)) => lhs.dot(rhs),
-            (lhs @ _, _) => Err(E::CompwiseBinary(lhs.ty(), rhs.ty())),
-        }
-    }
-}
-
-impl<const C: usize, const R: usize> MatInner<C, R> {
-    pub fn transpose(&self) -> MatInner<R, C> {
-        let components = (0..self.components.len())
-            .map(|i| {
-                self.components
-                    .iter()
-                    .map(|inner| inner.components[i].clone())
-                    .collect_vec()
-                    .into()
-            })
-            .collect_vec();
-        MatInner { components }
-    }
-}
-
 impl MatInstance {
     pub fn transpose(&self) -> MatInstance {
-        match self {
-            Self::Mat2x2(m) => Self::Mat2x2(m.transpose()),
-            Self::Mat2x3(m) => Self::Mat3x2(m.transpose()),
-            Self::Mat2x4(m) => Self::Mat4x2(m.transpose()),
-            Self::Mat3x2(m) => Self::Mat2x3(m.transpose()),
-            Self::Mat3x3(m) => Self::Mat3x3(m.transpose()),
-            Self::Mat3x4(m) => Self::Mat4x3(m.transpose()),
-            Self::Mat4x2(m) => Self::Mat2x4(m.transpose()),
-            Self::Mat4x3(m) => Self::Mat3x4(m.transpose()),
-            Self::Mat4x4(m) => Self::Mat4x4(m.transpose()),
-        }
+        let components = (0..self.r())
+            .map(|j| {
+                Instance::Vec(VecInstance::new(
+                    (0..self.c())
+                        .map(|i| self.get(i, j).unwrap().clone())
+                        .collect_vec(),
+                ))
+            })
+            .collect_vec();
+        MatInstance::new(components)
     }
 }

@@ -1,6 +1,6 @@
 use std::iter::zip;
 
-use crate::eval::MatInstance;
+use crate::eval::{ArrayInstance, MatInstance};
 
 use super::{
     call_builtin, AccessMode, Context, Convert, EvalError, EvalStage, EvalTy, Exec, Flow, Instance,
@@ -90,28 +90,24 @@ impl Eval for NamedComponentExpression {
                     _ => unreachable!(), // SAFETY: check_swizzle above checks it.
                 })
                 .collect_vec();
-            match indices.as_slice() {
-                [i] => {
-                    if let Some(r) = r {
-                        r.view_index(*i).map(Into::into)
-                    } else {
-                        v.get(*i)
+            if let [i] = indices.as_slice() {
+                if let Some(r) = r {
+                    r.view_index(*i).map(Instance::Ref)
+                } else {
+                    v.get(*i)
+                        .cloned()
+                        .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize))
+                }
+            } else {
+                let components = indices
+                    .into_iter()
+                    .map(|i| {
+                        v.get(i)
                             .cloned()
-                            .map(Into::into)
-                            .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize))
-                    }
-                }
-                _ => {
-                    let components = indices
-                        .iter()
-                        .map(|i| {
-                            v.get(*i)
-                                .cloned()
-                                .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize))
-                        })
-                        .collect::<Result<_, _>>()?;
-                    Ok(VecInstance::new(components).into())
-                }
+                            .ok_or_else(|| E::OutOfBounds(i, v.ty(), v.n() as usize))
+                    })
+                    .collect::<Result<_, _>>()?;
+                Ok(VecInstance::new(components).into())
             }
         }
 
@@ -141,29 +137,21 @@ impl Eval for NamedComponentExpression {
 
 impl Eval for IndexingExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        fn vec_index(v: &VecInstance, index: usize) -> Result<Instance, E> {
-            v.get(index)
-                .map(|e| Instance::Literal(e.clone()))
-                .ok_or_else(|| E::OutOfBounds(index, v.ty(), v.n() as usize))
-        }
-        fn mat_index(m: &MatInstance, index: usize) -> Result<Instance, E> {
-            m.col(index)
-                .map(Into::into)
-                .ok_or_else(|| E::OutOfBounds(index, m.ty(), m.c() as usize))
-        }
         fn index_inst(base: &Instance, index: usize) -> Result<Instance, E> {
             match base {
-                Instance::Vec(v) => vec_index(v, index),
-                Instance::Mat(m) => mat_index(m, index),
+                Instance::Vec(v) => v
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(|| E::OutOfBounds(index, v.ty(), v.n() as usize)),
+                Instance::Mat(m) => m
+                    .col(index)
+                    .cloned()
+                    .ok_or_else(|| E::OutOfBounds(index, m.ty(), m.c() as usize)),
                 Instance::Array(a) => a
                     .get(index)
                     .cloned()
                     .ok_or_else(|| E::OutOfBounds(index, a.ty(), a.n())),
-                Instance::Ref(r) => match &*r.read()? {
-                    Instance::Vec(v) => vec_index(v, index),
-                    Instance::Mat(m) => mat_index(m, index),
-                    _ => Err(E::NotIndexable(r.ty())),
-                },
+                Instance::Ref(r) => r.view_index(index).map(Instance::Ref),
                 _ => Err(E::NotIndexable(base.ty())),
             }
         }

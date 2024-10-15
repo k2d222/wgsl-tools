@@ -1,7 +1,7 @@
 use super::{
-    ArrayInstance, ArrayTemplate, Context, Eval, EvalError, Instance, LiteralInstance, MatInner,
-    MatInstance, MatTemplate, PtrInstance, PtrTemplate, RefInstance, StructInstance, SyntaxUtil,
-    VecInner, VecInstance, VecTemplate,
+    ArrayInstance, ArrayTemplate, Context, Eval, EvalError, Instance, LiteralInstance, MatInstance,
+    MatTemplate, PtrInstance, PtrTemplate, RefInstance, StructInstance, SyntaxUtil, VecInstance,
+    VecTemplate,
 };
 
 use wgsl_parse::syntax::*;
@@ -167,60 +167,28 @@ impl Ty for StructInstance {
 
 impl Ty for ArrayInstance {
     fn ty(&self) -> Type {
-        Type::Array(self.components.len(), Box::new(self.inner_ty().clone()))
+        Type::Array(self.n(), Box::new(self.inner_ty().clone()))
     }
     fn inner_ty(&self) -> Type {
-        self.components[0].ty()
-    }
-}
-
-impl<const N: usize> Ty for VecInner<N> {
-    fn ty(&self) -> Type {
-        Type::Vec(N as u8, Box::new(self.inner_ty()))
-    }
-    fn inner_ty(&self) -> Type {
-        self.components[0].ty()
+        self.get(0).unwrap().ty()
     }
 }
 
 impl Ty for VecInstance {
     fn ty(&self) -> Type {
-        Type::Vec(self.n(), Box::new(self.inner_ty()))
+        Type::Vec(self.n() as u8, Box::new(self.inner_ty()))
     }
     fn inner_ty(&self) -> Type {
-        match self {
-            VecInstance::Vec2(v) => v.inner_ty(),
-            VecInstance::Vec3(v) => v.inner_ty(),
-            VecInstance::Vec4(v) => v.inner_ty(),
-        }
-    }
-}
-
-impl<const C: usize, const R: usize> Ty for MatInner<C, R> {
-    fn ty(&self) -> Type {
-        Type::Mat(C as u8, R as u8, Box::new(self.inner_ty()))
-    }
-    fn inner_ty(&self) -> Type {
-        self.components[0].ty()
+        self.get(0).unwrap().ty()
     }
 }
 
 impl Ty for MatInstance {
     fn ty(&self) -> Type {
-        Type::Mat(self.c(), self.r(), Box::new(self.inner_ty()))
+        Type::Mat(self.c() as u8, self.r() as u8, Box::new(self.inner_ty()))
     }
     fn inner_ty(&self) -> Type {
-        match self {
-            MatInstance::Mat2x2(m) => m.inner_ty(),
-            MatInstance::Mat2x3(m) => m.inner_ty(),
-            MatInstance::Mat2x4(m) => m.inner_ty(),
-            MatInstance::Mat3x2(m) => m.inner_ty(),
-            MatInstance::Mat3x3(m) => m.inner_ty(),
-            MatInstance::Mat3x4(m) => m.inner_ty(),
-            MatInstance::Mat4x2(m) => m.inner_ty(),
-            MatInstance::Mat4x3(m) => m.inner_ty(),
-            MatInstance::Mat4x4(m) => m.inner_ty(),
-        }
+        self.get(0, 0).unwrap().ty()
     }
 }
 

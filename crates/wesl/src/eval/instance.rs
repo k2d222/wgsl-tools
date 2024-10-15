@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
@@ -6,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use derive_more::derive::From;
+use derive_more::derive::{From, Unwrap};
 use half::f16;
 use itertools::Itertools;
 use wgsl_parse::syntax::{AccessMode, AddressSpace};
@@ -17,7 +16,8 @@ use super::{EvalError, Type};
 
 type E = EvalError;
 
-#[derive(Clone, Debug, From, PartialEq)]
+#[derive(Clone, Debug, From, PartialEq, Unwrap)]
+#[unwrap(ref, ref_mut)]
 pub enum Instance {
     Literal(LiteralInstance),
     Struct(StructInstance),
@@ -52,6 +52,20 @@ impl Instance {
                         .ok_or_else(|| E::OutOfBounds(*i, a.ty(), a.n()))?;
                     inst.view(view)
                 }
+                Instance::Vec(v) => {
+                    let inst = v
+                        .components
+                        .get(*i)
+                        .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n()))?;
+                    inst.view(view)
+                }
+                Instance::Mat(m) => {
+                    let inst = m
+                        .components
+                        .get(*i)
+                        .ok_or_else(|| E::OutOfBounds(*i, m.ty(), m.c()))?;
+                    inst.view(view)
+                }
                 _ => Err(E::NotIndexable(self.ty())),
             },
         }
@@ -78,6 +92,22 @@ impl Instance {
                         .get_mut(*i)
                         .ok_or_else(|| E::OutOfBounds(*i, ty, n))?;
                     inst.view_mut(v)
+                }
+                Instance::Vec(v) => {
+                    let n = v.n();
+                    let inst = v
+                        .components
+                        .get_mut(*i)
+                        .ok_or_else(|| E::OutOfBounds(*i, ty, n))?;
+                    inst.view_mut(view)
+                }
+                Instance::Mat(m) => {
+                    let c = m.c();
+                    let inst = m
+                        .components
+                        .get_mut(*i)
+                        .ok_or_else(|| E::OutOfBounds(*i, ty, c))?;
+                    inst.view_mut(view)
                 }
                 _ => Err(E::NotIndexable(ty)),
             },
@@ -118,178 +148,88 @@ impl StructInstance {
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ArrayInstance {
-    pub components: Vec<Instance>,
+    components: Vec<Instance>,
 }
 
 impl ArrayInstance {
     ///
     /// # Panics
-    /// panics if the components are not all the same type
+    /// * if the components is empty
+    /// * if the components are not all the same type
     pub(crate) fn new(components: Vec<Instance>) -> Self {
+        assert!(!components.is_empty());
         assert!(components.iter().map(|c| c.ty()).all_equal());
         Self { components }
     }
-
     pub fn n(&self) -> usize {
         self.components.len()
     }
-
     pub fn get(&self, i: usize) -> Option<&Instance> {
         self.components.get(i)
+    }
+    pub fn get_mut(&mut self, i: usize) -> Option<&mut Instance> {
+        self.components.get_mut(i)
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &Instance> {
+        self.components.iter()
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
+        self.components.iter_mut()
+    }
+}
+impl IntoIterator for ArrayInstance {
+    type Item = Instance;
+    type IntoIter = <Vec<Instance> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.components.into_iter()
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct VecInner<const N: usize> {
-    pub components: Vec<LiteralInstance>,
-}
-
-pub type Vec2 = VecInner<2>;
-pub type Vec3 = VecInner<3>;
-pub type Vec4 = VecInner<4>;
-
-impl<const N: usize> VecInner<N> {
-    pub(crate) fn new(components: Vec<LiteralInstance>) -> Self {
-        assert!(components.len() == N);
-        Self { components }
-    }
-    pub fn new_with_value(val: &LiteralInstance) -> Self {
-        Self {
-            components: Vec::from_iter((0..N).map(|_| val.clone())),
-        }
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &LiteralInstance> {
-        self.components.iter()
-    }
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut LiteralInstance> {
-        self.components.iter_mut()
-    }
-}
-
-impl<const N: usize> From<Vec<LiteralInstance>> for VecInner<N> {
-    fn from(components: Vec<LiteralInstance>) -> Self {
-        assert!(components.len() == N);
-        Self { components }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, From)]
-pub enum VecInstance {
-    Vec2(Vec2),
-    Vec3(Vec3),
-    Vec4(Vec4),
+pub struct VecInstance {
+    components: ArrayInstance,
 }
 
 impl VecInstance {
     /// # Panics
     /// * if the components length is not [2, 3, 4]
     /// * if the components are not all the same type
-    pub(crate) fn new(components: Vec<LiteralInstance>) -> Self {
-        assert!(components.iter().map(|c| c.ty()).all_equal());
-        match components.len() {
-            2 => Self::Vec2(VecInner::new(components)),
-            3 => Self::Vec3(VecInner::new(components)),
-            4 => Self::Vec4(VecInner::new(components)),
-            _ => panic!("VecInstance must have 2, 3 or 4 commponents"),
-        }
+    /// * if the type is not a scalar
+    pub(crate) fn new(components: Vec<Instance>) -> Self {
+        assert!((2..=4).contains(&components.len()));
+        let components = ArrayInstance::new(components);
+        assert!(components.ty().is_scalar());
+        Self { components }
     }
-
-    pub fn n(&self) -> u8 {
-        match self {
-            VecInstance::Vec2(_) => 2,
-            VecInstance::Vec3(_) => 3,
-            VecInstance::Vec4(_) => 4,
-        }
+    pub fn n(&self) -> usize {
+        self.components.n()
     }
-
-    pub fn get(&self, i: usize) -> Option<&LiteralInstance> {
-        match self {
-            VecInstance::Vec2(v) => v.components.get(i),
-            VecInstance::Vec3(v) => v.components.get(i),
-            VecInstance::Vec4(v) => v.components.get(i),
-        }
+    pub fn get(&self, i: usize) -> Option<&Instance> {
+        self.components.get(i)
     }
-
-    pub fn iter(&self) -> impl Iterator<Item = &LiteralInstance> {
-        match self {
-            Self::Vec2(v) => v.components.iter(),
-            Self::Vec3(v) => v.components.iter(),
-            Self::Vec4(v) => v.components.iter(),
-        }
+    pub fn get_mut(&mut self, i: usize) -> Option<&mut Instance> {
+        self.components.get_mut(i)
     }
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut LiteralInstance> {
-        match self {
-            Self::Vec2(v) => v.components.iter_mut(),
-            Self::Vec3(v) => v.components.iter_mut(),
-            Self::Vec4(v) => v.components.iter_mut(),
-        }
+    pub fn iter(&self) -> impl Iterator<Item = &Instance> {
+        self.components.iter()
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
+        self.components.iter_mut()
     }
 }
+impl IntoIterator for VecInstance {
+    type Item = Instance;
+    type IntoIter = <ArrayInstance as IntoIterator>::IntoIter;
 
-impl From<Vec<LiteralInstance>> for VecInstance {
-    fn from(components: Vec<LiteralInstance>) -> Self {
-        match components.len() {
-            2 => Self::Vec2(VecInner { components }),
-            3 => Self::Vec2(VecInner { components }),
-            4 => Self::Vec2(VecInner { components }),
-            _ => panic!("number of VecInstance components must be 2, 3, 4"),
-        }
+    fn into_iter(self) -> Self::IntoIter {
+        self.components.into_iter()
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MatInner<const C: usize, const R: usize> {
-    pub components: Vec<VecInner<R>>,
-}
-
-pub type Mat2x2 = MatInner<2, 2>;
-pub type Mat2x3 = MatInner<2, 3>;
-pub type Mat2x4 = MatInner<2, 4>;
-pub type Mat3x2 = MatInner<3, 2>;
-pub type Mat3x3 = MatInner<3, 3>;
-pub type Mat3x4 = MatInner<3, 4>;
-pub type Mat4x2 = MatInner<4, 2>;
-pub type Mat4x3 = MatInner<4, 3>;
-pub type Mat4x4 = MatInner<4, 4>;
-
-impl<const C: usize, const R: usize> MatInner<C, R> {
-    pub(crate) fn new(components: Vec<VecInner<R>>) -> Self {
-        assert!(components.len() == C);
-        Self { components }
-    }
-    pub fn new_with_value(val: &LiteralInstance) -> Self {
-        Self {
-            components: Vec::from_iter((0..C).map(|_| VecInner::new_with_value(val))),
-        }
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &LiteralInstance> {
-        self.components.iter().flat_map(|c| c.iter())
-    }
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut LiteralInstance> {
-        self.components.iter_mut().flat_map(|c| c.iter_mut())
-    }
-}
-
-impl<const C: usize, const R: usize> From<Vec<VecInner<R>>> for MatInner<C, R> {
-    fn from(components: Vec<VecInner<R>>) -> Self {
-        assert!(components.len() == C);
-        Self { components }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum MatInstance {
-    Mat2x2(Mat2x2),
-    Mat2x3(Mat2x3),
-    Mat2x4(Mat2x4),
-    Mat3x2(Mat3x2),
-    Mat3x3(Mat3x3),
-    Mat3x4(Mat3x4),
-    Mat4x2(Mat4x2),
-    Mat4x3(Mat4x3),
-    Mat4x4(Mat4x4),
+pub struct MatInstance {
+    components: Vec<Instance>,
 }
 
 impl MatInstance {
@@ -297,123 +237,55 @@ impl MatInstance {
     /// * if the number of columns is not [2, 3, 4]
     /// * if the colums don't have the same number of rows
     /// * if the number of rows is not [2, 3, 4]
-    pub(crate) fn new(components: Vec<Vec<LiteralInstance>>) -> Self {
+    /// * if the elements don't have the same type
+    /// * if the type is not a scalar
+    pub(crate) fn new(components: Vec<Instance>) -> Self {
+        assert!((2..=4).contains(&components.len()));
         assert!(
-            components.iter().map(|c| c.len()).all_equal(),
+            components
+                .iter()
+                .map(|c| c.unwrap_vec_ref().n())
+                .all_equal(),
             "MatInstance columns must have the same number for rows"
         );
-        macro_rules! make_mat {
-            ($vec:expr, $mat:ident) => {{
-                let components = components
-                    .into_iter()
-                    .map(|c| VecInner::<$vec>::new(c))
-                    .collect_vec();
-                Self::$mat(MatInner::new(components))
-            }};
-        }
-        match components.len() {
-            2 => match components[0].len() {
-                2 => make_mat!(2, Mat2x2),
-                3 => make_mat!(3, Mat2x3),
-                4 => make_mat!(4, Mat2x4),
-                _ => panic!("number of MatInstance rows must be 2, 3 or 4"),
-            },
-            3 => match components[0].len() {
-                2 => make_mat!(2, Mat3x2),
-                3 => make_mat!(3, Mat3x3),
-                4 => make_mat!(4, Mat3x4),
-                _ => panic!("number of MatInstance rows must be 2, 3 or 4"),
-            },
-            4 => match components[0].len() {
-                2 => make_mat!(2, Mat4x2),
-                3 => make_mat!(3, Mat4x3),
-                4 => make_mat!(4, Mat4x4),
-                _ => panic!("number of MatInstance rows must be 2, 3 or 4"),
-            },
-            _ => panic!("number of MatInstance columns must be 2, 3 or 4"),
-        }
+        assert!(
+            components.iter().map(|c| c.ty()).all_equal(),
+            "MatInstance columns must have the same type"
+        );
+        Self { components }
     }
 
-    pub fn r(&self) -> u8 {
-        match self {
-            MatInstance::Mat2x2(_) => 2,
-            MatInstance::Mat2x3(_) => 3,
-            MatInstance::Mat2x4(_) => 4,
-            MatInstance::Mat3x2(_) => 2,
-            MatInstance::Mat3x3(_) => 3,
-            MatInstance::Mat3x4(_) => 4,
-            MatInstance::Mat4x2(_) => 2,
-            MatInstance::Mat4x3(_) => 3,
-            MatInstance::Mat4x4(_) => 4,
-        }
+    pub fn r(&self) -> usize {
+        self.components.get(0).unwrap().unwrap_vec_ref().n()
     }
-    pub fn c(&self) -> u8 {
-        match self {
-            MatInstance::Mat2x2(_) => 2,
-            MatInstance::Mat2x3(_) => 2,
-            MatInstance::Mat2x4(_) => 2,
-            MatInstance::Mat3x2(_) => 3,
-            MatInstance::Mat3x3(_) => 3,
-            MatInstance::Mat3x4(_) => 3,
-            MatInstance::Mat4x2(_) => 4,
-            MatInstance::Mat4x3(_) => 4,
-            MatInstance::Mat4x4(_) => 4,
-        }
+    pub fn c(&self) -> usize {
+        self.components.len()
     }
+    pub fn col(&self, i: usize) -> Option<&Instance> {
+        self.components.get(i)
+    }
+    pub fn col_mut(&mut self, i: usize) -> Option<&mut Instance> {
+        self.components.get_mut(i)
+    }
+    pub fn get(&self, i: usize, j: usize) -> Option<&Instance> {
+        self.col(i).and_then(|v| v.unwrap_vec_ref().get(j))
+    }
+    pub fn get_mut(&mut self, i: usize, j: usize) -> Option<&mut Instance> {
+        self.col_mut(i).and_then(|v| v.unwrap_vec_mut().get_mut(j))
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &Instance> {
+        self.components.iter()
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
+        self.components.iter_mut()
+    }
+}
+impl IntoIterator for MatInstance {
+    type Item = Instance;
+    type IntoIter = <Vec<Instance> as IntoIterator>::IntoIter;
 
-    pub fn col(&self, i: usize) -> Option<VecInstance> {
-        match self {
-            MatInstance::Mat2x2(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat2x3(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat2x4(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat3x2(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat3x3(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat3x4(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat4x2(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat4x3(m) => m.components.get(i).map(|c| c.clone().into()),
-            MatInstance::Mat4x4(m) => m.components.get(i).map(|c| c.clone().into()),
-        }
-    }
-
-    pub fn get(&self, i: usize, j: usize) -> Option<&LiteralInstance> {
-        match self {
-            MatInstance::Mat2x2(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat2x3(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat2x4(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat3x2(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat3x3(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat3x4(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat4x2(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat4x3(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-            MatInstance::Mat4x4(m) => m.components.get(i).and_then(|c| c.components.get(j)),
-        }
-    }
-
-    pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &LiteralInstance> + 'a> {
-        match self {
-            MatInstance::Mat2x2(m) => Box::new(m.iter()),
-            MatInstance::Mat2x3(m) => Box::new(m.iter()),
-            MatInstance::Mat2x4(m) => Box::new(m.iter()),
-            MatInstance::Mat3x2(m) => Box::new(m.iter()),
-            MatInstance::Mat3x3(m) => Box::new(m.iter()),
-            MatInstance::Mat3x4(m) => Box::new(m.iter()),
-            MatInstance::Mat4x2(m) => Box::new(m.iter()),
-            MatInstance::Mat4x3(m) => Box::new(m.iter()),
-            MatInstance::Mat4x4(m) => Box::new(m.iter()),
-        }
-    }
-    pub fn iter_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &mut LiteralInstance> + 'a> {
-        match self {
-            MatInstance::Mat2x2(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat2x3(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat2x4(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat3x2(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat3x3(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat3x4(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat4x2(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat4x3(m) => Box::new(m.iter_mut()),
-            MatInstance::Mat4x4(m) => Box::new(m.iter_mut()),
-        }
+    fn into_iter(self) -> Self::IntoIter {
+        self.components.into_iter()
     }
 }
 
@@ -508,12 +380,13 @@ impl<'a> Deref for RefViewMut<'a> {
 }
 
 impl RefInstance {
-    pub fn view_member(&self, member: String) -> Result<Self, E> {
+    /// get a reference to a struct or vec member
+    pub fn view_member(&self, comp: String) -> Result<Self, E> {
         if !self.access.is_read() {
             return Err(E::NotRead);
         }
         let mut view = self.view.clone();
-        view.append_member(member);
+        view.append_member(comp);
         let inst = self.ptr.borrow();
         let inst = inst.view(&self.view)?;
         Ok(Self {
@@ -524,6 +397,7 @@ impl RefInstance {
             ptr: self.ptr.clone(),
         })
     }
+    /// get a reference to an array, vec or mat component
     pub fn view_index(&self, index: usize) -> Result<Self, E> {
         if !self.access.is_read() {
             return Err(E::NotRead);
@@ -582,16 +456,16 @@ pub enum MemView {
 }
 
 impl MemView {
-    pub fn append_member(&mut self, m: String) {
+    pub fn append_member(&mut self, comp: String) {
         match self {
-            MemView::Whole => *self = MemView::Member(m, Box::new(MemView::Whole)),
-            MemView::Member(_, v) | MemView::Index(_, v) => v.append_member(m),
+            MemView::Whole => *self = MemView::Member(comp, Box::new(MemView::Whole)),
+            MemView::Member(_, v) | MemView::Index(_, v) => v.append_member(comp),
         }
     }
-    pub fn append_index(&mut self, i: usize) {
+    pub fn append_index(&mut self, index: usize) {
         match self {
-            MemView::Whole => *self = MemView::Index(i, Box::new(MemView::Whole)),
-            MemView::Member(_, v) | MemView::Index(_, v) => v.append_index(i),
+            MemView::Whole => *self = MemView::Index(index, Box::new(MemView::Whole)),
+            MemView::Member(_, v) | MemView::Index(_, v) => v.append_index(index),
         }
     }
 }

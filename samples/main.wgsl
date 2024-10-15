@@ -43,4 +43,9 @@
 // @group(0) @binding(0)
 // var<storage, read> foo: u32;
 
-@const fn modifyValue(p: ptr<function, i32>) { *p = 2; } @const fn main() -> i32 { var a: i32 = 1; modifyValue(&a); return a; }
+@const fn arrayReferenceTest() -> i32 {
+    var nums = array<i32, 4>(0, 10, 20, 30);
+    var ref = &nums[1];
+    *ref = 15;
+    return nums[1];
+}

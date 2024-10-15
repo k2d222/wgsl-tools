@@ -3,8 +3,8 @@ use itertools::Itertools;
 use num_traits::{FromPrimitive, ToPrimitive};
 
 use super::{
-    ArrayInstance, Instance, LiteralInstance, MatInner, MatInstance, SyntaxUtil, Ty, Type,
-    VecInner, VecInstance, PRELUDE,
+    ArrayInstance, Instance, LiteralInstance, MatInstance, SyntaxUtil, Ty, Type, VecInstance,
+    PRELUDE,
 };
 
 pub trait Convert: Sized + Clone + Ty {
@@ -99,7 +99,6 @@ impl Convert for ArrayInstance {
     }
     fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         let components = self
-            .components
             .iter()
             .map(|c| c.convert_to(ty))
             .collect::<Option<Vec<_>>>()?;
@@ -107,10 +106,10 @@ impl Convert for ArrayInstance {
     }
 }
 
-impl<const N: usize> Convert for VecInner<N> {
+impl Convert for VecInstance {
     fn convert_to(&self, ty: &Type) -> Option<Self> {
         if let Type::Vec(n, c_ty) = ty {
-            if *n == N as u8 {
+            if *n as usize == self.n() {
                 self.convert_inner_to(c_ty)
             } else {
                 None
@@ -121,79 +120,31 @@ impl<const N: usize> Convert for VecInner<N> {
     }
     fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         let components = self
-            .components
             .iter()
             .map(|c| c.convert_to(ty))
             .collect::<Option<Vec<_>>>()?;
-        Some(VecInner::new(components))
-    }
-}
-
-impl Convert for VecInstance {
-    fn convert_to(&self, ty: &Type) -> Option<Self> {
-        match self {
-            Self::Vec2(v) => Some(Self::Vec2(v.convert_to(ty)?)),
-            Self::Vec3(v) => Some(Self::Vec3(v.convert_to(ty)?)),
-            Self::Vec4(v) => Some(Self::Vec4(v.convert_to(ty)?)),
-        }
-    }
-    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
-        match self {
-            Self::Vec2(v) => Some(Self::Vec2(v.convert_inner_to(ty)?)),
-            Self::Vec3(v) => Some(Self::Vec3(v.convert_inner_to(ty)?)),
-            Self::Vec4(v) => Some(Self::Vec4(v.convert_inner_to(ty)?)),
-        }
-    }
-}
-
-impl<const C: usize, const R: usize> Convert for MatInner<C, R> {
-    fn convert_to(&self, ty: &Type) -> Option<Self> {
-        if let Type::Mat(c, r, c_ty) = ty {
-            if *c == C as u8 && *r == R as u8 {
-                self.convert_inner_to(c_ty)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
-        let components = self
-            .components
-            .iter()
-            .map(|c| c.convert_inner_to(ty))
-            .collect::<Option<Vec<_>>>()?;
-        Some(MatInner::new(components))
+        Some(VecInstance::new(components))
     }
 }
 
 impl Convert for MatInstance {
     fn convert_to(&self, ty: &Type) -> Option<Self> {
-        match self {
-            Self::Mat2x2(m) => Some(Self::Mat2x2(m.convert_to(ty)?)),
-            Self::Mat2x3(m) => Some(Self::Mat2x3(m.convert_to(ty)?)),
-            Self::Mat2x4(m) => Some(Self::Mat2x4(m.convert_to(ty)?)),
-            Self::Mat3x2(m) => Some(Self::Mat3x2(m.convert_to(ty)?)),
-            Self::Mat3x3(m) => Some(Self::Mat3x3(m.convert_to(ty)?)),
-            Self::Mat3x4(m) => Some(Self::Mat3x4(m.convert_to(ty)?)),
-            Self::Mat4x2(m) => Some(Self::Mat4x2(m.convert_to(ty)?)),
-            Self::Mat4x3(m) => Some(Self::Mat4x3(m.convert_to(ty)?)),
-            Self::Mat4x4(m) => Some(Self::Mat4x4(m.convert_to(ty)?)),
+        if let Type::Mat(c, r, c_ty) = ty {
+            if *c as usize == self.c() && *r as usize == self.r() {
+                self.convert_inner_to(c_ty)
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
     fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
-        match self {
-            Self::Mat2x2(m) => Some(Self::Mat2x2(m.convert_inner_to(ty)?)),
-            Self::Mat2x3(m) => Some(Self::Mat2x3(m.convert_inner_to(ty)?)),
-            Self::Mat2x4(m) => Some(Self::Mat2x4(m.convert_inner_to(ty)?)),
-            Self::Mat3x2(m) => Some(Self::Mat3x2(m.convert_inner_to(ty)?)),
-            Self::Mat3x3(m) => Some(Self::Mat3x3(m.convert_inner_to(ty)?)),
-            Self::Mat3x4(m) => Some(Self::Mat3x4(m.convert_inner_to(ty)?)),
-            Self::Mat4x2(m) => Some(Self::Mat4x2(m.convert_inner_to(ty)?)),
-            Self::Mat4x3(m) => Some(Self::Mat4x3(m.convert_inner_to(ty)?)),
-            Self::Mat4x4(m) => Some(Self::Mat4x4(m.convert_inner_to(ty)?)),
-        }
+        let components = self
+            .iter()
+            .map(|c| c.convert_inner_to(ty))
+            .collect::<Option<Vec<_>>>()?;
+        Some(MatInstance::new(components))
     }
 }
 
