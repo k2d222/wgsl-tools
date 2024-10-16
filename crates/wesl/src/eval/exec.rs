@@ -507,7 +507,7 @@ impl Exec for Declaration {
                     let ty = ty.eval_ty(ctx)?;
                     inst = inst
                         .convert_to(&ty)
-                        .ok_or_else(|| E::ConversionFailure(inst.ty(), ty))?;
+                        .ok_or_else(|| E::Conversion(inst.ty(), ty))?;
                 }
 
                 ctx.scope.add_val(self.name.clone(), inst, EvalStage::Const);
@@ -524,10 +524,10 @@ impl Exec for Declaration {
                 let inst = if let Some(ty) = &self.ty {
                     let ty = ty.eval_ty(ctx)?;
                     inst.convert_to(&ty)
-                        .ok_or_else(|| E::ConversionFailure(inst.ty(), ty))?
+                        .ok_or_else(|| E::Conversion(inst.ty(), ty))?
                 } else {
                     inst.concretize()
-                        .ok_or_else(|| E::ConversionFailure(inst.ty(), inst.ty().concretize()))?
+                        .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
                 };
 
                 ctx.scope.add_val(self.name.clone(), inst, ctx.stage);
@@ -543,7 +543,7 @@ impl Exec for Declaration {
                     (None, Some(init)) => {
                         let inst = init.eval(ctx)?;
                         inst.concretize()
-                            .ok_or_else(|| E::ConversionFailure(inst.ty(), inst.ty().concretize()))
+                            .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))
                     }
                     (Some(ty), None) => {
                         let ty = ty.eval_ty(ctx)?;
@@ -553,7 +553,7 @@ impl Exec for Declaration {
                         let inst = init.eval(ctx)?;
                         let ty = ty.eval_ty(ctx)?;
                         inst.convert_to(&ty)
-                            .ok_or_else(|| E::ConversionFailure(inst.ty(), ty))
+                            .ok_or_else(|| E::Conversion(inst.ty(), ty))
                     }
                 }?;
 

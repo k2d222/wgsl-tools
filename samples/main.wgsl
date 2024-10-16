@@ -1,1 +1,6 @@
-var foo = -2147483648i;
+
+@const
+fn main() {
+    let v = vec3(10);
+    let foo = vec3(v);
+}

@@ -37,7 +37,7 @@ pub enum EvalError {
 
     // conversions
     #[error("cannot convert from `{0}` to `{1}`")]
-    ConversionFailure(Type, Type),
+    Conversion(Type, Type),
     #[error("overflow while converting `{0}` to `{1}`")]
     ConvOverflow(LiteralInstance, Type),
 

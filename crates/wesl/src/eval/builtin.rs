@@ -15,7 +15,7 @@ use super::{
     conv::{convert_all, Convert},
     ops::Compwise,
     ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, StructInstance,
-    SyntaxUtil, Ty, Type, VecInstance,
+    SyntaxUtil, ToExpr, Ty, Type, VecInstance,
 };
 
 type E = EvalError;
@@ -358,14 +358,15 @@ impl VecTemplate {
             .collect::<Result<Vec<_>, _>>()?;
         let mut it = tplt.into_iter();
         match (it.next(), it.next()) {
-            (Some(Instance::Type(ty)), None) => {
-                if !ty.is_scalar() || ty.is_abstract() {
-                    return Err(EvalError::Builtin(
-                        "vector template type must be a concrete scalar",
-                    ));
+            (Some(Instance::Type(ty)), None) => match &ty {
+                Type::Vec(_, inner_ty) if inner_ty.is_scalar() && inner_ty.is_concrete() => {
+                    Ok(VecTemplate { ty })
                 }
-                Ok(VecTemplate { ty })
-            }
+                _ if ty.is_scalar() && ty.is_concrete() => Ok(VecTemplate { ty }),
+                _ => Err(EvalError::Builtin(
+                    "vector template type must be a concrete scalar",
+                )),
+            },
             _ => Err(E::TemplateArgs("vector")),
         }
     }
@@ -625,37 +626,87 @@ fn call_f16_1(a1: &Instance) -> Result<Instance, E> {
     }
 }
 
-// TODO: constructor that takes another vec
 fn call_vec_t(n: usize, tplt: VecTemplate, args: &[Instance]) -> Result<Instance, E> {
-    if args.len() != n {
-        return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
+    // overload 1: vec init from single scalar value
+    if let [Instance::Literal(l)] = args {
+        let val = l
+            .convert_to(&tplt.ty)
+            .map(Instance::Literal)
+            .ok_or_else(|| E::ParamType(tplt.ty.clone(), l.ty()))?;
+        let comps = (0..n).map(|_| val.clone()).collect_vec();
+        Ok(VecInstance::new(comps).into())
     }
+    // overload 2: vec conversion constructor
+    else if let [Instance::Vec(v)] = args {
+        if v.n() != n {
+            return Err(E::Conversion(v.ty(), tplt.ty(n as u8)));
+        }
 
-    let comps = args
-        .iter()
-        .map(|a| {
-            a.convert_inner_to(&tplt.ty)
-                .ok_or_else(|| E::ParamType(tplt.ty.clone(), a.ty()))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+        // this is a bit hacky
+        let inner_ty = tplt.ty(n as u8).inner_ty();
 
-    Ok(VecInstance::new(comps).into())
+        let comps = args
+            .iter()
+            .map(|a| match inner_ty {
+                Type::Bool => call_bool_1(a),
+                Type::I32 => call_i32_1(a),
+                Type::U32 => call_u32_1(a),
+                Type::F32 => call_f32_1(a),
+                Type::F16 => call_f16_1(a),
+                _ => Err(E::Builtin("vector type must be a concrete scalar")),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(VecInstance::new(comps).into())
+    }
+    // overload 3: vec init from component values
+    else {
+        if args.len() != n {
+            return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
+        }
+
+        let comps = args
+            .iter()
+            .map(|a| {
+                a.convert_inner_to(&tplt.ty)
+                    .ok_or_else(|| E::ParamType(tplt.ty.clone(), a.ty()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(VecInstance::new(comps).into())
+    }
 }
 
-// TODO: constructor that takes another vec
 fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
-    if args.len() != n {
-        return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
+    // overload 1: vec init from single scalar value
+    if let [Instance::Literal(l)] = args {
+        let val = Instance::Literal(l.clone());
+        let comps = (0..n).map(|_| val.clone()).collect_vec();
+        Ok(VecInstance::new(comps).into())
     }
-
-    let comps =
-        convert_all(&args).ok_or_else(|| E::Builtin("vector components are not compatible"))?;
-
-    if !comps[0].ty().is_scalar() {
-        return Err(E::Builtin("vec constructor expects scalar arguments"));
+    // overload 2: vec conversion constructor
+    else if let [Instance::Vec(v)] = args {
+        if v.n() != n {
+            let ty = v.ty();
+            let ty2 = Type::Vec(n as u8, ty.inner_ty().into());
+            return Err(E::Conversion(ty, ty2));
+        }
+        Ok(v.clone().into())
     }
+    // overload 3: vec init from component values
+    else {
+        if args.len() != n {
+            return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
+        }
 
-    Ok(VecInstance::new(comps).into())
+        let comps =
+            convert_all(&args).ok_or_else(|| E::Builtin("vector components are not compatible"))?;
+
+        if !comps[0].ty().is_scalar() {
+            return Err(E::Builtin("vec constructor expects scalar arguments"));
+        }
+        Ok(VecInstance::new(comps).into())
+    }
 }
 
 // -------
