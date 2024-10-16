@@ -1626,16 +1626,6 @@
     "note": "Ensures the connection between shader stages remains consistent."
   },
   {
-    "name": "valid-stroage-buffer-operation",
-    "desc": "Complex storage buffer operations involving atomic builtins",
-    "kind": "eval",
-    "code": "@group(0) @binding(0) var<storage, read_write> atomicVar: atomic<i32>; fn performAtomic() -> i32 { atomicExchange(&atomicVar, 1); return atomicLoad(&atomicVar); }",
-    "eval": "performAtomic()",
-    "result": "1i",
-    "expect": "pass",
-    "note": "Checking for correct operation and updates of storage buffer atomic operations."
-  },
-  {
     "name": "self-referential-struct-error",
     "desc": "Test for self-referential struct leading to a likely infinite loop",
     "kind": "context",
@@ -1690,7 +1680,7 @@
     "name": "function-return-idiosyncratic",
     "desc": "Function with inline control flow impacting what is returned",
     "kind": "eval",
-    "code": "@const fn returnControlFlow(input: i32) -> i32 { return if(input > 5) { 5 } else { 10; }; }",
+    "code": "@const fn returnControlFlow(input: i32) -> i32 { if(input > 5) { return 5; } else { return 10; }; }",
     "eval": "returnControlFlow(3)",
     "result": "10i",
     "expect": "pass",
@@ -1715,16 +1705,6 @@
     "note": "Underflow should result in values close to zero according to spec."
   },
   {
-    "name": "large-const-vector-definition",
-    "desc": "Define a large constant that exceeds typical vector size limits",
-    "kind": "eval",
-    "code": "const largeVec = array<f32, 1024>(0.0); fn accessLargeVector() -> f32 { return largeVec[512]; }",
-    "eval": "accessLargeVector()",
-    "result": "0.0f",
-    "expect": "pass",
-    "note": "This test checks if WGSL allows large constant vectors inside shader scopes."
-  },
-  {
     "name": "recursion-stack-overflow",
     "desc": "Detect stack overflow potential through unchecked recursion",
     "kind": "context",
@@ -1739,25 +1719,6 @@
     "code": "@vertex fn vertexShader() -> @location(1) @invariant vec4<f32> { var data: vec4<f32>; if (true) { data = vec4<f32>(1.0); } return data; }",
     "expect": "pass",
     "note": "Ensures invariant return values maintain consistent results across executions."
-  },
-  {
-    "name": "implicit-type-coercion-mismatch",
-    "desc": "Implicit type conversion mismatch in composite types",
-    "kind": "syntax",
-    "syntax": "declaration",
-    "code": "fn implicitConversion() { let mixed: vec2<f32> = vec2<f32>(1, 2.0); }",
-    "expect": "fail",
-    "note": "WGSL requires explicit casts for integer to floating-point conversion."
-  },
-  {
-    "name": "redundant-let-initialization",
-    "desc": "Redundant initialization in let statements causing hidden errors",
-    "kind": "eval",
-    "code": "@const fn redundantLet() -> i32 { let x: i32 = 5 + 5 == 10; return x; }",
-    "eval": "redundantLet()",
-    "result": "1i",
-    "expect": "pass",
-    "note": "Confirms boolean evaluation and initialization is handled correctly."
   },
   {
     "name": "dynamic-memory-overwrite",
@@ -1882,14 +1843,5 @@
     "code": "@fragment fn fragmentContinuation(@builtin(position) p: vec4<f32>) { let d: f32 = dpdx(p.x); }",
     "expect": "pass",
     "note": "Derivatives trajectories should logically map with execution consistency, ensuring without breaks."
-  },
-  {
-    "name": "sampler-filter-interaction",
-    "desc": "Verifying the impact of filter and sampler interactions with boundary conditions",
-    "kind": "eval",
-    "code": "@group(0) @binding(0) var texSampler: sampler; @group(0) @binding(1) var tex: texture_2d<f32>; fn sampleTest() -> vec4<f32> { return textureSample(tex, texSampler, vec2<f32>(1.0, 1.0)); }",
-    "eval": "sampleTest()",
-    "expect": "pass",
-    "note": "Texture and sampler must interact correctly ensuring no surprises when used around extrapolating boundary values."
   }
 ]

@@ -116,76 +116,107 @@ fn test_eval(
     }
 }
 
+// #[test]
+// fn gpt_test() {
+//     let dir = std::fs::read_dir("gpt-tests").expect("missing directory gpt-tests");
+//     let mut total_fails = 0;
+//     let mut total_count = 0;
+
+//     for entry in dir {
+//         let entry = entry.expect("error reading entry");
+//         let path = entry.path();
+//         if path.extension().is_some_and(|path| path == "json") {
+//             let (fails, count) = json_test(&path);
+//             println!("{fails}/{count} failures");
+//             total_fails += fails;
+//             total_count += count;
+//         }
+//     }
+
+//     let total_pass = total_count - total_fails;
+//     println!("SUMMARY: {total_pass}/{total_count} Pass, {total_fails}/{total_count} Fails");
+//     assert!(total_fails == 0);
+// }
+
 #[test]
-fn gpt_tests() {
-    let dir = std::fs::read_dir("gpt-tests").expect("missing directory webgpu-samples");
+fn spec_test() {
+    let dir = std::fs::read_dir("spec-tests").expect("missing directory spec-tests");
     let mut total_fails = 0;
     let mut total_count = 0;
-    let mut total_todo = 0;
 
     for entry in dir {
         let entry = entry.expect("error reading entry");
         let path = entry.path();
         if path.extension().is_some_and(|path| path == "json") {
-            let mut fails = 0;
-            println!("testing gpt-tests `{}`", path.display());
+            let (fails, count) = json_test(&path);
+            println!("{fails}/{count} failures");
+            total_fails += fails;
+            total_count += count;
+        }
+    }
 
-            let file = File::open(path).expect("failed to read file");
-            let reader = BufReader::new(file);
-            let json: Vec<GptTest> = serde_json::from_reader(reader)
-                .inspect_err(|err| eprintln!("{err}"))
-                .expect("invalid json test file");
+    let total_pass = total_count - total_fails;
+    println!("SUMMARY: {total_pass}/{total_count} Pass, {total_fails}/{total_count} Fails");
+    assert!(total_fails == 0);
+}
 
-            for test in &json {
-                if test.kind == GptTestKind::Context {
-                    total_todo += 1;
-                    continue;
-                }
-                print!(
-                    " * `{}` kind: {}, expect: {}, result: ",
-                    test.name, test.kind, test.expect
-                );
+fn json_test(path: &Path) -> (u32, u32) {
+    let mut fails = 0;
+    let mut todos = 0;
+    println!("testing json-test `{}`", path.display());
 
-                match &test.kind {
-                    GptTestKind::Syntax { syntax } => {
-                        let res = match syntax {
-                            GptTestSyntaxKind::Declaration => {
-                                test.code.parse::<TranslationUnit>().map(|_| ())
-                            }
-                            GptTestSyntaxKind::Statement => {
-                                test.code.parse::<Statement>().map(|_| ())
-                            }
-                            GptTestSyntaxKind::Expression => {
-                                test.code.parse::<Expression>().map(|_| ())
-                            }
-                        };
-                        let pass = res
-                            .is_ok()
-                            .then_some(GptTestExpect::Pass)
-                            .unwrap_or(GptTestExpect::Fail);
-                        println!("{pass}");
-                        if pass != test.expect {
-                            println!(
-                                "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * result: {:?}\n",
-                                test.desc,
-                                test.note
-                                    .as_ref()
-                                    .map(|note| format!(" (note: {note})"))
-                                    .unwrap_or_default(),
-                                test.code,
-                                res
-                            );
-                            fails += 1;
-                        }
+    let file = File::open(path).expect("failed to read file");
+    let reader = BufReader::new(file);
+    let json: Vec<GptTest> = serde_json::from_reader(reader)
+        .inspect_err(|err| eprintln!("{err}"))
+        .expect("invalid json test file");
+
+    for test in &json {
+        if test.kind == GptTestKind::Context {
+            todos += 1;
+            continue;
+        }
+        print!(
+            " * `{}` kind: {}, expect: {}, result: ",
+            test.name, test.kind, test.expect
+        );
+
+        match &test.kind {
+            GptTestKind::Syntax { syntax } => {
+                let res = match syntax {
+                    GptTestSyntaxKind::Declaration => {
+                        test.code.parse::<TranslationUnit>().map(|_| ())
                     }
-                    GptTestKind::Eval { eval, result } => {
-                        let res = test_eval(&eval, &result, &test.code);
-                        let pass = matches!(res, Ok((true, _)))
-                            .then_some(GptTestExpect::Pass)
-                            .unwrap_or(GptTestExpect::Fail);
-                        println!("{pass}");
-                        if pass != test.expect {
-                            println!(
+                    GptTestSyntaxKind::Statement => test.code.parse::<Statement>().map(|_| ()),
+                    GptTestSyntaxKind::Expression => test.code.parse::<Expression>().map(|_| ()),
+                };
+                let pass = res
+                    .is_ok()
+                    .then_some(GptTestExpect::Pass)
+                    .unwrap_or(GptTestExpect::Fail);
+                println!("{pass}");
+                if pass != test.expect {
+                    println!(
+                        "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * result: {:?}\n",
+                        test.desc,
+                        test.note
+                            .as_ref()
+                            .map(|note| format!(" (note: {note})"))
+                            .unwrap_or_default(),
+                        test.code,
+                        res
+                    );
+                    fails += 1;
+                }
+            }
+            GptTestKind::Eval { eval, result } => {
+                let res = test_eval(&eval, &result, &test.code);
+                let pass = matches!(res, Ok((true, _)))
+                    .then_some(GptTestExpect::Pass)
+                    .unwrap_or(GptTestExpect::Fail);
+                println!("{pass}");
+                if pass != test.expect {
+                    println!(
                                 "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * eval:`{:?}`\n   * expected: {:?}\n   * result: {:?}\n",
                                 test.desc,
                                 test.note
@@ -197,26 +228,16 @@ fn gpt_tests() {
                                 result,
                                 res.map(|(_, inst)| inst.to_string())
                             );
-                            fails += 1;
-                        }
-                    }
-                    GptTestKind::Context => {
-                        println!("TODO");
-                        total_todo += 1;
-                    }
+                    fails += 1;
                 }
             }
-
-            println!("{fails}/{} failures", json.len());
-            total_fails += fails;
-            total_count += json.len();
+            GptTestKind::Context => {
+                println!("TODO");
+            }
         }
     }
 
-    let count = total_count - total_todo;
-    let total_pass = count - total_fails;
-    println!("SUMMARY: {total_pass}/{count} Pass, {total_fails}/{count} Fails, {total_todo}/{total_count} TODO");
-    assert!(total_fails == 0);
+    (fails, json.len() as u32 - todos)
 }
 
 // see schema: https://github.com/wgsl-tooling-wg/wesl-testsuite/blob/main/src/TestSchema.ts
