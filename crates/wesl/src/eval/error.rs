@@ -95,7 +95,7 @@ pub enum EvalError {
     ParamCount(String, usize, usize),
     #[error("invalid parameter type, expected `{0}`, got `{1}`")]
     ParamType(Type, Type),
-    #[error("returned a `{0}` from a function that returns `{1}`")]
+    #[error("returned `{0}` from a function that returns `{1}`")]
     ReturnType(Type, Type),
     #[error("calling non-const function `{0}` in const context")]
     NotConst(String),

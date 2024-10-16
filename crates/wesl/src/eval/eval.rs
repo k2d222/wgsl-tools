@@ -321,7 +321,13 @@ impl Eval for FunctionCall {
         ctx.scope.pop();
 
         let inst = match flow {
-            Flow::Next => Ok(Instance::Void),
+            Flow::Next => {
+                if ret_ty == Type::Void {
+                    Ok(Instance::Void)
+                } else {
+                    Err(E::ReturnType(Type::Void, ret_ty))
+                }
+            }
             Flow::Break | Flow::Continue => Err(E::FlowInFunction(flow)),
             Flow::Return(inst) => inst
                 .convert_to(&ret_ty)

@@ -283,18 +283,28 @@ impl Exec for IfStatement {
 }
 
 impl Exec for SwitchStatement {
-    fn exec(&self, _ctx: &mut Context) -> Result<Flow, E> {
-        // let expr = self.expression.eval_value(ctx)?;
+    fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
+        let expr = self.expression.eval_value(ctx)?;
+        let ty = expr.ty();
 
-        // for clause in &self.clauses {}
+        for clause in &self.clauses {
+            for selector in &clause.case_selectors {
+                match selector {
+                    CaseSelector::Default => return clause.body.exec(ctx),
+                    CaseSelector::Expression(e) => {
+                        let e = with_stage!(ctx, EvalStage::Const, { e.eval_value(ctx) })?;
+                        let e = e
+                            .convert_to(&ty)
+                            .ok_or_else(|| E::Conversion(e.ty(), ty.clone()))?;
+                        if e == expr {
+                            return clause.body.exec(ctx);
+                        }
+                    }
+                }
+            }
+        }
 
-        // this one looks quite complicated and ambiguous
-        // * should I evaluate case selectors first?
-        // * concrete integer scalar type
-        // * ..
-        todo!()
-
-        // Ok(Flow::Void)
+        Ok(Flow::Next)
     }
 }
 
