@@ -59,7 +59,15 @@ impl Eval for LiteralExpression {
             LiteralExpression::I32(l) => Ok(LiteralInstance::I32(*l).into()),
             LiteralExpression::U32(l) => Ok(LiteralInstance::U32(*l).into()),
             LiteralExpression::F32(l) => Ok(LiteralInstance::F32(*l).into()),
-            LiteralExpression::F16(l) => Ok(LiteralInstance::F16(f16::from_f32(*l)).into()), // TODO: check infinity
+            LiteralExpression::F16(l) => {
+                let l = f16::from_f32(*l);
+                if l.is_infinite() {
+                    // this is not supposed to happen.
+                    Err(E::Builtin("invalid `f16` literal value (overflow)"))
+                } else {
+                    Ok(LiteralInstance::F16(l).into()) // TODO: check infinity
+                }
+            }
         }
     }
 }
@@ -348,7 +356,7 @@ impl Eval for TypeExpression {
                 Ok(ty.into())
             }
         } else {
-            todo!()
+            Ok(self.eval_ty(ctx)?.into())
         }
     }
 }
