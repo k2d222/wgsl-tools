@@ -55,6 +55,9 @@ struct CompileArgs {
     /// disable conditional compilation
     #[arg(long)]
     no_cond_comp: bool,
+    /// disable generics
+    #[arg(long)]
+    no_generics: bool,
     /// disable stripping unused declarations
     #[arg(long)]
     no_strip: bool,
@@ -141,6 +144,7 @@ fn run_compile(args: &CompileArgs) -> Result<(TranslationUnit, Option<BasicSourc
     let compile_options = CompileOptions {
         use_imports: !args.no_imports,
         use_condcomp: !args.no_cond_comp,
+        use_generics: !args.no_generics,
         strip: !args.no_strip,
         entry_points: args.entry_points.clone(),
         features,

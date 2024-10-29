@@ -142,53 +142,52 @@ impl FromStr for InterpolationSampling {
     }
 }
 
+fn one_arg(arguments: Option<Vec<ExpressionNode>>) -> Option<ExpressionNode> {
+    match arguments {
+        Some(mut args) => (args.len() == 1).then(|| args.pop().unwrap()),
+        None => None,
+    }
+}
+fn two_args(arguments: Option<Vec<ExpressionNode>>) -> Option<(ExpressionNode, ExpressionNode)> {
+    match arguments {
+        Some(args) => (args.len() == 2).then(|| args.into_iter().collect_tuple().unwrap()),
+        None => None,
+    }
+}
+fn zero_args(arguments: Option<Vec<ExpressionNode>>) -> bool {
+    match arguments {
+        Some(_) => false,
+        None => true,
+    }
+}
+fn ident(expr: ExpressionNode) -> Option<String> {
+    match expr.into_inner() {
+        Expression::TypeOrIdentifier(TypeExpression {
+            name,
+            template_args: None,
+        }) => Some(name),
+        _ => None,
+    }
+}
+
 pub(crate) fn parse_attribute(
     name: String,
-    arguments: Option<Vec<ExpressionNode>>,
+    args: Option<Vec<ExpressionNode>>,
 ) -> Result<Attribute, E> {
-    fn one_arg(arguments: Option<Vec<ExpressionNode>>) -> Option<ExpressionNode> {
-        match arguments {
-            Some(mut args) => (args.len() == 1).then(|| args.pop().unwrap()),
-            None => None,
-        }
-    }
-    fn two_args(
-        arguments: Option<Vec<ExpressionNode>>,
-    ) -> Option<(ExpressionNode, ExpressionNode)> {
-        match arguments {
-            Some(args) => (args.len() == 1).then(|| args.into_iter().collect_tuple().unwrap()),
-            None => None,
-        }
-    }
-    fn zero_args(arguments: Option<Vec<ExpressionNode>>) -> bool {
-        match arguments {
-            Some(_) => false,
-            None => true,
-        }
-    }
-    fn ident(expr: ExpressionNode) -> Option<String> {
-        match expr.into_inner() {
-            Expression::TypeOrIdentifier(TypeExpression {
-                name,
-                template_args: None,
-            }) => Some(name),
-            _ => None,
-        }
-    }
     match name.as_str() {
-        "align" => match one_arg(arguments) {
+        "align" => match one_arg(args) {
             Some(expr) => Ok(Attribute::Align(expr)),
             _ => Err(E::Attribute("align", "expected 1 argument")),
         },
-        "binding" => match one_arg(arguments) {
+        "binding" => match one_arg(args) {
             Some(expr) => Ok(Attribute::Binding(expr)),
             _ => Err(E::Attribute("binding", "expected 1 argument")),
         },
-        "blend_src" => match one_arg(arguments) {
+        "blend_src" => match one_arg(args) {
             Some(expr) => Ok(Attribute::BlendSrc(expr)),
             _ => Err(E::Attribute("blend_src", "expected 1 argument")),
         },
-        "builtin" => match one_arg(arguments) {
+        "builtin" => match one_arg(args) {
             Some(expr) => match ident(expr).and_then(|name| name.parse().ok()) {
                 Some(b) => Ok(Attribute::Builtin(b)),
                 _ => Err(E::Attribute(
@@ -198,11 +197,11 @@ pub(crate) fn parse_attribute(
             },
             _ => Err(E::Attribute("builtin", "expected 1 argument")),
         },
-        "const" => match zero_args(arguments) {
+        "const" => match zero_args(args) {
             true => Ok(Attribute::Const),
             false => Err(E::Attribute("const", "expected 0 arguments")),
         },
-        "diagnostic" => match two_args(arguments) {
+        "diagnostic" => match two_args(args) {
             Some((e1, e2)) => {
                 let severity = ident(e1).and_then(|name| name.parse().ok());
                 let rule = match e2.into_inner() {
@@ -227,15 +226,15 @@ pub(crate) fn parse_attribute(
             }
             _ => Err(E::Attribute("diagnostic", "expected 1 argument")),
         },
-        "group" => match one_arg(arguments) {
+        "group" => match one_arg(args) {
             Some(expr) => Ok(Attribute::Group(expr)),
             _ => Err(E::Attribute("group", "expected 1 argument")),
         },
-        "id" => match one_arg(arguments) {
+        "id" => match one_arg(args) {
             Some(expr) => Ok(Attribute::Id(expr)),
             _ => Err(E::Attribute("id", "expected 1 argument")),
         },
-        "interpolate" => match two_args(arguments) {
+        "interpolate" => match two_args(args) {
             Some((e1, e2)) => {
                 let ty = ident(e1).and_then(|name| name.parse().ok());
                 let sampling = ident(e2).and_then(|name| name.parse().ok());
@@ -251,23 +250,23 @@ pub(crate) fn parse_attribute(
             }
             _ => Err(E::Attribute("interpolate", "invalid arguments")),
         },
-        "invariant" => match zero_args(arguments) {
+        "invariant" => match zero_args(args) {
             true => Ok(Attribute::Invariant),
             false => Err(E::Attribute("invariant", "expected 0 arguments")),
         },
-        "location" => match one_arg(arguments) {
+        "location" => match one_arg(args) {
             Some(expr) => Ok(Attribute::Location(expr)),
             _ => Err(E::Attribute("location", "expected 1 argument")),
         },
-        "must_use" => match zero_args(arguments) {
+        "must_use" => match zero_args(args) {
             true => Ok(Attribute::MustUse),
             false => Err(E::Attribute("must_use", "expected 0 arguments")),
         },
-        "size" => match one_arg(arguments) {
+        "size" => match one_arg(args) {
             Some(expr) => Ok(Attribute::Size(expr)),
             _ => Err(E::Attribute("size", "expected 1 argument")),
         },
-        "workgroup_size" => match arguments {
+        "workgroup_size" => match args {
             Some(args) => {
                 let mut it = args.into_iter();
                 match (it.next(), it.next(), it.next(), it.next()) {
@@ -279,24 +278,67 @@ pub(crate) fn parse_attribute(
             }
             _ => Err(E::Attribute("workgroup_size", "expected 1-3 arguments")),
         },
-        "vertex" => match zero_args(arguments) {
+        "vertex" => match zero_args(args) {
             true => Ok(Attribute::Vertex),
             false => Err(E::Attribute("vertex", "expected 0 arguments")),
         },
-        "fragment" => match zero_args(arguments) {
+        "fragment" => match zero_args(args) {
             true => Ok(Attribute::Fragment),
             false => Err(E::Attribute("fragment", "expected 0 arguments")),
         },
-        "compute" => match zero_args(arguments) {
+        "compute" => match zero_args(args) {
             true => Ok(Attribute::Compute),
             false => Err(E::Attribute("compute", "expected 0 arguments")),
         },
         #[cfg(feature = "condcomp")]
-        "if" => match one_arg(arguments) {
+        "if" => match one_arg(args) {
             Some(expr) => Ok(Attribute::If(expr)),
             None => Err(E::Attribute("if", "expected 1 argument")),
         },
-        _ => Ok(Attribute::Custom(CustomAttribute { name, arguments })),
+        #[cfg(feature = "generics")]
+        "type" => parse_attr_type(args).map(Attribute::Type),
+        _ => Ok(Attribute::Custom(CustomAttribute {
+            name,
+            arguments: args,
+        })),
+    }
+}
+
+fn parse_attr_type(arguments: Option<Vec<ExpressionNode>>) -> Result<TypeConstraint, E> {
+    fn parse_rec(expr: Expression) -> Result<Vec<TypeExpression>, E> {
+        match expr {
+            Expression::TypeOrIdentifier(ty) => Ok(vec![ty]),
+            Expression::Binary(BinaryExpression {
+                operator: BinaryOperator::BitwiseOr,
+                left,
+                right,
+            }) => {
+                let ty = match right.into_inner() {
+                    Expression::TypeOrIdentifier(ty) => Ok(ty),
+                    _ => Err(E::Attribute(
+                        "type",
+                        "invalid second argument (type constraint)",
+                    )),
+                }?;
+                let mut v = parse_rec(left.into_inner())?;
+                v.push(ty);
+                Ok(v)
+            }
+            _ => Err(E::Attribute(
+                "type",
+                "invalid second argument (type constraint)",
+            )),
+        }
+    }
+    match two_args(arguments) {
+        Some((e1, e2)) => match e1.into_inner() {
+            Expression::TypeOrIdentifier(TypeExpression {
+                name,
+                template_args: None,
+            }) => parse_rec(e2.into_inner()).map(|variants| TypeConstraint { name, variants }),
+            _ => Err(E::Attribute("type", "invalid first argument (type name)")),
+        },
+        None => Err(E::Attribute("type", "expected 2 arguments")),
     }
 }
 

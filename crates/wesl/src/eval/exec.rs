@@ -62,11 +62,11 @@ impl Exec for TranslationUnit {
             for decl in &ctx.source.global_declarations {
                 let flow = decl
                     .exec(ctx)
-                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.name()))?;
+                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.name().unwrap_or("")))?;
                 match flow {
                     Flow::Next => (),
                     Flow::Break | Flow::Continue | Flow::Return(_) => {
-                        ctx.set_err_decl_ctx(decl.name());
+                        ctx.set_err_decl_ctx(decl.name().unwrap_or(""));
                         return Err(E::FlowInModule(flow));
                     }
                 }

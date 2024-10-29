@@ -23,7 +23,7 @@
 //! It is made with the ultimate goal to implement spec-compliant language extensions.
 //! This is why this parser doesn't borrow strings.
 
-use derive_more::From;
+use derive_more::{From, IsVariant};
 
 use crate::span::Spanned;
 
@@ -45,7 +45,7 @@ pub struct Import {
 }
 
 #[cfg(feature = "imports")]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum ImportContent {
     Star(ImportItem),
     Item(ImportItem),
@@ -59,7 +59,7 @@ pub struct ImportItem {
     pub rename: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, From)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum GlobalDirective {
     Diagnostic(DiagnosticDirective),
     Enable(EnableDirective),
@@ -74,7 +74,7 @@ pub struct DiagnosticDirective {
     pub rule_name: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum DiagnosticSeverity {
     Error,
     Warning,
@@ -96,7 +96,7 @@ pub struct RequiresDirective {
     pub extensions: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, From)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum GlobalDeclaration {
     Void,
     Declaration(Declaration),
@@ -115,7 +115,7 @@ pub struct Declaration {
     pub initializer: Option<ExpressionNode>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum DeclarationKind {
     Const,
     Override,
@@ -123,7 +123,7 @@ pub enum DeclarationKind {
     Var(Option<AddressSpace>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IsVariant)]
 pub enum AddressSpace {
     Function,
     Private,
@@ -187,7 +187,7 @@ pub struct ConstAssert {
     pub expression: ExpressionNode,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum BuiltinValue {
     VertexIndex,
     InstanceIndex,
@@ -203,14 +203,14 @@ pub enum BuiltinValue {
     NumWorkgroups,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum InterpolationType {
     Perspective,
     Linear,
     Flat,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum InterpolationSampling {
     Center,
     Centroid,
@@ -244,7 +244,7 @@ pub struct CustomAttribute {
     pub arguments: Option<Vec<ExpressionNode>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum Attribute {
     Align(ExpressionNode),
     Binding(ExpressionNode),
@@ -265,12 +265,21 @@ pub enum Attribute {
     Compute,
     #[cfg(feature = "condcomp")]
     If(ExpressionNode),
+    #[cfg(feature = "generics")]
+    Type(TypeConstraint),
     Custom(CustomAttribute),
+}
+
+#[cfg(feature = "generics")]
+#[derive(Clone, Debug, PartialEq, From)]
+pub struct TypeConstraint {
+    pub name: String,
+    pub variants: Vec<TypeExpression>,
 }
 
 pub type Attributes = Vec<Attribute>;
 
-#[derive(Clone, Debug, PartialEq, From)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum Expression {
     Literal(LiteralExpression),
     Parenthesized(ParenthesizedExpression),
@@ -284,7 +293,7 @@ pub enum Expression {
 
 pub type ExpressionNode = Spanned<Expression>;
 
-#[derive(Clone, Copy, Debug, PartialEq, From)]
+#[derive(Clone, Copy, Debug, PartialEq, From, IsVariant)]
 pub enum LiteralExpression {
     Bool(bool),
     AbstractInt(i64),
@@ -319,7 +328,7 @@ pub struct UnaryExpression {
     pub operand: ExpressionNode,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum UnaryOperator {
     LogicalNegation,
     Negation,
@@ -335,7 +344,7 @@ pub struct BinaryExpression {
     pub right: ExpressionNode,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum BinaryOperator {
     ShortCircuitOr,
     ShortCircuitAnd,
@@ -377,7 +386,7 @@ pub struct TemplateArg {
 }
 pub type TemplateArgs = Option<Vec<TemplateArg>>;
 
-#[derive(Clone, Debug, PartialEq, From)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum Statement {
     Void,
     Compound(CompoundStatement),
@@ -415,7 +424,7 @@ pub struct AssignmentStatement {
     pub rhs: ExpressionNode,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum AssignmentOperator {
     Equal,
     PlusEqual,

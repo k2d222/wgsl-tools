@@ -1,7 +1,28 @@
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    iter::{empty, once, Iterator},
+};
 
+use itertools::{chain, Itertools};
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
+
+/// was that not in the std at some point???
+type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
+trait IteratorExt: Iterator {
+    fn boxed<'a>(self) -> BoxedIterator<'a, Self::Item>
+    where
+        Self: Sized + 'a;
+}
+
+impl<T: Iterator> IteratorExt for T {
+    fn boxed<'a>(self) -> BoxedIterator<'a, Self::Item>
+    where
+        Self: Sized + 'a,
+    {
+        Box::new(self)
+    }
+}
 
 /// keep track of declarations in a scope.
 type Scope = HashSet<String>;
@@ -31,41 +52,69 @@ impl IterUses for GlobalDeclaration {
                 attributes.[].(IterUses::uses_mut),
                 ty,
             },
-            GlobalDeclaration::Function.{
-                attributes.[].(IterUses::uses_mut),
-                parameters.[].{
-                    attributes.[].(IterUses::uses_mut),
-                    ty,
-                },
-                return_attributes.[].(IterUses::uses_mut),
-                return_type.[],
-                body.{
-                    attributes.[].(IterUses::uses_mut),
-                    statements.(IterUses::uses_mut)
-                }
-            },
+            GlobalDeclaration::Function.(IterUses::uses_mut),
             GlobalDeclaration::ConstAssert.expression.(IterUses::uses_mut),
+        })
+    }
+}
+
+impl IterUses for Function {
+    fn uses_mut(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
+        query_mut!(self.{
+            attributes.[].(IterUses::uses_mut),
+            parameters.[].{
+                attributes.[].(IterUses::uses_mut),
+                ty,
+            },
+            return_attributes.[].(IterUses::uses_mut),
+            return_type.[],
+            body.{
+                attributes.[].(IterUses::uses_mut),
+                statements.(IterUses::uses_mut)
+            }
         })
     }
 }
 
 impl IterUses for Attribute {
     fn uses_mut(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            Attribute::Align.(IterUses::uses_mut),
-            Attribute::Binding.(IterUses::uses_mut),
-            Attribute::BlendSrc.(IterUses::uses_mut),
-            Attribute::Group.(IterUses::uses_mut),
-            Attribute::Id.(IterUses::uses_mut),
-            Attribute::Location.(IterUses::uses_mut),
-            Attribute::Size.(IterUses::uses_mut),
-            Attribute::WorkgroupSize.{
-                x.(IterUses::uses_mut),
-                y.[].(IterUses::uses_mut),
-                z.[].(IterUses::uses_mut),
-            },
-            Attribute::Custom.arguments.[].[].(IterUses::uses_mut)
-        })
+        #[cfg(feature = "generics")]
+        {
+            query_mut!(self.{
+                Attribute::Align.(IterUses::uses_mut),
+                Attribute::Binding.(IterUses::uses_mut),
+                Attribute::BlendSrc.(IterUses::uses_mut),
+                Attribute::Group.(IterUses::uses_mut),
+                Attribute::Id.(IterUses::uses_mut),
+                Attribute::Location.(IterUses::uses_mut),
+                Attribute::Size.(IterUses::uses_mut),
+                Attribute::WorkgroupSize.{
+                    x.(IterUses::uses_mut),
+                    y.[].(IterUses::uses_mut),
+                    z.[].(IterUses::uses_mut),
+                },
+                Attribute::Type.variants.[],
+                Attribute::Custom.arguments.[].[].(IterUses::uses_mut)
+            })
+        }
+        #[cfg(not(feature = "generics"))]
+        {
+            query_mut!(self.{
+                Attribute::Align.(IterUses::uses_mut),
+                Attribute::Binding.(IterUses::uses_mut),
+                Attribute::BlendSrc.(IterUses::uses_mut),
+                Attribute::Group.(IterUses::uses_mut),
+                Attribute::Id.(IterUses::uses_mut),
+                Attribute::Location.(IterUses::uses_mut),
+                Attribute::Size.(IterUses::uses_mut),
+                Attribute::WorkgroupSize.{
+                    x.(IterUses::uses_mut),
+                    y.[].(IterUses::uses_mut),
+                    z.[].(IterUses::uses_mut),
+                },
+                Attribute::Custom.arguments.[].[].(IterUses::uses_mut)
+            })
+        }
     }
 }
 
@@ -112,28 +161,36 @@ impl IterUses for Vec<StatementNode> {
         fn rec<'a>(
             statements: impl IntoIterator<Item = &'a mut StatementNode>,
         ) -> (Vec<&'a mut TypeExpression>, Scope) {
-            let mut names = Vec::new();
             let mut scope = Scope::new();
-            for stat in statements {
-                match stat.node_mut() {
-                    Statement::Compound(stat) => {
-                        let it = rec(&mut stat.statements).0.into_iter();
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Assignment(stat) => {
-                        let it = query_mut!(stat.{ lhs, rhs }.(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Increment(stat) => {
-                        let it = query_mut!(stat.expression.(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Decrement(stat) => {
-                        let it = query_mut!(stat.expression.(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::If(stat) => {
-                        let it = query_mut!(stat.{
+            let names = statements
+                .into_iter()
+                .flat_map(|stat| {
+                    let it: BoxedIterator<'a, &mut TypeExpression> = match stat.node_mut() {
+                        Statement::Compound(stat) => chain!(
+                            query_mut!(stat.attributes.[].(IterUses::uses_mut)),
+                            rec(&mut stat.statements).0.into_iter(),
+                        )
+                        .boxed(),
+                        Statement::Assignment(stat) => query_mut!(stat.{
+                            #[cfg(feature = "attributes")]
+                            attributes.[].(IterUses::uses_mut),
+                            lhs.(IterUses::uses_mut),
+                            rhs.(IterUses::uses_mut),
+                        })
+                        .boxed(),
+                        Statement::Increment(stat) => query_mut!(stat.{
+                            #[cfg(feature = "attributes")]
+                            attributes.[].(IterUses::uses_mut),
+                            expression.(IterUses::uses_mut),
+                        })
+                        .boxed(),
+                        Statement::Decrement(stat) => query_mut!(stat.{
+                            #[cfg(feature = "attributes")]
+                            attributes.[].(IterUses::uses_mut),
+                            expression.(IterUses::uses_mut),
+                        })
+                        .boxed(),
+                        Statement::If(stat) => query_mut!(stat.{
                             attributes.[].(IterUses::uses_mut),
                             if_clause.{
                                 expression.(IterUses::uses_mut),
@@ -143,127 +200,157 @@ impl IterUses for Vec<StatementNode> {
                                 }
                             },
                             else_if_clauses.[].{
+                                #[cfg(feature = "attributes")]
+                                attributes.[].(IterUses::uses_mut),
                                 expression.(IterUses::uses_mut),
                                 body.{
                                     attributes.[].(IterUses::uses_mut),
                                     statements.(x => rec(x).0)
                                 }
                             },
-                            else_clause.[].body.{
+                            else_clause.[].{
+                                #[cfg(feature = "attributes")]
                                 attributes.[].(IterUses::uses_mut),
-                                statements.(x => rec(x).0)
+                                body.{
+                                    attributes.[].(IterUses::uses_mut),
+                                    statements.(x => rec(x).0)
+                                },
                             },
-                        });
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Switch(stat) => {
-                        let it = query_mut!(stat.{
+                        })
+                        .boxed(),
+                        Statement::Switch(stat) => query_mut!(stat.{
                             attributes.[].(IterUses::uses_mut),
                             expression.(IterUses::uses_mut),
                             body_attributes.[].(IterUses::uses_mut),
                             clauses.[].{
+                                #[cfg(feature = "attributes")]
+                                attributes.[].(IterUses::uses_mut),
                                 case_selectors.[].CaseSelector::Expression.(IterUses::uses_mut),
                                 body.{
                                     attributes.[].(IterUses::uses_mut),
                                     statements.(x => rec(x).0)
                                 }
                             },
-                        });
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Loop(stat) => {
-                        let it = query_mut!(stat.attributes.[].(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
+                        })
+                        .boxed(),
+                        Statement::Loop(stat) => {
+                            let it1 = query_mut!(stat.attributes.[].(IterUses::uses_mut));
+                            let it2 = query_mut!(stat.body.attributes.[].(IterUses::uses_mut));
 
-                        let it = query_mut!(stat.body.attributes.[].(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
+                            // these ones have to be handled separatly, because the continuing statement
+                            // is separated from the rest of the statements (same for the break-if)
+                            let (it3, cont_scope) = rec(&mut stat.body.statements);
 
-                        // these ones have to be handled separatly, because the continuing statement
-                        // is separated from the rest of the statements (same for the break-if)
-                        let it = rec(&mut stat.body.statements).0;
-                        names.extend(it.into_iter().filter(|ty| !scope.contains(&ty.name)));
+                            let it4 =
+                                {
+                                    let cont_scope = cont_scope.clone();
+                                    stat.continuing.iter_mut().flat_map(move |stat| {
+                                    #[cfg(feature = "attributes")]
+                                    let it1 =
+                                        query_mut!(stat.body.attributes.[].(IterUses::uses_mut));
+                                    #[cfg(not(feature = "attributes"))]
+                                    let it1 = empty();
 
-                        if let Some(stat) = &mut stat.continuing {
-                            let it = query_mut!(stat.body.attributes.[].(IterUses::uses_mut));
-                            names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-
-                            let (it, cont_scope) = rec(&mut stat.body.statements);
-                            names.extend(it.into_iter().filter(|ty| !scope.contains(&ty.name)));
-
-                            if let Some(stat) = &mut stat.break_if {
-                                let it = IterUses::uses_mut(&mut stat.expression);
-                                names.extend(it.filter(|ty| !cont_scope.contains(&ty.name)));
-                            }
+                                    let (it2, break_scope) = rec(&mut stat.body.statements);
+                                    let it3 = stat
+                                        .break_if
+                                        .iter_mut()
+                                        .flat_map(|stat| query_mut!(stat.{
+                                            #[cfg(feature = "attributes")]
+                                            attributes.[].(IterUses::uses_mut),
+                                            expression.(IterUses::uses_mut),
+                                        }))
+                                        .filter(move |ty| !break_scope.contains(&ty.name));
+                                    let cont_scope = cont_scope.clone();
+                                    chain!(it1, it2, it3)
+                                        .filter(move |ty| !cont_scope.contains(&ty.name))
+                                })
+                                };
+                            chain!(it1, it2, it3, it4).boxed()
                         }
-                    }
-                    Statement::For(stat) => {
-                        let it = query_mut!(stat.attributes.[].(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
+                        Statement::For(stat) => {
+                            let it1 = query_mut!(stat.attributes.[].(IterUses::uses_mut));
 
-                        // these ones have to be handled separatly, because the for initializer
-                        // statement is the parent scope of the body
-                        let body_scope = if let Some(init) = &mut stat.initializer {
-                            let (it, scope) = rec(std::iter::once(init));
-                            names.extend(it.into_iter().filter(|ty| !scope.contains(&ty.name)));
-                            scope
-                        } else {
-                            Scope::new()
-                        };
-                        let it = query_mut!(stat.condition.[].(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !body_scope.contains(&ty.name)));
+                            // these ones have to be handled separatly, because the for initializer
+                            // statement is the parent scope of the body
+                            let (it2, body_scope) = stat
+                                .initializer
+                                .as_mut()
+                                .map(|init| {
+                                    let (iter, scope) = rec(once(init));
+                                    (iter, scope)
+                                })
+                                .unwrap_or_else(|| (Vec::new(), Scope::new()));
 
-                        if let Some(update) = &mut stat.update {
-                            let it = rec(std::iter::once(update)).0.into_iter();
-                            names.extend(it.filter(|ty| !body_scope.contains(&ty.name)));
+                            let it3 = query_mut!(stat.condition.[].(IterUses::uses_mut));
+
+                            let it4 = stat
+                                .update
+                                .iter_mut()
+                                .flat_map(|update| rec(once(update)).0);
+
+                            let it5 = query_mut!(stat.body.{
+                                attributes.[].(IterUses::uses_mut),
+                                statements.(x => rec(x).0)
+                            });
+                            chain!(
+                                it1,
+                                it2,
+                                chain!(it3, it4, it5)
+                                    .filter(move |ty| !body_scope.contains(&ty.name))
+                            )
+                            .boxed()
                         }
-
-                        let it = query_mut!(stat.body.{
-                            attributes.[].(IterUses::uses_mut),
-                            statements.(x => rec(x).0)
-                        });
-                        names.extend(it.filter(|ty| !body_scope.contains(&ty.name)));
-                    }
-                    Statement::While(stat) => {
-                        let it = query_mut!(stat.{
+                        Statement::While(stat) => query_mut!(stat.{
                             attributes.[].(IterUses::uses_mut),
                             condition.(IterUses::uses_mut),
                             body.{
                                 attributes.[].(IterUses::uses_mut),
                                 statements.(x => rec(x).0)
                             }
-                        });
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Break(_) => (),
-                    Statement::Continue(_) => (),
-                    Statement::Return(stat) => {
-                        let it = query_mut!(stat.expression.[].(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Discard(_) => (),
-                    Statement::FunctionCall(stat) => {
-                        let it = query_mut!(stat.call.{
-                            ty,
-                            arguments.[].(IterUses::uses_mut),
-                        });
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::ConstAssert(stat) => {
-                        let it = query_mut!(stat.expression.(IterUses::uses_mut));
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    Statement::Declaration(stat) => {
-                        scope.insert(stat.name.clone());
-                        let it = query_mut!(stat.{
+                        })
+                        .boxed(),
+                        #[cfg(feature = "attributes")]
+                        Statement::Break(stat) => {
+                            query_mut!(stat.attributes.[].(IterUses::uses_mut)).boxed()
+                        }
+                        #[cfg(feature = "attributes")]
+                        Statement::Continue(stat) => {
+                            query_mut!(stat.attributes.[].(IterUses::uses_mut)).boxed()
+                        }
+                        Statement::Return(stat) => {
+                            query_mut!(stat.expression.[].(IterUses::uses_mut)).boxed()
+                        }
+                        #[cfg(feature = "attributes")]
+                        Statement::Discard(stat) => {
+                            query_mut!(stat.attributes.[].(IterUses::uses_mut)).boxed()
+                        }
+                        Statement::FunctionCall(stat) => Box::new(query_mut!(stat.{
+                            #[cfg(feature = "attributes")]
                             attributes.[].(IterUses::uses_mut),
-                            ty.[],
-                            initializer.[].(IterUses::uses_mut),
-                        });
-                        names.extend(it.filter(|ty| !scope.contains(&ty.name)));
-                    }
-                    _ => (),
-                }
-            }
+                            call.{
+                                ty,
+                                arguments.[].(IterUses::uses_mut),
+                            }
+                        })),
+                        Statement::ConstAssert(stat) => {
+                            query_mut!(stat.expression.(IterUses::uses_mut)).boxed()
+                        }
+                        Statement::Declaration(stat) => {
+                            scope.insert(stat.name.clone());
+                            query_mut!(stat.{
+                                attributes.[].(IterUses::uses_mut),
+                                ty.[],
+                                initializer.[].(IterUses::uses_mut),
+                            })
+                            .boxed()
+                        }
+                        _ => empty().boxed(),
+                    };
+                    let scope = scope.clone(); // this clone is unfortunate
+                    it.filter(move |ty| !scope.contains(&ty.name))
+                })
+                .collect_vec();
             (names, scope)
         }
         rec(self).0.into_iter()

@@ -6,8 +6,13 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
-    token, Expr, Ident, LitInt, Token,
+    token, Attribute, Expr, Ident, LitInt, Token,
 };
+
+struct WithAttrs<T> {
+    attrs: Vec<Attribute>,
+    content: T,
+}
 
 struct QueryInput {
     components: Punctuated<QueryComponent, Token![.]>,
@@ -22,12 +27,19 @@ enum QueryComponent {
     Variant(Ident, Ident),
     Member(Ident),
     Index(LitInt),
-    Branch(BranchKind, Punctuated<QueryInput, Token![,]>),
+    Branch(BranchKind, Punctuated<WithAttrs<QueryInput>, Token![,]>),
     Iter,
     Expr(Option<Ident>, Expr),
     Void,
 }
 
+impl<T: Parse> Parse for WithAttrs<T> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let attrs = Attribute::parse_outer(input)?;
+        let content = input.parse()?;
+        Ok(Self { attrs, content })
+    }
+}
 impl Parse for QueryComponent {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
         if input.peek(Ident) && input.peek2(Token![::]) {
@@ -53,7 +65,7 @@ impl Parse for QueryComponent {
                 BranchKind::Members
             };
             let components =
-                Punctuated::<QueryInput, Token![,]>::parse_separated_nonempty(&content)?;
+                Punctuated::<WithAttrs<QueryInput>, Token![,]>::parse_separated_nonempty(&content)?;
             content.parse::<Token![,]>().ok();
             Ok(QueryComponent::Branch(branch_kind, components))
         } else if input.peek(token::Bracket) {
@@ -103,17 +115,19 @@ fn query_impl(input: QueryInput, mutable: bool) -> proc_macro::TokenStream {
             }
             QueryComponent::Branch(kind, branch) => match kind {
                 BranchKind::Variants => {
-                    let cases = branch.into_iter().filter_map(|case| {
-                        let mut iter = case.components.into_iter();
-                        let first = match iter.next() {
-                            Some(QueryComponent::Variant(enum_name, variant)) => {
-                                quote! { #enum_name :: #variant (x) }
-                            }
-                            _ => return None,
-                        };
-                        let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
-                        Some(quote! { #first => Box::new(std::iter::once(x) #(.#rest)*) })
-                    });
+                    let cases = branch
+                        .into_iter()
+                        .filter_map(|WithAttrs { attrs, content }| {
+                            let mut iter = content.components.into_iter();
+                            let first = match iter.next() {
+                                Some(QueryComponent::Variant(enum_name, variant)) => {
+                                    quote! { #(#attrs)* #enum_name :: #variant (x) }
+                                }
+                                _ => return None,
+                            };
+                            let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
+                            Some(quote! { #first => Box::new(std::iter::once(x) #(.#rest)*) })
+                        });
                     quote! {
                         flat_map(|x| -> Box<dyn Iterator<Item = _>> {
                             match x {
@@ -124,17 +138,19 @@ fn query_impl(input: QueryInput, mutable: bool) -> proc_macro::TokenStream {
                     }
                 }
                 BranchKind::Members => {
-                    let cases = branch.into_iter().filter_map(|case| {
-                        let mut iter = case.components.into_iter();
-                        let first = match iter.next() {
-                            Some(QueryComponent::Member(member)) => {
-                                quote! { std::iter::once(#ref_ x.#member) }
-                            }
-                            _ => return None,
-                        };
-                        let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
-                        Some(quote! { #first #(.#rest)* })
-                    });
+                    let cases = branch
+                        .into_iter()
+                        .filter_map(|WithAttrs { attrs, content }| {
+                            let mut iter = content.components.into_iter();
+                            let first = match iter.next() {
+                                Some(QueryComponent::Member(member)) => {
+                                    quote! { #(#attrs)* std::iter::once(#ref_ x.#member) }
+                                }
+                                _ => return None,
+                            };
+                            let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
+                            Some(quote! { #first #(.#rest)* })
+                        });
                     quote! {
                         flat_map(|x| {
                             itertools::chain!( #(#cases),* )

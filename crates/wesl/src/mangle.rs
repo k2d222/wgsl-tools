@@ -1,11 +1,16 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Formatter;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::PathBuf;
 
 use itertools::Itertools;
+use wgsl_parse::syntax::Expression;
+use wgsl_parse::syntax::ExpressionNode;
+use wgsl_parse::syntax::TypeExpression;
 
 use super::Resource;
 
@@ -13,6 +18,9 @@ pub trait Mangler {
     fn mangle(&self, resource: &Resource, item: &str) -> String;
     fn unmangle(&self, _mangled: &str) -> Option<(Resource, String)> {
         None
+    }
+    fn mangle_types(&self, item: &str, variant: u32, _types: &[TypeExpression]) -> String {
+        format!("{item}_{variant}")
     }
 }
 
@@ -23,6 +31,9 @@ impl<T: Mangler + ?Sized> Mangler for Box<T> {
     fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
         (**self).unmangle(mangled)
     }
+    fn mangle_types(&self, item: &str, variant: u32, types: &[TypeExpression]) -> String {
+        (**self).mangle_types(item, variant, types)
+    }
 }
 
 impl<T: Mangler> Mangler for &T {
@@ -31,6 +42,9 @@ impl<T: Mangler> Mangler for &T {
     }
     fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
         (**self).unmangle(mangled)
+    }
+    fn mangle_types(&self, item: &str, variant: u32, types: &[TypeExpression]) -> String {
+        (**self).mangle_types(item, variant, types)
     }
 }
 
@@ -143,5 +157,71 @@ impl<'a, T: Mangler> Mangler for CachedMangler<'a, T> {
         }
 
         self.mangler.unmangle(mangled)
+    }
+}
+
+/// A mangler that uses cryptic unicode symbols that look like :, < and >
+/// e.g. `foo/bar/baz.wgsl item => item`
+///
+/// Warning: will break the program in case of name conflicts.
+///
+/// # Panics
+/// if the TypeExpression is not normalized (i.e. contains only identifiers and literals)
+#[derive(Default, Clone, Debug)]
+pub struct UnicodeMangler;
+
+pub const MANGLER_UNICODE: UnicodeMangler = UnicodeMangler;
+
+impl UnicodeMangler {
+    const LT: char = 'ᐸ'; // U+1438
+    const GT: char = 'ᐳ'; // U+02CF
+    const SEP: &'static str = "::"; // <-- these are NOT colons, they are U+02D0
+    const TY_SEP: &'static str = "ˏ"; // U+02CF
+
+    fn display_ty<'a>(ty: &'a TypeExpression) -> impl fmt::Display + 'a {
+        format_args!(
+            "{}{}",
+            ty.name,
+            ty.template_args
+                .iter()
+                .format_with(Self::TY_SEP, |tplt, f| {
+                    f(&format_args!(
+                        "{}{}{}",
+                        Self::LT,
+                        tplt.iter().format_with(Self::TY_SEP, |tplt, f| {
+                            match tplt.expression.node() {
+                                Expression::Literal(lit) => f(lit),
+                                Expression::TypeOrIdentifier(ty) => f(&Self::display_ty(ty)),
+                                _ => panic!("only type names can be mangled"),
+                            }
+                        }),
+                        Self::GT
+                    ))
+                })
+        )
+        .to_string()
+    }
+}
+
+impl Mangler for UnicodeMangler {
+    fn mangle(&self, resource: &Resource, item: &str) -> String {
+        let sep = Self::SEP;
+        let path = resource.path().with_extension("");
+        let path = path.iter().map(|p| p.to_string_lossy()).format(sep);
+        format!("{path}{sep}{item}")
+    }
+    fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
+        Some((Resource::from(PathBuf::new()), mangled.to_string()))
+    }
+    fn mangle_types(&self, item: &str, _variant: u32, types: &[TypeExpression]) -> String {
+        // these are NOT chevrons and comma!
+        format!(
+            "{item}{}{}{}",
+            Self::LT,
+            types
+                .iter()
+                .format_with(Self::TY_SEP, |ty, f| f(&Self::display_ty(ty))),
+            Self::GT
+        )
     }
 }

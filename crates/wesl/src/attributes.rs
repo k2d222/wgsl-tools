@@ -28,7 +28,7 @@ pub(crate) fn query_attributes(
     })
 }
 
-fn statement_query_attributes(
+pub(crate) fn statement_query_attributes(
     stat: &mut StatementNode,
 ) -> impl Iterator<Item = &mut Vec<Attribute>> {
     let stat = stat.node_mut();

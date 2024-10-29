@@ -348,6 +348,8 @@ impl Display for Attribute {
             Attribute::Compute => write!(f, "@compute"),
             #[cfg(feature = "condcomp")]
             Attribute::If(e1) => write!(f, "@if({e1})"),
+            #[cfg(feature = "generics")]
+            Attribute::Type(e1) => write!(f, "@type({e1})"),
             Attribute::Custom(custom) => {
                 let name = &custom.name;
                 let args = custom.arguments.iter().format_with("", |args, f| {
@@ -356,6 +358,15 @@ impl Display for Attribute {
                 write!(f, "@{name}{args}")
             }
         }
+    }
+}
+
+#[cfg(feature = "generics")]
+impl Display for TypeConstraint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let name = &self.name;
+        let variants = self.variants.iter().format(" | ");
+        write!(f, "{name}, {variants}")
     }
 }
 

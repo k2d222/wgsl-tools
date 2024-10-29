@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::Path};
 
 use wgsl_parse::syntax::{self, TranslationUnit};
 
-use crate::{error::Diagnostic, ImportError, Mangler, ResolveError, Resolver, Resource};
+use crate::{error::Diagnostic, ImportError, ResolveError, Resolver, Resource};
 
 // XXX: are imports supposed to be order-independent?
 type Imports = HashMap<Resource, Vec<syntax::ImportItem>>;
@@ -136,7 +136,7 @@ pub(crate) fn imports_to_resources(imports: &[syntax::Import], resource: &Resour
     res
 }
 
-pub fn resolve<M: Mangler + ?Sized>(
+pub fn resolve(
     source: TranslationUnit,
     resource: Resource,
     resolver: &impl Resolver,

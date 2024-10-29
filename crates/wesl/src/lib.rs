@@ -4,6 +4,8 @@ mod attributes;
 mod condcomp;
 #[cfg(feature = "eval")]
 pub mod eval;
+#[cfg(feature = "generics")]
+mod generics;
 #[cfg(feature = "imports")]
 mod import;
 
@@ -16,13 +18,16 @@ mod strip;
 mod syntax_util;
 
 #[cfg(feature = "condcomp")]
-pub use condcomp::{run as run_condcomp, CondCompError};
+pub use condcomp::CondCompError;
 
 #[cfg(feature = "imports")]
 pub use import::{resolve, ImportError, Module};
 
 #[cfg(feature = "eval")]
 use eval::{Context, Eval, EvalError, Exec, Instance};
+
+#[cfg(feature = "generics")]
+pub use generics::GenericsError;
 
 pub use mangle::{
     CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE,
@@ -53,6 +58,7 @@ use wgsl_parse::syntax::TranslationUnit;
 pub struct CompileOptions {
     pub use_imports: bool,
     pub use_condcomp: bool,
+    pub use_generics: bool,
     pub strip: bool,
     pub entry_points: Option<Vec<String>>,
     pub features: HashMap<String, bool>,
@@ -63,6 +69,7 @@ impl Default for CompileOptions {
         Self {
             use_imports: true,
             use_condcomp: true,
+            use_generics: true,
             strip: true,
             entry_points: Default::default(),
             features: Default::default(),
@@ -81,6 +88,15 @@ fn compile_impl(
     let resolver: Box<dyn Resolver> = if cfg!(feature = "condcomp") && options.use_condcomp {
         Box::new(PreprocessResolver::new(resolver, |wesl| {
             condcomp::run(wesl, &options.features)?;
+            Ok(())
+        }))
+    } else {
+        resolver
+    };
+
+    let resolver: Box<dyn Resolver> = if cfg!(feature = "generics") && options.use_generics {
+        Box::new(PreprocessResolver::new(resolver, |wesl| {
+            generics::run(wesl)?;
             Ok(())
         }))
     } else {

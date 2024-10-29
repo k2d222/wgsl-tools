@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use wgsl_parse::{error::ParseError, span::Span};
 
-use crate::{CondCompError, EvalError, ImportError, ResolveError, Resource};
+use crate::{CondCompError, EvalError, GenericsError, ImportError, ResolveError, Resource};
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
@@ -16,6 +16,9 @@ pub enum Error {
     #[cfg(feature = "condcomp")]
     #[error("{0}")]
     CondCompError(#[from] CondCompError),
+    #[cfg(feature = "generics")]
+    #[error("{0}")]
+    GenericsError(#[from] GenericsError),
     #[cfg(feature = "eval")]
     #[error("{0}")]
     EvalError(#[from] EvalError),

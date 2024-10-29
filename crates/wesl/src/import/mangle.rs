@@ -5,23 +5,20 @@ use super::Module;
 use crate::syntax_util::IterUses;
 use crate::{Mangler, Resource};
 use wgsl_parse::syntax::*;
-use wgsl_parse_macros::query_mut;
 
 fn mangle_file(wesl: &mut TranslationUnit, resource: Resource, mangler: &impl Mangler) {
     // find delared idents
-    let mut replace: HashMap<String, String> = query_mut!(wesl.global_declarations.[].{
-        GlobalDeclaration::Declaration.name,
-        GlobalDeclaration::TypeAlias.name,
-        GlobalDeclaration::Struct.name,
-        GlobalDeclaration::Function.name,
-    })
-    .map(|decl_ident| {
-        let old_ident = decl_ident.to_string();
-        let new_ident = mangler.mangle(&resource, &old_ident);
-        *decl_ident = new_ident.clone();
-        (old_ident, new_ident)
-    })
-    .collect();
+    let mut replace: HashMap<String, String> = wesl
+        .global_declarations
+        .iter_mut()
+        .filter_map(|decl| decl.name_mut())
+        .map(|decl_ident| {
+            let old_ident = decl_ident.to_string();
+            let new_ident = mangler.mangle(&resource, &old_ident);
+            *decl_ident = new_ident.clone();
+            (old_ident, new_ident)
+        })
+        .collect();
 
     // find imported idents
     let imports = imports_to_resources(&wesl.imports, &resource);

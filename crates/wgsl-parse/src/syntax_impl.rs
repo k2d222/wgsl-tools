@@ -97,14 +97,24 @@ impl From<Expression> for ReturnStatement {
 }
 
 impl GlobalDeclaration {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> Option<&str> {
         match self {
-            GlobalDeclaration::Void => "",
-            GlobalDeclaration::Declaration(decl) => decl.name.as_str(),
-            GlobalDeclaration::TypeAlias(decl) => decl.name.as_str(),
-            GlobalDeclaration::Struct(decl) => decl.name.as_str(),
-            GlobalDeclaration::Function(decl) => decl.name.as_str(),
-            GlobalDeclaration::ConstAssert(_) => "",
+            GlobalDeclaration::Void => None,
+            GlobalDeclaration::Declaration(decl) => Some(decl.name.as_str()),
+            GlobalDeclaration::TypeAlias(decl) => Some(decl.name.as_str()),
+            GlobalDeclaration::Struct(decl) => Some(decl.name.as_str()),
+            GlobalDeclaration::Function(decl) => Some(decl.name.as_str()),
+            GlobalDeclaration::ConstAssert(_) => None,
+        }
+    }
+    pub fn name_mut(&mut self) -> Option<&mut String> {
+        match self {
+            GlobalDeclaration::Void => None,
+            GlobalDeclaration::Declaration(decl) => Some(&mut decl.name),
+            GlobalDeclaration::TypeAlias(decl) => Some(&mut decl.name),
+            GlobalDeclaration::Struct(decl) => Some(&mut decl.name),
+            GlobalDeclaration::Function(decl) => Some(&mut decl.name),
+            GlobalDeclaration::ConstAssert(_) => None,
         }
     }
 }

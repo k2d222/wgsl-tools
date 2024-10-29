@@ -19,8 +19,9 @@ wgsl-parse = { path = "../wgsl-parse", features = ["imports", "condcomp"] }
 wgsl-parse-macros = { version = "0.0.2", path = "../wgsl-parse-macros" }
 
 [features]
-default = ["imports", "condcomp", "eval"]
+default = ["imports", "condcomp", "generics", "eval"]
 imports = ["wgsl-parse/imports"]
 attributes = ["wgsl-parse/attributes"]
 condcomp = ["attributes", "wgsl-parse/condcomp"]
 eval = []
+generics = ["attributes"]
