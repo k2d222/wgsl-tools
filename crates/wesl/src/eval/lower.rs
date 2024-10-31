@@ -347,7 +347,7 @@ impl Lower for TranslationUnit {
                 GlobalDeclaration::Function(decl) => decl.lower(ctx),
                 GlobalDeclaration::ConstAssert(decl) => decl.lower(ctx),
             }
-            .inspect_err(|_| ctx.set_err_decl_ctx(decl.name()))?;
+            .inspect_err(|_| ctx.set_err_decl_ctx(decl.name().unwrap_or_default()))?;
         }
         self.global_declarations.retain(|decl| match decl {
             GlobalDeclaration::Void => false,

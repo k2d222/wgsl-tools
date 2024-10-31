@@ -69,22 +69,26 @@ pub fn run(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
                     }
                 }
 
-                // let signature = decl.parameters.iter().map(|p| {
-                //     let mut ty = p.ty.clone();
-                //     for (old_name, new_name) in &variant {
-                //         rename_ty(ty, old_name, new_name)
-                //     }
-                // })
+                let signature = decl
+                    .parameters
+                    .iter()
+                    .map(|p| {
+                        let mut ty = p.ty.clone();
+                        for (old_name, new_name) in &variant {
+                            replace_ty(&mut ty, old_name, new_name)
+                        }
+                        ty
+                    })
+                    .collect_vec();
 
-                // decl.name = format!("{}{}", decl.name, signature);
-
+                decl.name = mangle::mangle(&decl.name, &signature);
                 new_decls.push(decl.into());
             }
         }
     }
 
     // remove generic function declarations
-    wesl.global_declarations.retain(|decl| matches!(decl, GlobalDeclaration::Function(f) if f.attributes.iter().find(|attr| attr.is_type()).is_some()));
+    wesl.global_declarations.retain(|decl| !matches!(decl, GlobalDeclaration::Function(f) if f.attributes.iter().find(|attr| attr.is_type()).is_some()));
 
     // add generic variants
     wesl.global_declarations.extend(new_decls);
