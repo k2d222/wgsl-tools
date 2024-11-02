@@ -49,9 +49,9 @@ impl Module {
                     module.resolve_import(child_res, wesl);
                     rec(module, resolver, &imports).map_err(|e| {
                         ResolveError::Error(
-                            Diagnostic::new(e.into())
-                                .file(child_res.clone())
-                                .source(source.to_string()),
+                            Diagnostic::from(e)
+                                .with_file(child_res.clone())
+                                .with_source(source.to_string()),
                         )
                     })?;
                 }

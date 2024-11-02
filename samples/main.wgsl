@@ -23,3 +23,8 @@ fn abs(e: T) -> T {
         return max(-e, e);
     }
 }
+
+@const
+fn main() -> i32 {
+    return abs<i32>(-5);
+}

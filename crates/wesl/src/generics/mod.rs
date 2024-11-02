@@ -2,7 +2,7 @@ mod mangle;
 
 use itertools::Itertools;
 use thiserror::Error;
-use wgsl_parse::{syntax::*, Decorated};
+use wgsl_parse::{syntax::*, visit::VisitMut, Decorated};
 
 use crate::{attributes::statement_query_attributes, syntax_util::IterUses};
 
@@ -18,7 +18,7 @@ pub fn replace_ty(ty: &mut TypeExpression, old_name: &str, new_ty: &TypeExpressi
     }
 }
 
-pub fn run(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
+pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
     let mut new_decls = Vec::new();
     for decl in &wesl.global_declarations {
         if let GlobalDeclaration::Function(decl) = decl {
@@ -93,6 +93,32 @@ pub fn run(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
     // add generic variants
     wesl.global_declarations.extend(new_decls);
 
+    Ok(())
+}
+
+pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
+    for expr in VisitMut::<ExpressionNode>::visit_mut(wesl) {
+        match expr.node_mut() {
+            Expression::FunctionCall(f) => {
+                if let Some(args) = &f.ty.template_args {
+                    let signature = args
+                        .iter()
+                        .map(|arg| match arg.expression.node() {
+                            Expression::Literal(_) => todo!("literal generics"),
+                            Expression::TypeOrIdentifier(ty) => ty.clone(),
+                            _ => panic!("invalid template arg"),
+                        })
+                        .collect_vec();
+
+                    f.ty.name = mangle::mangle(&f.ty.name, &signature);
+                    f.ty.template_args = None;
+                }
+            }
+            _ => (),
+        }
+        // TODO recursive
+        // expr.visit_mut()
+    }
     Ok(())
 }
 

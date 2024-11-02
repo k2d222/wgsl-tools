@@ -1,5 +1,5 @@
 use super::{
-    ArrayInstance, ArrayTemplate, Context, Eval, EvalError, Instance, LiteralInstance, MatInstance,
+    ArrayInstance, ArrayTemplate, Context, EvalError, Instance, LiteralInstance, MatInstance,
     MatTemplate, PtrInstance, PtrTemplate, RefInstance, StructInstance, SyntaxUtil, VecInstance,
     VecTemplate,
 };
@@ -25,7 +25,7 @@ pub enum Type {
 }
 
 impl Type {
-    /// reference: https://www.w3.org/TR/WGSL/#scalar
+    /// reference: <https://www.w3.org/TR/WGSL/#scalar>
     pub fn is_scalar(&self) -> bool {
         match self {
             Type::Bool
@@ -39,7 +39,7 @@ impl Type {
         }
     }
 
-    /// reference: https://www.w3.org/TR/WGSL/#numeric-scalar
+    /// reference: <https://www.w3.org/TR/WGSL/#numeric-scalar>
     pub fn is_numeric(&self) -> bool {
         match self {
             Type::AbstractInt
@@ -52,7 +52,7 @@ impl Type {
         }
     }
 
-    /// reference: https://www.w3.org/TR/WGSL/#integer-scalar
+    /// reference: <https://www.w3.org/TR/WGSL/#integer-scalar>
     pub fn is_integer(&self) -> bool {
         match self {
             Type::AbstractInt | Type::I32 | Type::U32 => true,
@@ -60,7 +60,7 @@ impl Type {
         }
     }
 
-    /// reference: https://www.w3.org/TR/WGSL/#abstract-types
+    /// reference: <https://www.w3.org/TR/WGSL/#abstract-types>
     pub fn is_abstract(&self) -> bool {
         match self {
             Type::AbstractInt => true,
@@ -74,7 +74,7 @@ impl Type {
         !self.is_abstract()
     }
 
-    /// reference: https://www.w3.org/TR/WGSL/#storable-types
+    /// reference: <https://www.w3.org/TR/WGSL/#storable-types>
     pub fn is_storable(&self) -> bool {
         self.is_concrete()
             && match self {

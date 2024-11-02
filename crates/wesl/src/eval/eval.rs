@@ -1,9 +1,7 @@
 use std::iter::zip;
 
-use crate::eval::{ArrayInstance, MatInstance};
-
 use super::{
-    call_builtin, AccessMode, Context, Convert, EvalError, EvalStage, EvalTy, Exec, Flow, Instance,
+    call_builtin, Context, Convert, EvalError, EvalStage, EvalTy, Exec, Flow, Instance,
     LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_INTRINSIC,
 };
 

@@ -5,8 +5,8 @@
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 use wesl::{
-    eval::Instance, BasicSourceMap, CompileOptions, FileResolver, Mangler, Resource,
-    MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
+    eval::Instance, syntax, BasicSourceMap, CompileOptions, Diagnostic, Error, FileResolver,
+    Mangler, Resource, MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE,
 };
 use wgsl_parse::{error::FormatError, syntax::TranslationUnit, Parser as WgslParser};
 
@@ -162,14 +162,28 @@ fn run_compile(args: &CompileArgs) -> Result<(TranslationUnit, Option<BasicSourc
 
 fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
     let (wgsl, sourcemap) = run_compile(&args.compile)?;
-    if let Some(mut sourcemap) = sourcemap {
-        sourcemap.set_default_source(args.expr.clone());
-        let inst = wesl::eval_with_sourcemap(&args.expr, &wgsl, &sourcemap)?;
-        Ok(inst)
-    } else {
-        let inst = wesl::eval(&args.expr, &wgsl)?;
-        Ok(inst)
-    }
+
+    let inst = (|| {
+        let expr = args
+            .expr
+            .parse::<syntax::Expression>()
+            .map_err(|e| Diagnostic::from(e).with_source(args.expr.to_string()))?;
+
+        let (res, ctx) = wesl::eval(&expr, &wgsl);
+        let res = res.map_err(|e| {
+            Diagnostic::from(e)
+                .with_source(args.expr.clone())
+                .with_ctx(&ctx)
+        });
+        if let Some(sourcemap) = sourcemap {
+            res.map_err(|e| e.with_sourcemap(&sourcemap))
+        } else {
+            res
+        }
+    })()
+    .map_err(|e| CliError::CompileError(Error::Error(e)))?;
+
+    Ok(inst)
 }
 
 fn main() {

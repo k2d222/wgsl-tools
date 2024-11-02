@@ -169,6 +169,10 @@ impl<'s> Context<'s> {
     pub fn err_ctx(&self) -> (Option<String>, Option<Span>) {
         (self.err_decl.clone(), self.err_expr.clone())
     }
+
+    pub fn set_stage(&mut self, stage: EvalStage) {
+        self.stage = stage;
+    }
 }
 
 pub trait SyntaxUtil {
@@ -177,7 +181,7 @@ pub trait SyntaxUtil {
 
     /// find a struct declaration by name.
     ///
-    /// see also: [`resolve_alias`] to resolve the name before calling this function.
+    /// see also: [`Self::resolve_alias`] to resolve the name before calling this function.
     fn decl_struct(&self, name: &str) -> Option<&Struct>;
 
     /// find a function declaration by name.

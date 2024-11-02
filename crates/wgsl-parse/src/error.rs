@@ -1,5 +1,3 @@
-//! A [`SpannedError`] is the error type returned by `Parser::parse*` functions.
-
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},

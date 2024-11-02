@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::fmt::Formatter;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -9,7 +8,6 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 use wgsl_parse::syntax::Expression;
-use wgsl_parse::syntax::ExpressionNode;
 use wgsl_parse::syntax::TypeExpression;
 
 use super::Resource;

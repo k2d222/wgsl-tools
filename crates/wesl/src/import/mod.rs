@@ -7,7 +7,7 @@ mod module;
 use itertools::Itertools;
 pub use module::{resolve, Module};
 
-use crate::{Diagnostic, ResolveError};
+use crate::ResolveError;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImportPath(Vec<String>);

@@ -1,16 +1,12 @@
 use crate::{
-    attributes::query_attributes,
-    eval::{Lower, SyntaxUtil},
-    sourcemap::NoSourceMap,
-    syntax_util::IterUses,
-    Context, Error, SourceMap,
+    attributes::query_attributes, sourcemap::NoSourceMap, syntax_util::IterUses, Error, SourceMap,
 };
 use wgsl_parse::syntax::*;
 
 /// Like [`lower`], but provides better error diagnostics.
 pub fn lower_sourcemap(
     wesl: &mut TranslationUnit,
-    sourcemap: &impl SourceMap,
+    _sourcemap: &impl SourceMap,
 ) -> Result<(), Error> {
     if cfg!(feature = "imports") {
         wesl.imports.clear();

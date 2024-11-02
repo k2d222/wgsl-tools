@@ -1,6 +1,6 @@
 use half::prelude::*;
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
-use std::{collections::HashMap, iter::zip};
+use std::collections::HashMap;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -15,7 +15,7 @@ use super::{
     conv::{convert_all, Convert},
     ops::Compwise,
     ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, StructInstance,
-    SyntaxUtil, ToExpr, Ty, Type, VecInstance,
+    SyntaxUtil, Ty, Type, VecInstance,
 };
 
 type E = EvalError;

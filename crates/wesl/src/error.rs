@@ -2,7 +2,10 @@ use std::fmt::Display;
 
 use wgsl_parse::{error::ParseError, span::Span};
 
-use crate::{CondCompError, EvalError, GenericsError, ImportError, ResolveError, Resource};
+use crate::{CondCompError, GenericsError, ImportError, ResolveError, Resource, SourceMap};
+
+#[cfg(feature = "eval")]
+use crate::eval::{Context, EvalError};
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
@@ -37,18 +40,70 @@ pub struct Diagnostic<E: std::error::Error> {
 
 impl From<wgsl_parse::Error> for Diagnostic<Error> {
     fn from(error: wgsl_parse::Error) -> Self {
-        Self {
-            error: Box::new(Error::ParseError(error.error)),
-            source: None,
-            file: None,
-            declaration: None,
-            span: Some(error.span),
+        let mut res = Self::new(Error::ParseError(error.error));
+        res.span = Some(error.span);
+        res
+    }
+}
+
+impl From<ParseError> for Diagnostic<Error> {
+    fn from(error: ParseError) -> Self {
+        Self::new(error.into())
+    }
+}
+
+impl From<ResolveError> for Diagnostic<Error> {
+    fn from(error: ResolveError) -> Self {
+        match error {
+            ResolveError::FileNotFound(_) => Self::new(error.into()),
+            ResolveError::Error(e) => e,
+        }
+    }
+}
+
+impl From<ImportError> for Diagnostic<Error> {
+    fn from(error: ImportError) -> Self {
+        match error {
+            ImportError::ResolveError(e) => Self::from(e),
+            _ => Self::new(error.into()),
+        }
+    }
+}
+
+impl From<CondCompError> for Diagnostic<Error> {
+    fn from(error: CondCompError) -> Self {
+        Self::new(error.into())
+    }
+}
+
+impl From<GenericsError> for Diagnostic<Error> {
+    fn from(error: GenericsError) -> Self {
+        Self::new(error.into())
+    }
+}
+
+impl From<EvalError> for Diagnostic<Error> {
+    fn from(error: EvalError) -> Self {
+        Self::new(error.into())
+    }
+}
+
+impl From<Error> for Diagnostic<Error> {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::ParseError(e) => e.into(),
+            Error::ResolveError(e) => e.into(),
+            Error::ImportError(e) => e.into(),
+            Error::CondCompError(e) => e.into(),
+            Error::GenericsError(e) => e.into(),
+            Error::EvalError(e) => e.into(),
+            Error::Error(e) => return e,
         }
     }
 }
 
 impl<E: std::error::Error> Diagnostic<E> {
-    pub fn new(error: E) -> Diagnostic<E> {
+    fn new(error: E) -> Diagnostic<E> {
         Self {
             error: Box::new(error),
             source: None,
@@ -57,12 +112,44 @@ impl<E: std::error::Error> Diagnostic<E> {
             span: None,
         }
     }
-    pub fn source(mut self, source: String) -> Self {
+    pub fn with_source(mut self, source: String) -> Self {
         self.source = Some(source);
         self
     }
-    pub fn file(mut self, file: Resource) -> Self {
+    pub fn with_file(mut self, file: Resource) -> Self {
         self.file = Some(file);
+        self
+    }
+
+    #[cfg(feature = "eval")]
+    pub fn with_ctx(mut self, ctx: &Context) -> Self {
+        let (decl, span) = ctx.err_ctx();
+        self.declaration = decl;
+        self.span = span;
+        self
+    }
+
+    pub fn with_sourcemap(mut self, sourcemap: &impl SourceMap) -> Self {
+        if let Some(decl) = &self.declaration {
+            if let Some((resource, decl)) = sourcemap.get_decl(&decl) {
+                self.file = Some(resource.clone());
+                self.declaration = Some(decl.to_string());
+                self.source = sourcemap
+                    .get_source(resource)
+                    .map(|s| s.to_string())
+                    .or(self.source);
+            } else {
+                self.source = sourcemap
+                    .get_default_source()
+                    .map(|s| s.to_string())
+                    .or(self.source);
+            }
+        } else {
+            self.source = sourcemap
+                .get_default_source()
+                .map(|s| s.to_string())
+                .or(self.source);
+        }
         self
     }
 }

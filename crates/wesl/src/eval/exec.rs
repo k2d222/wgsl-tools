@@ -20,7 +20,6 @@ pub enum Flow {
     Return(Instance),
 }
 
-#[macro_export]
 macro_rules! with_stage {
     ($ctx:expr, $stage:expr, $body:tt) => {{
         let stage = $ctx.stage;
@@ -30,6 +29,7 @@ macro_rules! with_stage {
         body
     }};
 }
+pub(super) use with_stage;
 
 impl Display for Flow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -506,7 +506,7 @@ impl Exec for Declaration {
         }
 
         match (self.kind, ctx.kind) {
-            (DeclarationKind::Const, scope) => {
+            (DeclarationKind::Const, _scope) => {
                 let mut inst = self
                     .initializer
                     .as_ref()
@@ -587,7 +587,7 @@ impl Exec for Declaration {
                 }
             }
             (DeclarationKind::Let, ScopeKind::Module) => Err(E::LetInMod),
-            (DeclarationKind::Var(addr_space), ScopeKind::Module) => {
+            (DeclarationKind::Var(_addr_space), ScopeKind::Module) => {
                 // TODO: implement  address space
                 if ctx.stage == EvalStage::Const {
                     // in const contexts we just ignore var declarations since they cannot be

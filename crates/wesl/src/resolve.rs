@@ -58,8 +58,8 @@ pub trait Resolver {
     ) -> Result<TranslationUnit, ResolveError> {
         let wesl = source.parse().map_err(|e| {
             Diagnostic::from(e)
-                .file(resource.clone())
-                .source(source.to_string())
+                .with_file(resource.clone())
+                .with_source(source.to_string())
         })?;
         Ok(wesl)
     }
@@ -189,7 +189,7 @@ impl Resolver for VirtualFileResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let source = self
             .get_file(resource)
-            .map_err(|e| Diagnostic::new(e).file(resource.clone()))?;
+            .map_err(|e| Diagnostic::from(e).with_file(resource.clone()))?;
         Ok(source.into())
     }
 }
@@ -224,13 +224,13 @@ impl<'a, F: ResolveFn> Resolver for PreprocessResolver<'a, F> {
     ) -> Result<TranslationUnit, ResolveError> {
         let mut wesl = source.parse().map_err(|e| {
             Diagnostic::from(e)
-                .file(resource.clone())
-                .source(source.to_string())
+                .with_file(resource.clone())
+                .with_source(source.to_string())
         })?;
         (self.preprocess)(&mut wesl).map_err(|e| {
-            Diagnostic::new(e)
-                .file(resource.clone())
-                .source(source.to_string())
+            Diagnostic::from(e)
+                .with_file(resource.clone())
+                .with_source(source.to_string())
         })?;
         Ok(wesl)
     }

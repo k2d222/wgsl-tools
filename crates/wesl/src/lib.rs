@@ -49,7 +49,7 @@ pub use wgsl_parse::syntax;
 
 pub use lower::{lower, lower_sourcemap};
 
-use syntax_util::{entry_points, rename_decl};
+use syntax_util::entry_points;
 
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -94,15 +94,6 @@ fn compile_impl(
         resolver
     };
 
-    let resolver: Box<dyn Resolver> = if cfg!(feature = "generics") && options.use_generics {
-        Box::new(PreprocessResolver::new(resolver, |wesl| {
-            generics::run(wesl)?;
-            Ok(())
-        }))
-    } else {
-        resolver
-    };
-
     let source = resolver.resolve_source(entrypoint)?;
     let wesl = resolver.source_to_module(&source, entrypoint)?;
 
@@ -111,7 +102,7 @@ fn compile_impl(
         .map(|name| name.to_string())
         .collect_vec();
 
-    let mut wgsl = if cfg!(feature = "imports") && options.use_imports {
+    let mut wesl = if cfg!(feature = "imports") && options.use_imports {
         let mut module = Module::new(wesl, entrypoint.clone());
         module.resolve(&resolver)?;
         module.mangle(mangler);
@@ -121,31 +112,32 @@ fn compile_impl(
         wesl
     };
 
+    if cfg!(feature = "generics") && options.use_generics {
+        generics::generate_variants(&mut wesl)?;
+        generics::replace_calls(&mut wesl)?;
+    };
+
     if options.strip {
-        if let Some(entry_names) = &options.entry_points {
-            let mangled_names = entry_names
-                .iter()
-                .map(|name| mangler.mangle(entrypoint, name))
-                .collect_vec();
-            strip(&mut wgsl, &mangled_names);
-        } else {
-            let mangled_names = entry_names
-                .iter()
-                .map(|name| mangler.mangle(entrypoint, name))
-                .collect_vec();
-            strip(&mut wgsl, &mangled_names);
-        }
+        let entry_names = options.entry_points.as_ref().unwrap_or(entry_names);
+        // TODO: should we mangle names in main?
+        // let mangled_names = entry_names
+        //     .iter()
+        //     .map(|name| mangler.mangle(entrypoint, name))
+        //     .collect_vec();
+        // strip(&mut wesl, &mangled_names);
+        strip(&mut wesl, entry_names);
     }
 
-    for entry_name in entry_names {
-        rename_decl(
-            &mut wgsl,
-            &mangler.mangle(entrypoint, &entry_name),
-            entry_name,
-        );
-    }
+    // TODO: should we mangle names in main?
+    // for entry_name in entry_names {
+    //     rename_decl(
+    //         &mut wesl,
+    //         &mangler.mangle(entrypoint, &entry_name),
+    //         entry_name,
+    //     );
+    // }
 
-    Ok(wgsl)
+    Ok(wesl)
 }
 
 pub fn compile(
@@ -189,62 +181,11 @@ pub fn compile_with_sourcemap(
 }
 
 #[cfg(feature = "eval")]
-impl Error {
-    pub fn to_diagnostic(self, ctx: &Context, sourcemap: &impl SourceMap) -> Diagnostic<Error> {
-        let mut diagnostic = Diagnostic::new(self);
-        let (decl, span) = ctx.err_ctx();
-        diagnostic.span = span;
-
-        if let Some(decl) = decl {
-            if let Some((resource, decl)) = sourcemap.get_decl(&decl) {
-                diagnostic.file = Some(resource.clone());
-                diagnostic.declaration = Some(decl.to_string());
-                diagnostic.source = sourcemap.get_source(resource).map(|s| s.to_string());
-            } else {
-                diagnostic.declaration = Some(decl);
-                diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
-            }
-        } else {
-            diagnostic.source = sourcemap.get_default_source().map(|s| s.to_string());
-        }
-        diagnostic
-    }
-}
-
-#[cfg(feature = "eval")]
-pub fn eval(expr: &str, wgsl: &TranslationUnit) -> Result<Instance, Error> {
+pub fn eval<'s>(
+    expr: &syntax::Expression,
+    wgsl: &'s TranslationUnit,
+) -> (Result<Instance, EvalError>, Context<'s>) {
     let mut ctx = Context::new(wgsl);
-    let expr = expr
-        .parse::<syntax::Expression>()
-        .map_err(|e| Diagnostic::from(e).source(expr.to_string()))?;
-
-    let instance = wgsl
-        .exec(&mut ctx)
-        .and_then(|_| expr.eval(&mut ctx))
-        .map_err(|e| {
-            let mut diagnostic = Diagnostic::new(e.into());
-            let (decl, span) = ctx.err_ctx();
-            diagnostic.declaration = decl;
-            diagnostic.span = span;
-            diagnostic
-        })?;
-    Ok(instance)
-}
-
-#[cfg(feature = "eval")]
-pub fn eval_with_sourcemap(
-    expr: &str,
-    wgsl: &TranslationUnit,
-    sourcemap: &impl SourceMap,
-) -> Result<Instance, Error> {
-    let mut ctx = Context::new(wgsl);
-    let expr = expr
-        .parse::<syntax::Expression>()
-        .map_err(|e| Diagnostic::from(e).source(expr.to_string()))?;
-
-    let instance = wgsl
-        .exec(&mut ctx)
-        .and_then(|_| expr.eval(&mut ctx))
-        .map_err(|e| Error::EvalError(e).to_diagnostic(&ctx, sourcemap))?;
-    Ok(instance)
+    let res = wgsl.exec(&mut ctx).and_then(|_| expr.eval(&mut ctx));
+    (res, ctx)
 }

@@ -9,7 +9,7 @@ use super::{
 
 pub trait Convert: Sized + Clone + Ty {
     /// convert an instance to another type, if a feasible conversion exists.
-    /// reference: https://www.w3.org/TR/WGSL/#conversion-rank
+    /// reference: <https://www.w3.org/TR/WGSL/#conversion-rank>
     fn convert_to(&self, ty: &Type) -> Option<Self>;
 
     /// convert an instance by changing its inner type to another.
@@ -69,7 +69,7 @@ impl Convert for LiteralInstance {
 
         // TODO: check that these conversions are correctly implemented.
         // I think they are correct.
-        // reference: https://www.w3.org/TR/WGSL/#floating-point-conversion
+        // reference: <https://www.w3.org/TR/WGSL/#floating-point-conversion>
         match (self, ty) {
             (Self::AbstractInt(n), Type::AbstractFloat) => n.to_f64().map(Self::AbstractFloat),
             (Self::AbstractInt(n), Type::I32) => n.to_i32().map(Self::I32),
@@ -167,7 +167,7 @@ impl Convert for Instance {
 }
 
 pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
-    // reference: https://www.w3.org/TR/WGSL/#conversion-rank
+    // reference: <https://www.w3.org/TR/WGSL/#conversion-rank>
     match (ty1, ty2) {
         (_, _) if ty1 == ty2 => Some(0),
         (Type::AbstractInt, Type::AbstractFloat) => Some(5),
