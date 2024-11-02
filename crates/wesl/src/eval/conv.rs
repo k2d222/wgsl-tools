@@ -153,7 +153,7 @@ impl Convert for Instance {
             return Some(self.clone());
         }
         match self {
-            Self::Literal(l) => Some(Self::Literal(l.convert_to(ty)?)),
+            Self::Literal(l) => l.convert_to(ty).map(Self::Literal),
             Self::Struct(_) => None,
             Self::Array(a) => a.convert_to(ty).map(Self::Array),
             Self::Vec(v) => v.convert_to(ty).map(Self::Vec),
@@ -228,10 +228,26 @@ pub fn convert_inner<T1: Convert + Ty + Clone, T2: Convert + Ty + Clone>(
 /// See [`convert`]
 pub fn convert_all<'a, T: Convert + Ty + Clone + 'a>(insts: &[T]) -> Option<Vec<T>> {
     let tys = insts.iter().map(|i| i.ty()).collect_vec();
-    let ty = convert_ty_all(&tys)?;
+    let ty = convert_all_ty(&tys)?;
+    convert_all_to(insts, ty)
+}
+
+/// See [`convert`]
+pub fn convert_all_to<'a, T: Convert + Ty + Clone + 'a>(insts: &[T], ty: &Type) -> Option<Vec<T>> {
     insts
         .into_iter()
         .map(|inst| inst.convert_to(ty))
+        .collect::<Option<Vec<_>>>()
+}
+
+/// See [`convert`]
+pub fn convert_all_inner_to<'a, T: Convert + Ty + Clone + 'a>(
+    insts: &[T],
+    ty: &Type,
+) -> Option<Vec<T>> {
+    insts
+        .into_iter()
+        .map(|inst| inst.convert_inner_to(ty))
         .collect::<Option<Vec<_>>>()
 }
 
@@ -247,7 +263,7 @@ pub fn convert_ty<'a>(ty1: &'a Type, ty2: &'a Type) -> Option<&'a Type> {
 /// performs overload resolution when two instances of T are involved (which is the most common).
 /// it just makes sure that the two types are the same.
 /// this is sufficient in most cases.
-pub fn convert_ty_all<'a>(tys: impl IntoIterator<Item = &'a Type> + 'a) -> Option<&'a Type> {
+pub fn convert_all_ty<'a>(tys: impl IntoIterator<Item = &'a Type> + 'a) -> Option<&'a Type> {
     tys.into_iter()
         .map(Option::Some)
         .reduce(|ty1, ty2| convert_ty(ty1?, ty2?))

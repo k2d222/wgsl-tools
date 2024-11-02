@@ -52,7 +52,7 @@ impl Mangle for TranslationUnit {
 
 impl Module {
     pub fn mangle(&mut self, mangler: &impl Mangler) {
-        // should we mangle items in main?
+        // TODO: should we mangle items in main?
         // self.source.mangle(resource, mangler);
         for (resource, source) in &mut self.resolutions {
             source.mangle(resource, mangler);

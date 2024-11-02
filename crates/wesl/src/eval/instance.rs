@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use derive_more::derive::{From, Unwrap};
+use derive_more::derive::{From, IsVariant, Unwrap};
 use half::f16;
 use itertools::Itertools;
 use wgsl_parse::syntax::{AccessMode, AddressSpace};
@@ -16,7 +16,7 @@ use super::{EvalError, Type};
 
 type E = EvalError;
 
-#[derive(Clone, Debug, From, PartialEq, Unwrap)]
+#[derive(Clone, Debug, From, PartialEq, IsVariant, Unwrap)]
 #[unwrap(ref, ref_mut)]
 pub enum Instance {
     Literal(LiteralInstance),

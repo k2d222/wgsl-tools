@@ -13,6 +13,7 @@ use crate::{Context, Eval};
 
 use super::{
     conv::{convert_all, Convert},
+    convert_all_inner_to,
     ops::Compwise,
     ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, StructInstance,
     SyntaxUtil, Ty, Type, VecInstance,
@@ -194,15 +195,33 @@ pub fn call_builtin(
         ("f32", None, [a1]) => call_f32_1(a1),
         ("f16", None, []) => Instance::zero_value(&Type::F16, ctx),
         ("f16", None, [a1]) => call_f16_1(a1),
-        ("mat2x2", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat2x3", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat2x4", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat3x2", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat3x3", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat3x4", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat4x2", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat4x3", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
-        ("mat4x4", _, _) => Err(E::NotImpl("matrix constructors".to_string())),
+        ("mat2x2", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(2, 2), ctx),
+        ("mat2x2", Some(t), a) => call_mat_t(2, 2, MatTemplate::parse(t, ctx)?, a),
+        ("mat2x2", None, a) => call_mat(2, 2, a),
+        ("mat2x3", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(2, 3), ctx),
+        ("mat2x3", Some(t), a) => call_mat_t(2, 3, MatTemplate::parse(t, ctx)?, a),
+        ("mat2x3", None, a) => call_mat(2, 3, a),
+        ("mat2x4", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(2, 4), ctx),
+        ("mat2x4", Some(t), a) => call_mat_t(2, 4, MatTemplate::parse(t, ctx)?, a),
+        ("mat2x4", None, a) => call_mat(2, 4, a),
+        ("mat3x2", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(3, 2), ctx),
+        ("mat3x2", Some(t), a) => call_mat_t(3, 2, MatTemplate::parse(t, ctx)?, a),
+        ("mat3x2", None, a) => call_mat(3, 2, a),
+        ("mat3x3", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(3, 3), ctx),
+        ("mat3x3", Some(t), a) => call_mat_t(3, 3, MatTemplate::parse(t, ctx)?, a),
+        ("mat3x3", None, a) => call_mat(3, 3, a),
+        ("mat3x4", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(3, 4), ctx),
+        ("mat3x4", Some(t), a) => call_mat_t(3, 4, MatTemplate::parse(t, ctx)?, a),
+        ("mat3x4", None, a) => call_mat(3, 4, a),
+        ("mat4x2", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(4, 2), ctx),
+        ("mat4x2", Some(t), a) => call_mat_t(4, 2, MatTemplate::parse(t, ctx)?, a),
+        ("mat4x2", None, a) => call_mat(4, 2, a),
+        ("mat4x3", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(4, 3), ctx),
+        ("mat4x3", Some(t), a) => call_mat_t(4, 3, MatTemplate::parse(t, ctx)?, a),
+        ("mat4x3", None, a) => call_mat(4, 3, a),
+        ("mat4x4", Some(t), []) => Instance::zero_value(&MatTemplate::parse(t, ctx)?.ty(4, 4), ctx),
+        ("mat4x4", Some(t), a) => call_mat_t(4, 4, MatTemplate::parse(t, ctx)?, a),
+        ("mat4x4", None, a) => call_mat(4, 4, a),
         ("vec2", Some(t), []) => Instance::zero_value(&VecTemplate::parse(t, ctx)?.ty(2), ctx),
         ("vec2", Some(t), a) => call_vec_t(2, VecTemplate::parse(t, ctx)?, a),
         ("vec2", None, a) => call_vec(2, a),
@@ -305,8 +324,8 @@ pub fn call_builtin(
 }
 
 pub struct ArrayTemplate {
-    pub n: usize,
-    pub ty: Type,
+    n: usize,
+    ty: Type,
 }
 impl ArrayTemplate {
     pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<ArrayTemplate, E> {
@@ -345,10 +364,16 @@ impl ArrayTemplate {
     pub fn ty(&self) -> Type {
         Type::Array(self.n, Box::new(self.ty.clone()))
     }
+    pub fn inner_ty(&self) -> Type {
+        self.ty.clone()
+    }
+    pub fn n(&self) -> usize {
+        self.n
+    }
 }
 
 pub struct VecTemplate {
-    pub ty: Type,
+    ty: Type,
 }
 impl VecTemplate {
     pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<VecTemplate, E> {
@@ -373,10 +398,13 @@ impl VecTemplate {
     pub fn ty(&self, n: u8) -> Type {
         Type::Vec(n, self.ty.clone().into())
     }
+    pub fn inner_ty(&self) -> Type {
+        self.ty.clone()
+    }
 }
 
 pub struct MatTemplate {
-    pub ty: Type,
+    ty: Type,
 }
 
 impl MatTemplate {
@@ -388,9 +416,9 @@ impl MatTemplate {
         let mut it = tplt.into_iter();
         match (it.next(), it.next()) {
             (Some(Instance::Type(ty)), None) => {
-                if !ty.is_scalar() || ty.is_abstract() {
+                if !ty.is_f_32() && !ty.is_f_16() {
                     return Err(EvalError::Builtin(
-                        "matrix template type must be a concrete scalar",
+                        "matrix template type must be f32 or f16",
                     ));
                 }
                 Ok(MatTemplate { ty })
@@ -401,6 +429,10 @@ impl MatTemplate {
 
     pub fn ty(&self, c: u8, r: u8) -> Type {
         Type::Mat(c, r, self.ty.clone().into())
+    }
+
+    pub fn inner_ty(&self) -> Type {
+        self.ty.clone()
     }
 }
 
@@ -626,36 +658,147 @@ fn call_f16_1(a1: &Instance) -> Result<Instance, E> {
     }
 }
 
+fn call_mat_t(c: usize, r: usize, tplt: MatTemplate, args: &[Instance]) -> Result<Instance, E> {
+    // overload 1: mat conversion constructor
+    if let [Instance::Mat(m)] = args {
+        if m.c() != c || m.r() != r {
+            return Err(E::Conversion(m.ty(), tplt.ty(c as u8, r as u8)));
+        }
+
+        let conv_fn = match &tplt.inner_ty() {
+            Type::F32 => call_f32_1,
+            Type::F16 => call_f16_1,
+            _ => return Err(E::Builtin("matrix type must be a f32 or f16")),
+        };
+
+        let comps = m
+            .iter()
+            .map(|v| {
+                v.unwrap_vec_ref()
+                    .iter()
+                    .map(conv_fn)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|s| Instance::Vec(VecInstance::new(s)))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(MatInstance::new(comps).into())
+    } else {
+        let args = convert_all_inner_to(&args, &tplt.inner_ty())
+            .ok_or_else(|| E::Builtin("matrix components are not compatible"))?;
+        let ty = args
+            .first()
+            .ok_or_else(|| E::Builtin("matrix constructor expects arguments"))?
+            .ty();
+
+        // overload 2: mat from column vectors
+        if ty.is_vec() {
+            if args.len() != c {
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
+            }
+
+            Ok(MatInstance::new(args).into())
+        }
+        // overload 3: mat from scalar values
+        else {
+            if args.len() != c {
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c * r, args.len()));
+            }
+
+            let args = args
+                .chunks(c)
+                .map(|v| Instance::Vec(VecInstance::new(v.to_vec())))
+                .collect_vec();
+
+            Ok(MatInstance::new(args).into())
+        }
+    }
+}
+
+fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
+    // overload 1: mat conversion constructor
+    if let [Instance::Mat(m)] = args {
+        if m.c() != c || m.r() != r {
+            let ty = m.ty();
+            let ty2 = Type::Mat(c as u8, r as u8, ty.inner_ty().into());
+            return Err(E::Conversion(ty, ty2));
+        }
+        // note: `matCxR(e: matCxR<S>) -> matCxR<S>` is no-op
+        Ok(m.clone().into())
+    } else {
+        let inner_tys = args.iter().map(|a| a.inner_ty()).collect_vec();
+        let inner_ty = if inner_tys
+            .iter()
+            .all(|ty| ty.is_convertible_to(&Type::AbstractFloat))
+        {
+            Type::AbstractFloat
+        } else if inner_tys.iter().all(|ty| ty.is_convertible_to(&Type::F32)) {
+            Type::F32
+        } else if inner_tys.iter().all(|ty| ty.is_convertible_to(&Type::F16)) {
+            Type::F16
+        } else {
+            return Err(E::Builtin(
+                "matrix constructor expects AbstractFloat, f32, or f16 arguments",
+            ));
+        };
+
+        let args = convert_all_inner_to(&args, &inner_ty)
+            .ok_or_else(|| E::Builtin("matrix components are not compatible"))?;
+        let ty = args
+            .first()
+            .ok_or_else(|| E::Builtin("matrix constructor expects arguments"))?
+            .ty();
+
+        // overload 2: mat from column vectors
+        if ty.is_vec() {
+            if args.len() != c {
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
+            }
+
+            Ok(MatInstance::new(args).into())
+        }
+        // overload 3: mat from scalar values
+        else {
+            if args.len() != c {
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c * r, args.len()));
+            }
+            let args = args
+                .chunks(c)
+                .map(|v| Instance::Vec(VecInstance::new(v.to_vec())))
+                .collect_vec();
+
+            Ok(MatInstance::new(args).into())
+        }
+    }
+}
+
 fn call_vec_t(n: usize, tplt: VecTemplate, args: &[Instance]) -> Result<Instance, E> {
     // overload 1: vec init from single scalar value
     if let [Instance::Literal(l)] = args {
         let val = l
-            .convert_to(&tplt.ty)
+            .convert_to(&tplt.inner_ty())
             .map(Instance::Literal)
-            .ok_or_else(|| E::ParamType(tplt.ty.clone(), l.ty()))?;
+            .ok_or_else(|| E::ParamType(tplt.inner_ty(), l.ty()))?;
         let comps = (0..n).map(|_| val.clone()).collect_vec();
         Ok(VecInstance::new(comps).into())
     }
     // overload 2: vec conversion constructor
     else if let [Instance::Vec(v)] = args {
+        let ty = tplt.ty(n as u8);
         if v.n() != n {
-            return Err(E::Conversion(v.ty(), tplt.ty(n as u8)));
+            return Err(E::Conversion(v.ty(), ty));
         }
 
-        // this is a bit hacky
-        let inner_ty = tplt.ty(n as u8).inner_ty();
+        let conv_fn = match ty.inner_ty() {
+            Type::Bool => call_bool_1,
+            Type::I32 => call_i32_1,
+            Type::U32 => call_u32_1,
+            Type::F32 => call_f32_1,
+            Type::F16 => call_f16_1,
+            _ => return Err(E::Builtin("vector type must be a concrete scalar")),
+        };
 
-        let comps = args
-            .iter()
-            .map(|a| match inner_ty {
-                Type::Bool => call_bool_1(a),
-                Type::I32 => call_i32_1(a),
-                Type::U32 => call_u32_1(a),
-                Type::F32 => call_f32_1(a),
-                Type::F16 => call_f16_1(a),
-                _ => Err(E::Builtin("vector type must be a concrete scalar")),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let comps = v.iter().map(conv_fn).collect::<Result<Vec<_>, _>>()?;
 
         Ok(VecInstance::new(comps).into())
     }
@@ -668,8 +811,8 @@ fn call_vec_t(n: usize, tplt: VecTemplate, args: &[Instance]) -> Result<Instance
         let comps = args
             .iter()
             .map(|a| {
-                a.convert_inner_to(&tplt.ty)
-                    .ok_or_else(|| E::ParamType(tplt.ty.clone(), a.ty()))
+                a.convert_inner_to(&tplt.inner_ty())
+                    .ok_or_else(|| E::ParamType(tplt.inner_ty(), a.ty()))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -691,6 +834,7 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
             let ty2 = Type::Vec(n as u8, ty.inner_ty().into());
             return Err(E::Conversion(ty, ty2));
         }
+        // note: `vecN(e: vecN<S>) -> vecN<S>` is no-op
         Ok(v.clone().into())
     }
     // overload 3: vec init from component values
@@ -702,7 +846,7 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
         let comps =
             convert_all(&args).ok_or_else(|| E::Builtin("vector components are not compatible"))?;
 
-        if !comps[0].ty().is_scalar() {
+        if !comps.first().unwrap(/* SAFETY: len() checked above */).ty().is_scalar() {
             return Err(E::Builtin("vec constructor expects scalar arguments"));
         }
         Ok(VecInstance::new(comps).into())

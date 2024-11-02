@@ -4,9 +4,10 @@ use super::{
     VecTemplate,
 };
 
+use derive_more::derive::IsVariant;
 use wgsl_parse::syntax::*;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, IsVariant)]
 pub enum Type {
     Bool,
     AbstractInt,
@@ -256,7 +257,7 @@ impl EvalTy for TypeExpression {
                     let tplt = MatTemplate::parse(&tplt, ctx)?;
                     let c = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
                     let r = self.name.chars().nth(5).unwrap().to_digit(10).unwrap() as u8;
-                    Ok(Type::Mat(c, r, Box::new(tplt.ty)))
+                    Ok(tplt.ty(c, r))
                 }
                 "ptr" => {
                     let tplt = PtrTemplate::parse(&tplt, ctx)?;
