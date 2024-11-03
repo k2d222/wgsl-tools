@@ -123,7 +123,7 @@ impl Instance {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, From)]
+#[derive(Clone, Copy, Debug, PartialEq, From, Unwrap)]
 pub enum LiteralInstance {
     Bool(bool),
     AbstractInt(i64),
@@ -176,6 +176,9 @@ impl ArrayInstance {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
         self.components.iter_mut()
     }
+    pub fn as_slice(&self) -> &[Instance] {
+        self.components.as_slice()
+    }
 }
 impl IntoIterator for ArrayInstance {
     type Item = Instance;
@@ -216,6 +219,9 @@ impl VecInstance {
     }
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
         self.components.iter_mut()
+    }
+    pub fn as_slice(&self) -> &[Instance] {
+        self.components.as_slice()
     }
 }
 impl IntoIterator for VecInstance {

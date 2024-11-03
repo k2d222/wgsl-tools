@@ -1,8 +1,8 @@
 use half::prelude::*;
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{FromPrimitive, One, ToBytes, ToPrimitive, Zero};
 use std::collections::HashMap;
 
-use itertools::Itertools;
+use itertools::{chain, Itertools};
 use lazy_static::lazy_static;
 use wgsl_parse::syntax::{
     AccessMode, AddressSpace, Attribute, CustomAttribute, Expression, GlobalDeclaration,
@@ -74,7 +74,7 @@ lazy_static! {
 // -----------
 // ZERO VALUES
 // -----------
-// reference: https://www.w3.org/TR/WGSL/#zero-value
+// reference: <https://www.w3.org/TR/WGSL/#zero-value>
 
 impl Instance {
     /// zero-value initialize an instance of a given type.
@@ -169,7 +169,7 @@ impl MatInstance {
 // ------------
 // CONSTRUCTORS
 // ------------
-// reference: https://www.w3.org/TR/WGSL/#constructor-builtin-function
+// reference: <https://www.w3.org/TR/WGSL/#constructor-builtin-function>
 
 pub fn call_builtin(
     ty: &TypeExpression,
@@ -476,7 +476,7 @@ impl PtrTemplate {
                     None
                 };
                 // selecting the default access mode per address space.
-                // reference: https://www.w3.org/TR/WGSL/#address-space
+                // reference: <https://www.w3.org/TR/WGSL/#address-space>
                 let access = match (&mut space, access) {
                     (AddressSpace::Function, Some(access))
                     | (AddressSpace::Private, Some(access))
@@ -512,7 +512,7 @@ impl PtrTemplate {
 }
 
 pub struct BitcastTemplate {
-    pub ty: Type,
+    ty: Type,
 }
 impl BitcastTemplate {
     pub fn parse(tplt: &[TemplateArg], ctx: &mut Context) -> Result<BitcastTemplate, E> {
@@ -524,18 +524,21 @@ impl BitcastTemplate {
         match (it.next(), it.next()) {
             (Some(Instance::Type(ty)), None) => {
                 let inner = ty.inner_ty();
-                if !inner.is_scalar()
-                    || inner.is_abstract()
-                    || !(ty.is_scalar() || matches!(ty, Type::Vec(_, _)))
-                {
+                if !inner.is_numeric() || inner.is_abstract() || !(ty.is_numeric() || ty.is_vec()) {
                     return Err(EvalError::Builtin(
-                        "bitcast template type must be a concrete scalar or concrete scalar vector",
+                        "bitcast template type must be a concrete numeric scalar or concrete numeric vector",
                     ));
                 }
-                Ok(BitcastTemplate { ty: ty.clone() })
+                Ok(BitcastTemplate { ty })
             }
             _ => Err(E::TemplateArgs("bitcast")),
         }
+    }
+    pub fn ty(&self) -> Type {
+        self.ty.clone()
+    }
+    pub fn inner_ty(&self) -> Type {
+        self.ty.inner_ty()
     }
 }
 
@@ -856,16 +859,107 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
 // -------
 // BITCAST
 // -------
-// reference: https://www.w3.org/TR/WGSL/#bit-reinterp-builtin-functions
+// reference: <https://www.w3.org/TR/WGSL/#bit-reinterp-builtin-functions>
 
-fn call_bitcast_t(_tplt: BitcastTemplate, _a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("bitcast".to_string()))
+fn call_bitcast_t(tplt: BitcastTemplate, a1: &Instance) -> Result<Instance, E> {
+    fn lit_bytes(l: &LiteralInstance, ty: &Type) -> Result<Vec<u8>, E> {
+        match l {
+            LiteralInstance::Bool(_) => Err(E::Builtin("bitcast argument cannot be bool")),
+            LiteralInstance::AbstractInt(n) => {
+                if ty == &Type::U32 {
+                    n.to_u32()
+                        .map(|n| n.to_le_bytes().to_vec())
+                        .ok_or_else(|| E::ConvOverflow(*l, Type::U32))
+                } else {
+                    n.to_i32()
+                        .map(|n| n.to_le_bytes().to_vec())
+                        .ok_or_else(|| E::ConvOverflow(*l, Type::I32))
+                }
+            }
+            LiteralInstance::AbstractFloat(n) => n
+                .to_f32()
+                .map(|n| n.to_le_bytes().to_vec())
+                .ok_or_else(|| E::ConvOverflow(*l, Type::F32)),
+            LiteralInstance::I32(n) => Ok(n.to_le_bytes().to_vec()),
+            LiteralInstance::U32(n) => Ok(n.to_le_bytes().to_vec()),
+            LiteralInstance::F32(n) => Ok(n.to_le_bytes().to_vec()),
+            LiteralInstance::F16(n) => Ok(n.to_le_bytes().to_vec()),
+        }
+    }
+
+    fn vec_bytes(v: &VecInstance, ty: &Type) -> Result<Vec<u8>, E> {
+        v.iter()
+            .map(|n| lit_bytes(n.unwrap_literal_ref(), ty))
+            .reduce(|n1, n2| Ok(chain(n1?, n2?).collect_vec()))
+            .unwrap()
+    }
+
+    let ty = tplt.ty();
+
+    let bytes = match a1 {
+        Instance::Literal(l) => lit_bytes(l, &ty),
+        Instance::Vec(v) => vec_bytes(v, &ty),
+        _ => Err(E::Builtin(
+            "bitcast expects a numeric scalar or vector argument",
+        )),
+    }?;
+
+    let size_err = E::Builtin("bitcast input and output types must have the same size");
+
+    match ty {
+        Type::I32 => {
+            let n = i32::from_le_bytes(bytes.try_into().map_err(|_| size_err)?);
+            Ok(LiteralInstance::I32(n).into())
+        }
+        Type::U32 => {
+            let n = u32::from_le_bytes(bytes.try_into().map_err(|_| size_err)?);
+            Ok(LiteralInstance::U32(n).into())
+        }
+        Type::F32 => {
+            let n = f32::from_le_bytes(bytes.try_into().map_err(|_| size_err)?);
+            Ok(LiteralInstance::F32(n).into())
+        }
+        Type::Vec(n, ty) => {
+            if *ty == Type::I32 && bytes.len() == 4 * (n as usize) {
+                let v = bytes
+                    .chunks(4)
+                    .map(|b| i32::from_le_bytes(b.try_into().unwrap()))
+                    .map(|n| LiteralInstance::from(n).into())
+                    .collect_vec();
+                Ok(VecInstance::new(v).into())
+            } else if *ty == Type::U32 && bytes.len() == 4 * (n as usize) {
+                let v = bytes
+                    .chunks(4)
+                    .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+                    .map(|n| LiteralInstance::from(n).into())
+                    .collect_vec();
+                Ok(VecInstance::new(v).into())
+            } else if *ty == Type::F32 && bytes.len() == 4 * (n as usize) {
+                let v = bytes
+                    .chunks(4)
+                    .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                    .map(|n| LiteralInstance::from(n).into())
+                    .collect_vec();
+                Ok(VecInstance::new(v).into())
+            } else if *ty == Type::F16 && bytes.len() == 2 * (n as usize) {
+                let v = bytes
+                    .chunks(2)
+                    .map(|b| f16::from_le_bytes(b.try_into().unwrap()))
+                    .map(|n| LiteralInstance::from(n).into())
+                    .collect_vec();
+                Ok(VecInstance::new(v).into())
+            } else {
+                Err(size_err)
+            }
+        }
+        _ => unreachable!("invalid bitcast template"),
+    }
 }
 
 // -------
 // LOGICAL
 // -------
-// reference: https://www.w3.org/TR/WGSL/#logical-builtin-functions
+// reference: <https://www.w3.org/TR/WGSL/#logical-builtin-functions>
 
 fn call_all(_a1: &Instance) -> Result<Instance, E> {
     Err(E::NotImpl("all".to_string()))
@@ -882,7 +976,7 @@ fn call_select(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instanc
 // -----
 // ARRAY
 // -----
-// reference: https://www.w3.org/TR/WGSL/#array-builtin-functions
+// reference: <https://www.w3.org/TR/WGSL/#array-builtin-functions>
 
 fn call_arraylength(_a1: &Instance) -> Result<Instance, E> {
     Err(E::NotImpl("arrayLength".to_string()))
@@ -891,7 +985,7 @@ fn call_arraylength(_a1: &Instance) -> Result<Instance, E> {
 // -------
 // NUMERIC
 // -------
-// reference: https://www.w3.org/TR/WGSL/#numeric-builtin-function
+// reference: <https://www.w3.org/TR/WGSL/#numeric-builtin-function>
 
 fn call_abs(_a1: &Instance) -> Result<Instance, E> {
     Err(E::NotImpl("abs".to_string()))
@@ -1145,7 +1239,7 @@ fn call_trunc(_a1: &Instance) -> Result<Instance, E> {
 // ------------
 // DATA PACKING
 // ------------
-// reference: https://www.w3.org/TR/WGSL/#pack-builtin-functions
+// reference: <https://www.w3.org/TR/WGSL/#pack-builtin-functions>
 
 fn call_pack4x8snorm(_a1: &Instance) -> Result<Instance, E> {
     Err(E::NotImpl("pack4x8snorm".to_string()))
