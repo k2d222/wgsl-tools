@@ -77,6 +77,9 @@ struct EvalArgs {
     /// context to evaluate the expression into
     #[command(flatten)]
     compile: CompileArgs,
+    /// run the eval() to at shader-execution-time instead of at pipeline-creation-time
+    #[arg(long)]
+    runtime: bool,
     /// the expression to evaluate
     expr: String,
 }
@@ -169,7 +172,14 @@ fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
             .parse::<syntax::Expression>()
             .map_err(|e| Diagnostic::from(e).with_source(args.expr.to_string()))?;
 
-        let (res, ctx) = wesl::eval(&expr, &wgsl);
+        let (res, ctx) = if args.runtime {
+            let bindings = Default::default();
+            let overrides = Default::default();
+            wesl::eval_runtime(&expr, &wgsl, bindings, overrides)
+        } else {
+            wesl::eval_const(&expr, &wgsl)
+        };
+
         let res = res.map_err(|e| {
             Diagnostic::from(e)
                 .with_source(args.expr.clone())

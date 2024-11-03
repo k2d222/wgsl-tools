@@ -105,11 +105,11 @@ fn test_eval(
         .parse::<TranslationUnit>()
         .map_err(|e| wesl::Error::from(e.error))?;
 
-    let eval_inst = wesl::eval(eval, &ctx)?;
+    let eval_inst = wesl::eval_const(eval, &ctx)?;
 
     match result {
         Some(expect) => {
-            let expect_inst = wesl::eval(expect, &ctx)?;
+            let expect_inst = wesl::eval_const(expect, &ctx)?;
             Ok((eval_inst == expect_inst, eval_inst))
         }
         None => Ok((false, eval_inst)),

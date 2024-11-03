@@ -181,11 +181,26 @@ pub fn compile_with_sourcemap(
 }
 
 #[cfg(feature = "eval")]
-pub fn eval<'s>(
+pub fn eval_const<'s>(
     expr: &syntax::Expression,
     wgsl: &'s TranslationUnit,
 ) -> (Result<Instance, EvalError>, Context<'s>) {
     let mut ctx = Context::new(wgsl);
+    let res = wgsl.exec(&mut ctx).and_then(|_| expr.eval(&mut ctx));
+    (res, ctx)
+}
+
+#[cfg(feature = "eval")]
+pub fn eval_runtime<'s>(
+    expr: &syntax::Expression,
+    wgsl: &'s TranslationUnit,
+    bindings: HashMap<(usize, usize), Instance>,
+    overrides: HashMap<String, Instance>,
+) -> (Result<Instance, EvalError>, Context<'s>) {
+    let mut ctx = Context::new(wgsl);
+    ctx.add_resources(bindings);
+    ctx.add_overrides(overrides);
+    ctx.set_stage(eval::EvalStage::Exec);
     let res = wgsl.exec(&mut ctx).and_then(|_| expr.eval(&mut ctx));
     (res, ctx)
 }

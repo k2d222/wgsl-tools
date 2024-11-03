@@ -21,7 +21,7 @@ pub use to_expr::*;
 pub use ty::*;
 
 use derive_more::Display;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, collections::HashMap, rc::Rc};
 use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
@@ -124,9 +124,27 @@ pub enum EvalStage {
     Exec,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum ResourceKind {
+    UniformBuffer,
+    StorageBuffer,
+    Texture,
+    Sampler,
+}
+
+#[derive(Clone, Debug)]
+pub struct Resource {
+    kind: ResourceKind,
+    ty: Type,
+    access: AccessMode,
+    ptr: Rc<RefCell<Instance>>,
+}
+
 pub struct Context<'s> {
     source: &'s TranslationUnit,
     scope: Scope,
+    resources: HashMap<(usize, usize), Resource>,
+    overrides: HashMap<String, Instance>,
     kind: ScopeKind,
     stage: EvalStage,
     err_decl: Option<String>,
@@ -138,6 +156,8 @@ impl<'s> Context<'s> {
         Self {
             source,
             scope: Default::default(),
+            resources: Default::default(),
+            overrides: Default::default(),
             kind: ScopeKind::Function,
             stage: EvalStage::Const,
             err_expr: None,
@@ -172,6 +192,36 @@ impl<'s> Context<'s> {
 
     pub fn set_stage(&mut self, stage: EvalStage) {
         self.stage = stage;
+    }
+
+    pub fn add_resources(
+        &mut self,
+        resources: impl IntoIterator<Item = ((usize, usize), Instance)>,
+    ) {
+        for ((group, binding), inst) in resources.into_iter() {
+            self.add_resource(group, binding, inst);
+        }
+    }
+    pub fn add_resource(&mut self, group: usize, binding: usize, inst: Instance) {
+        let res = Resource {
+            kind: ResourceKind::StorageBuffer,
+            ty: inst.ty(),
+            access: AccessMode::ReadWrite,
+            ptr: Rc::new(RefCell::new(inst)),
+        };
+        self.resources.insert((group, binding), res);
+    }
+    pub fn resource(&self, group: usize, binding: usize) -> Option<Rc<RefCell<Instance>>> {
+        self.resources.get(&(group, binding)).map(|r| r.ptr.clone())
+    }
+    pub fn add_overrides(&mut self, overrides: impl IntoIterator<Item = (String, Instance)>) {
+        self.overrides.extend(overrides.into_iter());
+    }
+    pub fn add_overridable(&mut self, name: String, inst: Instance) {
+        self.overrides.insert(name, inst);
+    }
+    pub fn overridable(&self, name: &str) -> Option<&Instance> {
+        self.overrides.get(name)
     }
 }
 

@@ -24,7 +24,6 @@ fn abs(e: T) -> T {
     }
 }
 
-@const
 fn main() -> i32 {
     return abs<i32>(-5);
 }
