@@ -189,7 +189,7 @@ impl Eval for UnaryExpression {
                 UnaryOperator::LogicalNegation => operand.op_not(),
                 UnaryOperator::Negation => operand.op_neg(),
                 UnaryOperator::BitwiseComplement => operand.op_bitnot(),
-                UnaryOperator::AddressOf => unreachable!(),
+                UnaryOperator::AddressOf => unreachable!("handled above"),
                 UnaryOperator::Indirection => match operand {
                     Instance::Ptr(p) => Ok(RefInstance::from(p).into()),
                     operand @ _ => Err(E::Unary(self.operator, operand.ty())),

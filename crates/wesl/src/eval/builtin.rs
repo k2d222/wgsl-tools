@@ -15,8 +15,8 @@ use super::{
     conv::{convert_all, Convert},
     convert, convert_all_inner_to,
     ops::Compwise,
-    ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, StructInstance,
-    SyntaxUtil, Ty, Type, VecInstance,
+    ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, RefInstance,
+    StructInstance, SyntaxUtil, Ty, Type, VecInstance,
 };
 
 type E = EvalError;
@@ -1026,8 +1026,17 @@ fn call_select(f: &Instance, t: &Instance, cond: &Instance) -> Result<Instance, 
 // -----
 // reference: <https://www.w3.org/TR/WGSL/#array-builtin-functions>
 
-fn call_arraylength(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("arrayLength".to_string()))
+fn call_arraylength(p: &Instance) -> Result<Instance, E> {
+    let err = E::Builtin("`arrayLength` expects a pointer to array argument");
+    let r = match p {
+        Instance::Ptr(p) => RefInstance::from(p.clone()),
+        _ => return Err(err),
+    };
+    let r = r.read()?;
+    match &*r {
+        Instance::Array(a) => Ok(LiteralInstance::U32(a.n() as u32).into()),
+        _ => Err(err),
+    }
 }
 
 // -------
