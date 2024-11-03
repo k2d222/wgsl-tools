@@ -2,7 +2,7 @@ use half::prelude::*;
 use num_traits::{FromPrimitive, One, ToBytes, ToPrimitive, Zero};
 use std::collections::HashMap;
 
-use itertools::{chain, Itertools};
+use itertools::{chain, izip, Itertools};
 use lazy_static::lazy_static;
 use wgsl_parse::syntax::{
     AccessMode, AddressSpace, Attribute, CustomAttribute, Expression, GlobalDeclaration,
@@ -13,7 +13,7 @@ use crate::{Context, Eval};
 
 use super::{
     conv::{convert_all, Convert},
-    convert_all_inner_to,
+    convert, convert_all_inner_to,
     ops::Compwise,
     ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, StructInstance,
     SyntaxUtil, Ty, Type, VecInstance,
@@ -900,11 +900,11 @@ fn call_bitcast_t(tplt: BitcastTemplate, a1: &Instance) -> Result<Instance, E> {
         Instance::Literal(l) => lit_bytes(l, &ty),
         Instance::Vec(v) => vec_bytes(v, &ty),
         _ => Err(E::Builtin(
-            "bitcast expects a numeric scalar or vector argument",
+            "`bitcast` expects a numeric scalar or vector argument",
         )),
     }?;
 
-    let size_err = E::Builtin("bitcast input and output types must have the same size");
+    let size_err = E::Builtin("`bitcast` input and output types must have the same size");
 
     match ty {
         Type::I32 => {
@@ -952,7 +952,7 @@ fn call_bitcast_t(tplt: BitcastTemplate, a1: &Instance) -> Result<Instance, E> {
                 Err(size_err)
             }
         }
-        _ => unreachable!("invalid bitcast template"),
+        _ => unreachable!("invalid `bitcast` template"),
     }
 }
 
@@ -961,16 +961,64 @@ fn call_bitcast_t(tplt: BitcastTemplate, a1: &Instance) -> Result<Instance, E> {
 // -------
 // reference: <https://www.w3.org/TR/WGSL/#logical-builtin-functions>
 
-fn call_all(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("all".to_string()))
+fn call_all(e: &Instance) -> Result<Instance, E> {
+    match e {
+        Instance::Literal(LiteralInstance::Bool(_)) => Ok(e.clone()),
+        Instance::Vec(v) if v.inner_ty() == Type::Bool => {
+            let b = v.iter().all(|b| b.unwrap_literal_ref().unwrap_bool());
+            Ok(LiteralInstance::Bool(b).into())
+        }
+        _ => Err(E::Builtin(
+            "`all` expects a boolean or vector of boolean argument",
+        )),
+    }
 }
 
-fn call_any(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("any".to_string()))
+fn call_any(e: &Instance) -> Result<Instance, E> {
+    match e {
+        Instance::Literal(LiteralInstance::Bool(_)) => Ok(e.clone()),
+        Instance::Vec(v) if v.inner_ty() == Type::Bool => {
+            let b = v.iter().any(|b| b.unwrap_literal_ref().unwrap_bool());
+            Ok(LiteralInstance::Bool(b).into())
+        }
+        _ => Err(E::Builtin(
+            "`any` expects a boolean or vector of boolean argument",
+        )),
+    }
 }
 
-fn call_select(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("select".to_string()))
+fn call_select(f: &Instance, t: &Instance, cond: &Instance) -> Result<Instance, E> {
+    let (f, t) = convert(f, t)
+        .ok_or_else(|| E::Builtin("`select` 1st and 2nd arguments are not compatible"))?;
+
+    match cond {
+        Instance::Literal(LiteralInstance::Bool(b)) => Ok(b.then_some(t).unwrap_or(f)),
+        Instance::Vec(v) if v.inner_ty() == Type::Bool => match (f, t) {
+            (Instance::Vec(v1), Instance::Vec(v2)) => {
+                if v1.n() != v.n() {
+                    Err(E::Builtin(
+                        "`select` vector arguments must have the same number of components",
+                    ))
+                } else {
+                    let v = izip!(v1, v2, v.iter())
+                        .map(|(f, t, b)| {
+                            b.unwrap_literal_ref()
+                                .unwrap_bool()
+                                .then_some(t)
+                                .unwrap_or(f)
+                        })
+                        .collect_vec();
+                    Ok(VecInstance::new(v).into())
+                }
+            }
+            _ => Err(E::Builtin(
+                "`select` arguments must be vectors when the condition is a vector",
+            )),
+        },
+        _ => Err(E::Builtin(
+            "`select` 3rd argument must be a boolean or vector of boolean",
+        )),
+    }
 }
 
 // -----
