@@ -4,10 +4,10 @@ use super::{
     VecTemplate,
 };
 
-use derive_more::derive::IsVariant;
+use derive_more::derive::{IsVariant, Unwrap};
 use wgsl_parse::syntax::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, IsVariant)]
+#[derive(Clone, Debug, PartialEq, Eq, IsVariant, Unwrap)]
 pub enum Type {
     Bool,
     AbstractInt,

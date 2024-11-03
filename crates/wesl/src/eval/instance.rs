@@ -1,7 +1,7 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
-    ops::Deref,
+    ops::{Deref, Index},
     rc::Rc,
 };
 
@@ -230,6 +230,13 @@ impl IntoIterator for VecInstance {
 
     fn into_iter(self) -> Self::IntoIter {
         self.components.into_iter()
+    }
+}
+impl Index<usize> for VecInstance {
+    type Output = Instance;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.get(index).unwrap()
     }
 }
 

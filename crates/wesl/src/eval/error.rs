@@ -7,7 +7,7 @@ use super::{Flow, Instance, LiteralInstance, MemView, ScopeKind, Ty, Type};
 #[derive(Clone, Debug, Error)]
 pub enum EvalError {
     #[error("not implemented: `{0}`")]
-    NotImpl(String),
+    Todo(String),
     #[error("expected type `{0}`, got `{1}`")]
     Type(Type, Type),
     #[error("unknown type or variable `{0}`")]

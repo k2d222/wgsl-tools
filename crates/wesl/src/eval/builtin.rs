@@ -1,5 +1,5 @@
 use half::prelude::*;
-use num_traits::{FromPrimitive, One, ToBytes, ToPrimitive, Zero};
+use num_traits::{real::Real, FromPrimitive, One, ToBytes, ToPrimitive, Zero};
 use std::collections::HashMap;
 
 use itertools::{chain, izip, Itertools};
@@ -13,7 +13,7 @@ use crate::{Context, Eval};
 
 use super::{
     conv::{convert_all, Convert},
-    convert, convert_all_inner_to,
+    convert, convert_all_inner_to, convert_all_ty,
     ops::Compwise,
     ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, RefInstance,
     StructInstance, SyntaxUtil, Ty, Type, VecInstance,
@@ -70,106 +70,6 @@ lazy_static! {
         prelude
     };
 }
-
-// -----------
-// ZERO VALUES
-// -----------
-// reference: <https://www.w3.org/TR/WGSL/#zero-value>
-
-impl Instance {
-    /// zero-value initialize an instance of a given type.
-    pub fn zero_value(ty: &Type, ctx: &mut Context) -> Result<Self, E> {
-        match ty {
-            Type::Bool => Ok(LiteralInstance::Bool(false).into()),
-            Type::AbstractInt => Ok(LiteralInstance::AbstractInt(0).into()),
-            Type::AbstractFloat => Ok(LiteralInstance::AbstractFloat(0.0).into()),
-            Type::I32 => Ok(LiteralInstance::I32(0).into()),
-            Type::U32 => Ok(LiteralInstance::U32(0).into()),
-            Type::F32 => Ok(LiteralInstance::F32(0.0).into()),
-            Type::F16 => Ok(LiteralInstance::F16(f16::zero()).into()),
-            Type::Struct(name) => StructInstance::zero_value(name, ctx).map(Into::into),
-            Type::Array(n, a_ty) => ArrayInstance::zero_value(*n, a_ty, ctx).map(Into::into),
-            Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
-            Type::Mat(c, r, m_ty) => MatInstance::zero_value(*c, *r, m_ty).map(Into::into),
-            Type::Atomic(_) => Err(E::NotConstructible(ty.clone())),
-            Type::Ptr(_, _) => Err(E::NotConstructible(ty.clone())),
-            Type::Void => Ok(Instance::Void),
-        }
-    }
-}
-
-impl LiteralInstance {
-    pub fn zero_value(ty: &Type) -> Result<Self, E> {
-        match ty {
-            Type::Bool => Ok(LiteralInstance::Bool(false)),
-            Type::AbstractInt => Ok(LiteralInstance::AbstractInt(0)),
-            Type::AbstractFloat => Ok(LiteralInstance::AbstractFloat(0.0)),
-            Type::I32 => Ok(LiteralInstance::I32(0)),
-            Type::U32 => Ok(LiteralInstance::U32(0)),
-            Type::F32 => Ok(LiteralInstance::F32(0.0)),
-            Type::F16 => Ok(LiteralInstance::F16(f16::zero())),
-            _ => Err(E::NotScalar(ty.clone())),
-        }
-    }
-}
-
-impl StructInstance {
-    /// zero-value initialize a struct instance.
-    pub fn zero_value(name: &str, ctx: &mut Context) -> Result<Self, E> {
-        let decl = ctx
-            .source
-            .decl_struct(name)
-            .expect("struct declaration not found");
-
-        let members = decl
-            .members
-            .iter()
-            .map(|m| {
-                let ty = m.ty.eval_ty(ctx)?;
-                let val = Instance::zero_value(&ty, ctx)?;
-                Ok((m.name.clone(), val))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(StructInstance {
-            name: name.to_string(),
-            members: HashMap::from_iter(members),
-        })
-    }
-}
-
-impl ArrayInstance {
-    /// zero-value initialize an array instance.
-    pub fn zero_value(n: usize, ty: &Type, ctx: &mut Context) -> Result<Self, E> {
-        let zero = Instance::zero_value(ty, ctx)?;
-        let comps = (0..n).map(|_| zero.clone()).collect_vec();
-        Ok(ArrayInstance::new(comps))
-    }
-}
-
-impl VecInstance {
-    /// zero-value initialize a vec instance.
-    pub fn zero_value(n: u8, ty: &Type) -> Result<Self, E> {
-        let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
-        let comps = (0..n).map(|_| zero.clone()).collect_vec();
-        Ok(VecInstance::new(comps))
-    }
-}
-
-impl MatInstance {
-    /// zero-value initialize a mat instance.
-    pub fn zero_value(c: u8, r: u8, ty: &Type) -> Result<Self, E> {
-        let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
-        let zero_col = Instance::Vec(VecInstance::new((0..r).map(|_| zero.clone()).collect_vec()));
-        let comps = (0..c).map(|_| zero_col.clone()).collect_vec();
-        Ok(MatInstance::new(comps))
-    }
-}
-
-// ------------
-// CONSTRUCTORS
-// ------------
-// reference: <https://www.w3.org/TR/WGSL/#constructor-builtin-function>
 
 pub fn call_builtin(
     ty: &TypeExpression,
@@ -283,7 +183,7 @@ pub fn call_builtin(
         ("mix", None, [a1, a2, a3]) => call_mix(a1, a2, a3),
         ("modf", None, [a]) => call_modf(a),
         ("normalize", None, [a]) => call_normalize(a),
-        ("pow", None, [a]) => call_pow(a),
+        ("pow", None, [a1, a2]) => call_pow(a1, a2),
         ("quantizeToF16", None, [a]) => call_quantizetof16(a),
         ("radians", None, [a]) => call_radians(a),
         ("reflect", None, [a1, a2]) => call_reflect(a1, a2),
@@ -322,6 +222,106 @@ pub fn call_builtin(
         _ => Err(E::Signature(ty.clone(), args)),
     }
 }
+
+// -----------
+// ZERO VALUES
+// -----------
+// reference: <https://www.w3.org/TR/WGSL/#zero-value>
+
+impl Instance {
+    /// zero-value initialize an instance of a given type.
+    pub fn zero_value(ty: &Type, ctx: &mut Context) -> Result<Self, E> {
+        match ty {
+            Type::Bool => Ok(LiteralInstance::Bool(false).into()),
+            Type::AbstractInt => Ok(LiteralInstance::AbstractInt(0).into()),
+            Type::AbstractFloat => Ok(LiteralInstance::AbstractFloat(0.0).into()),
+            Type::I32 => Ok(LiteralInstance::I32(0).into()),
+            Type::U32 => Ok(LiteralInstance::U32(0).into()),
+            Type::F32 => Ok(LiteralInstance::F32(0.0).into()),
+            Type::F16 => Ok(LiteralInstance::F16(f16::zero()).into()),
+            Type::Struct(name) => StructInstance::zero_value(name, ctx).map(Into::into),
+            Type::Array(n, a_ty) => ArrayInstance::zero_value(*n, a_ty, ctx).map(Into::into),
+            Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
+            Type::Mat(c, r, m_ty) => MatInstance::zero_value(*c, *r, m_ty).map(Into::into),
+            Type::Atomic(_) => Err(E::NotConstructible(ty.clone())),
+            Type::Ptr(_, _) => Err(E::NotConstructible(ty.clone())),
+            Type::Void => Ok(Instance::Void),
+        }
+    }
+}
+
+impl LiteralInstance {
+    pub fn zero_value(ty: &Type) -> Result<Self, E> {
+        match ty {
+            Type::Bool => Ok(LiteralInstance::Bool(false)),
+            Type::AbstractInt => Ok(LiteralInstance::AbstractInt(0)),
+            Type::AbstractFloat => Ok(LiteralInstance::AbstractFloat(0.0)),
+            Type::I32 => Ok(LiteralInstance::I32(0)),
+            Type::U32 => Ok(LiteralInstance::U32(0)),
+            Type::F32 => Ok(LiteralInstance::F32(0.0)),
+            Type::F16 => Ok(LiteralInstance::F16(f16::zero())),
+            _ => Err(E::NotScalar(ty.clone())),
+        }
+    }
+}
+
+impl StructInstance {
+    /// zero-value initialize a struct instance.
+    pub fn zero_value(name: &str, ctx: &mut Context) -> Result<Self, E> {
+        let decl = ctx
+            .source
+            .decl_struct(name)
+            .expect("struct declaration not found");
+
+        let members = decl
+            .members
+            .iter()
+            .map(|m| {
+                let ty = m.ty.eval_ty(ctx)?;
+                let val = Instance::zero_value(&ty, ctx)?;
+                Ok((m.name.clone(), val))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(StructInstance {
+            name: name.to_string(),
+            members: HashMap::from_iter(members),
+        })
+    }
+}
+
+impl ArrayInstance {
+    /// zero-value initialize an array instance.
+    pub fn zero_value(n: usize, ty: &Type, ctx: &mut Context) -> Result<Self, E> {
+        let zero = Instance::zero_value(ty, ctx)?;
+        let comps = (0..n).map(|_| zero.clone()).collect_vec();
+        Ok(ArrayInstance::new(comps))
+    }
+}
+
+impl VecInstance {
+    /// zero-value initialize a vec instance.
+    pub fn zero_value(n: u8, ty: &Type) -> Result<Self, E> {
+        let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
+        let comps = (0..n).map(|_| zero.clone()).collect_vec();
+        Ok(VecInstance::new(comps))
+    }
+}
+
+impl MatInstance {
+    /// zero-value initialize a mat instance.
+    pub fn zero_value(c: u8, r: u8, ty: &Type) -> Result<Self, E> {
+        let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
+        let zero_col = Instance::Vec(VecInstance::new((0..r).map(|_| zero.clone()).collect_vec()));
+        let comps = (0..c).map(|_| zero_col.clone()).collect_vec();
+        Ok(MatInstance::new(comps))
+    }
+}
+
+// ------------
+// CONSTRUCTORS
+// ------------
+// reference: <https://www.w3.org/TR/WGSL/#constructor-builtin-function>
 
 pub struct ArrayTemplate {
     n: usize,
@@ -1004,8 +1004,8 @@ fn call_select(f: &Instance, t: &Instance, cond: &Instance) -> Result<Instance, 
                         .map(|(f, t, b)| {
                             b.unwrap_literal_ref()
                                 .unwrap_bool()
-                                .then_some(t)
-                                .unwrap_or(f)
+                                .then_some(t.to_owned()) // BUG: is it a bug in rust_analyzer? it displays f as Instance and t as &Instance
+                                .unwrap_or(f.to_owned())
                         })
                         .collect_vec();
                     Ok(VecInstance::new(v).into())
@@ -1044,132 +1044,290 @@ fn call_arraylength(p: &Instance) -> Result<Instance, E> {
 // -------
 // reference: <https://www.w3.org/TR/WGSL/#numeric-builtin-function>
 
-fn call_abs(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("abs".to_string()))
+macro_rules! impl_call_float_unary {
+    ($name:literal, $e:ident, $n:ident => $expr:expr) => {{
+        const ERR: E = E::Builtin(concat!(
+            "`",
+            $name,
+            "` expects a float or vector of float argument"
+        ));
+        fn lit_fn(l: &LiteralInstance) -> Result<LiteralInstance, E> {
+            match l {
+                LiteralInstance::Bool(_) => Err(ERR),
+                LiteralInstance::AbstractInt(_) => {
+                    let $n = l
+                        .convert_to(&Type::AbstractFloat)
+                        .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?
+                        .unwrap_abstract_float();
+                    Ok(LiteralInstance::from($expr))
+                }
+                LiteralInstance::AbstractFloat($n) => Ok(LiteralInstance::from($expr)),
+                LiteralInstance::I32(_) => Err(ERR),
+                LiteralInstance::U32(_) => Err(ERR),
+                LiteralInstance::F32($n) => Ok(LiteralInstance::from($expr)),
+                LiteralInstance::F16($n) => Ok(LiteralInstance::from($expr)),
+            }
+        }
+        match $e {
+            Instance::Literal(l) => lit_fn(l).map(Into::into),
+            Instance::Vec(v) => v.compwise_unary(lit_fn).map(Into::into),
+            _ => Err(ERR),
+        }
+    }};
 }
 
-fn call_acos(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("acos".to_string()))
+fn call_abs(e: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`abs` expects a scalar or vector of scalar argument");
+    fn lit_abs(l: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match l {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(n) => Ok(LiteralInstance::from(n.abs())),
+            LiteralInstance::AbstractFloat(n) => Ok(LiteralInstance::from(n.abs())),
+            LiteralInstance::I32(n) => Ok(LiteralInstance::from(n.abs())),
+            LiteralInstance::U32(_) => Ok(l.clone()),
+            LiteralInstance::F32(n) => Ok(LiteralInstance::from(n.abs())),
+            LiteralInstance::F16(n) => Ok(LiteralInstance::from(n.abs())),
+        }
+    }
+    match e {
+        Instance::Literal(l) => lit_abs(l).map(Into::into),
+        Instance::Vec(v) => v.compwise_unary(lit_abs).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
-fn call_acosh(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("acosh".to_string()))
+// NOTE: the function returns NaN as an `indeterminate value` if computed out of domain
+fn call_acos(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("acos", e, n => n.acos())
 }
 
-fn call_asin(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("asin".to_string()))
+// NOTE: the function returns NaN as an `indeterminate value` if computed out of domain
+fn call_acosh(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("acosh", e, n => n.acosh())
 }
 
-fn call_asinh(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("asinh".to_string()))
+// NOTE: the function returns NaN as an `indeterminate value` if computed out of domain
+fn call_asin(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("asin", e, n => n.asin())
 }
 
-fn call_atan(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("atan".to_string()))
+fn call_asinh(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("asinh", e, n => n.asinh())
 }
 
-fn call_atanh(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("atanh".to_string()))
+fn call_atan(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("atan", e, n => n.atan())
 }
 
-fn call_atan2(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("atan2".to_string()))
+// NOTE: the function returns NaN as an `indeterminate value` if computed out of domain
+fn call_atanh(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("atanh", e, n => n.atanh())
 }
 
-fn call_ceil(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("ceil".to_string()))
+fn call_atan2(y: &Instance, x: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`atan2` expects a float or vector of float argument");
+    fn lit_atan2(y: &LiteralInstance, x: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match y {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(_) => {
+                let y = y
+                    .convert_to(&Type::AbstractFloat)
+                    .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?;
+                let x = x
+                    .convert_to(&Type::AbstractFloat)
+                    .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?;
+                Ok(LiteralInstance::from(
+                    y.unwrap_abstract_float().atan2(x.unwrap_abstract_float()),
+                ))
+            }
+            LiteralInstance::AbstractFloat(y) => {
+                Ok(LiteralInstance::from(y.atan2(x.unwrap_abstract_float())))
+            }
+            LiteralInstance::I32(_) => Err(ERR),
+            LiteralInstance::U32(_) => Err(ERR),
+            LiteralInstance::F32(y) => Ok(LiteralInstance::from(y.atan2(x.unwrap_f_32()))),
+            LiteralInstance::F16(y) => Ok(LiteralInstance::from(y.atan2(x.unwrap_f_16()))),
+        }
+    }
+    let (y, x) = convert(y, x).ok_or_else(|| E::Builtin("`atan2` arguments are incompatible"))?;
+    match (y, x) {
+        (Instance::Literal(y), Instance::Literal(x)) => lit_atan2(&y, &x).map(Into::into),
+        (Instance::Vec(y), Instance::Vec(x)) => y.compwise_binary(&x, lit_atan2).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
-fn call_clamp(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("clamp".to_string()))
+fn call_ceil(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("ceil", e, n => n.ceil())
 }
 
-fn call_cos(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("cos".to_string()))
+fn call_clamp(e: &Instance, low: &Instance, high: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`clamp` arguments are incompatible");
+    let tys = [e.ty(), low.ty(), high.ty()];
+    let ty = convert_all_ty(&tys).ok_or(ERR)?;
+    let e = e.convert_to(ty).ok_or(ERR)?;
+    let low = low.convert_to(ty).ok_or(ERR)?;
+    let high = high.convert_to(ty).ok_or(ERR)?;
+    call_min(&call_max(&e, &low)?, &high)
 }
 
-fn call_cosh(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("cosh".to_string()))
+// NOTE: the function returns NaN as an `indeterminate value` if computed out of domain
+fn call_cos(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("cos", e, n => n.cos())
 }
 
-fn call_countleadingzeros(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("countLeadingZeros".to_string()))
+fn call_cosh(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("cosh", e, n => n.cosh())
 }
 
-fn call_countonebits(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("countOneBits".to_string()))
+fn call_countleadingzeros(e: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`countLeadingZeros` expects a float or vector of float argument");
+    fn lit_leading_zeros(l: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match l {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(n) => {
+                Ok(LiteralInstance::AbstractInt(n.leading_zeros() as i64))
+            }
+            LiteralInstance::AbstractFloat(_) => Err(ERR),
+            LiteralInstance::I32(n) => Ok(LiteralInstance::I32(n.leading_zeros() as i32)),
+            LiteralInstance::U32(n) => Ok(LiteralInstance::U32(n.leading_zeros())),
+            LiteralInstance::F32(_) => Err(ERR),
+            LiteralInstance::F16(_) => Err(ERR),
+        }
+    }
+    match e {
+        Instance::Literal(l) => lit_leading_zeros(l).map(Into::into),
+        Instance::Vec(v) => v.compwise_unary(lit_leading_zeros).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
-fn call_counttrailingzeros(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("countTrailingZeros".to_string()))
+fn call_countonebits(e: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`countOneBits` expects a float or vector of float argument");
+    fn lit_count_ones(l: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match l {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(n) => {
+                Ok(LiteralInstance::AbstractInt(n.count_ones() as i64))
+            }
+            LiteralInstance::AbstractFloat(_) => Err(ERR),
+            LiteralInstance::I32(n) => Ok(LiteralInstance::I32(n.count_ones() as i32)),
+            LiteralInstance::U32(n) => Ok(LiteralInstance::U32(n.count_ones())),
+            LiteralInstance::F32(_) => Err(ERR),
+            LiteralInstance::F16(_) => Err(ERR),
+        }
+    }
+    match e {
+        Instance::Literal(l) => lit_count_ones(l).map(Into::into),
+        Instance::Vec(v) => v.compwise_unary(lit_count_ones).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
-fn call_cross(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("cross".to_string()))
+fn call_counttrailingzeros(e: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`countTrailingZeros` expects a float or vector of float argument");
+    fn lit_trailing_zeros(l: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match l {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(n) => {
+                Ok(LiteralInstance::AbstractInt(n.trailing_zeros() as i64))
+            }
+            LiteralInstance::AbstractFloat(_) => Err(ERR),
+            LiteralInstance::I32(n) => Ok(LiteralInstance::I32(n.trailing_zeros() as i32)),
+            LiteralInstance::U32(n) => Ok(LiteralInstance::U32(n.trailing_zeros())),
+            LiteralInstance::F32(_) => Err(ERR),
+            LiteralInstance::F16(_) => Err(ERR),
+        }
+    }
+    match e {
+        Instance::Literal(l) => lit_trailing_zeros(l).map(Into::into),
+        Instance::Vec(v) => v.compwise_unary(lit_trailing_zeros).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
-fn call_degrees(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("degrees".to_string()))
+fn call_cross(a: &Instance, b: &Instance) -> Result<Instance, E> {
+    let (a, b) = convert(a, b).ok_or(E::Builtin("`cross` arguments are incompatible"))?;
+    match (a, b) {
+        (Instance::Vec(a), Instance::Vec(b)) if a.n() == 3 => {
+            let s1 = a[1].op_mul(&b[2])?.op_sub(&a[2].op_mul(&b[1])?)?;
+            let s2 = a[2].op_mul(&b[0])?.op_sub(&a[0].op_mul(&b[2])?)?;
+            let s3 = a[0].op_mul(&b[1])?.op_sub(&a[1].op_mul(&b[0])?)?;
+            Ok(VecInstance::new(vec![s1, s2, s3]).into())
+        }
+        _ => Err(E::Builtin(
+            "`cross` expects a 3-component vector of float arguments",
+        )),
+    }
+}
+
+fn call_degrees(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("degrees", e, n => n.to_degrees())
 }
 
 fn call_determinant(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("determinant".to_string()))
+    Err(E::Todo("determinant".to_string()))
 }
 
-fn call_distance(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("distance".to_string()))
+// NOTE: the function returns an error if computed out of domain
+fn call_distance(e1: &Instance, e2: &Instance) -> Result<Instance, E> {
+    call_length(&e1.op_sub(e2)?)
 }
 
-fn call_dot(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("dot".to_string()))
+fn call_dot(e1: &Instance, e2: &Instance) -> Result<Instance, E> {
+    let (e1, e2) = convert(e1, e2).ok_or(E::Builtin("`dot` arguments are incompatible"))?;
+    match (e1, e2) {
+        (Instance::Vec(e1), Instance::Vec(e2)) => e1.dot(&e2).map(Into::into),
+        _ => Err(E::Builtin("`dot` expects vector arguments")),
+    }
 }
 
 fn call_dot4u8packed(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("dot4U8Packed".to_string()))
+    Err(E::Todo("dot4U8Packed".to_string()))
 }
 
 fn call_dot4i8packed(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("dot4I8Packed".to_string()))
+    Err(E::Todo("dot4I8Packed".to_string()))
 }
 
-fn call_exp(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("exp".to_string()))
+fn call_exp(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("exp", e, n => n.exp())
 }
 
-fn call_exp2(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("exp2".to_string()))
+fn call_exp2(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("exp2", e, n => n.exp2())
 }
 
 fn call_extractbits(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("extractBits".to_string()))
+    Err(E::Todo("extractBits".to_string()))
 }
 
 fn call_faceforward(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("faceForward".to_string()))
+    Err(E::Todo("faceForward".to_string()))
 }
 
 fn call_firstleadingbit(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("firstLeadingBit".to_string()))
+    Err(E::Todo("firstLeadingBit".to_string()))
 }
 
 fn call_firsttrailingbit(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("firstTrailingBit".to_string()))
+    Err(E::Todo("firstTrailingBit".to_string()))
 }
 
-fn call_floor(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("floor".to_string()))
+fn call_floor(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("floor", e, n => n.floor())
 }
 
 fn call_fma(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("fma".to_string()))
+    Err(E::Todo("fma".to_string()))
 }
 
-fn call_fract(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("fract".to_string()))
+fn call_fract(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("fract", e, n => n.fract())
 }
 
 fn call_frexp(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("frexp".to_string()))
+    Err(E::Todo("frexp".to_string()))
 }
 
 fn call_insertbits(
@@ -1178,119 +1336,264 @@ fn call_insertbits(
     _a3: &Instance,
     _a4: &Instance,
 ) -> Result<Instance, E> {
-    Err(E::NotImpl("insertBits".to_string()))
+    Err(E::Todo("insertBits".to_string()))
 }
 
-fn call_inversesqrt(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("inverseSqrt".to_string()))
+// NOTE: the function returns NaN as an `indeterminate value` if computed out of domain
+fn call_inversesqrt(e: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`inverseSqrt` expects a float or vector of float argument");
+    fn lit_isqrt(l: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match l {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(_) => l
+                .convert_to(&Type::AbstractFloat)
+                .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))
+                .map(|n| LiteralInstance::from(1.0 / n.unwrap_abstract_float().sqrt())),
+            LiteralInstance::AbstractFloat(n) => Ok(LiteralInstance::from(1.0 / n.sqrt())),
+            LiteralInstance::I32(_) => Err(ERR),
+            LiteralInstance::U32(_) => Err(ERR),
+            LiteralInstance::F32(n) => Ok(LiteralInstance::from(1.0 / n.sqrt())),
+            LiteralInstance::F16(n) => Ok(LiteralInstance::from(f16::one() / n.sqrt())),
+        }
+    }
+    match e {
+        Instance::Literal(l) => lit_isqrt(l).map(Into::into),
+        Instance::Vec(v) => v.compwise_unary(lit_isqrt).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
 fn call_ldexp(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("ldexp".to_string()))
+    Err(E::Todo("ldexp".to_string()))
 }
 
-fn call_length(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("length".to_string()))
+fn call_length(e: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`length` expects a float or vector of float argument");
+    match e {
+        Instance::Literal(_) => call_abs(e),
+        Instance::Vec(v) => v
+            .op_mul(v)?
+            .into_iter()
+            .map(Ok)
+            .reduce(|a, b| a?.op_add(&b?))
+            .unwrap(),
+        _ => Err(ERR),
+    }
 }
 
-fn call_log(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("log".to_string()))
+fn call_log(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("log", e, n => n.ln())
 }
 
-fn call_log2(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("log2".to_string()))
+fn call_log2(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("log2", e, n => n.log2())
 }
 
-fn call_max(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("max".to_string()))
+fn call_max(e1: &Instance, e2: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`max` expects a scalar or vector of scalar argument");
+    fn lit_max(e1: &LiteralInstance, e2: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match e1 {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(e1) => {
+                Ok(LiteralInstance::from(*e1.max(&e2.unwrap_abstract_int())))
+            }
+            LiteralInstance::AbstractFloat(e1) => {
+                Ok(LiteralInstance::from(e1.max(e2.unwrap_abstract_float())))
+            }
+            LiteralInstance::I32(e1) => Ok(LiteralInstance::from(*e1.max(&e2.unwrap_i_32()))),
+            LiteralInstance::U32(_) => Ok(e1.clone()),
+            LiteralInstance::F32(e1) => Ok(LiteralInstance::from(e1.max(e2.unwrap_f_32()))),
+            LiteralInstance::F16(e1) => Ok(LiteralInstance::from(e1.max(e2.unwrap_f_16()))),
+        }
+    }
+    let (e1, e2) = convert(e1, e2).ok_or_else(|| E::Builtin("`max` arguments are incompatible"))?;
+    match (e1, e2) {
+        (Instance::Literal(e1), Instance::Literal(e2)) => lit_max(&e1, &e2).map(Into::into),
+        (Instance::Vec(e1), Instance::Vec(e2)) => e1.compwise_binary(&e2, lit_max).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
-fn call_min(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("min".to_string()))
+fn call_min(e1: &Instance, e2: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`min` expects a scalar or vector of scalar argument");
+    fn lit_min(e1: &LiteralInstance, e2: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match e1 {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(e1) => {
+                Ok(LiteralInstance::from(*e1.min(&e2.unwrap_abstract_int())))
+            }
+            LiteralInstance::AbstractFloat(e1) => {
+                Ok(LiteralInstance::from(e1.min(e2.unwrap_abstract_float())))
+            }
+            LiteralInstance::I32(e1) => Ok(LiteralInstance::from(*e1.min(&e2.unwrap_i_32()))),
+            LiteralInstance::U32(_) => Ok(e1.clone()),
+            LiteralInstance::F32(e1) => Ok(LiteralInstance::from(e1.min(e2.unwrap_f_32()))),
+            LiteralInstance::F16(e1) => Ok(LiteralInstance::from(e1.min(e2.unwrap_f_16()))),
+        }
+    }
+    let (e1, e2) = convert(e1, e2).ok_or_else(|| E::Builtin("`min` arguments are incompatible"))?;
+    match (e1, e2) {
+        (Instance::Literal(e1), Instance::Literal(e2)) => lit_min(&e1, &e2).map(Into::into),
+        (Instance::Vec(e1), Instance::Vec(e2)) => e1.compwise_binary(&e2, lit_min).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
 fn call_mix(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("mix".to_string()))
+    Err(E::Todo("mix".to_string()))
 }
 
 fn call_modf(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("modf".to_string()))
+    Err(E::Todo("modf".to_string()))
 }
 
 fn call_normalize(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("normalize".to_string()))
+    Err(E::Todo("normalize".to_string()))
 }
 
-fn call_pow(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pow".to_string()))
+fn call_pow(e1: &Instance, e2: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`pow` expects a scalar or vector of scalar argument");
+    fn lit_powf(e1: &LiteralInstance, e2: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match e1 {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(_) => {
+                let e1 = e1
+                    .convert_to(&Type::AbstractFloat)
+                    .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?
+                    .unwrap_abstract_float();
+                let e2 = e2
+                    .convert_to(&Type::AbstractFloat)
+                    .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?
+                    .unwrap_abstract_float();
+                Ok(LiteralInstance::from(e1.powf(e2)))
+            }
+            LiteralInstance::AbstractFloat(e1) => {
+                Ok(LiteralInstance::from(e1.powf(e2.unwrap_abstract_float())))
+            }
+            LiteralInstance::I32(_) => Err(ERR),
+            LiteralInstance::U32(_) => Err(ERR),
+            LiteralInstance::F32(e1) => Ok(LiteralInstance::from(e1.powf(e2.unwrap_f_32()))),
+            LiteralInstance::F16(e1) => Ok(LiteralInstance::from(e1.powf(e2.unwrap_f_16()))),
+        }
+    }
+    let (e1, e2) = convert(e1, e2).ok_or_else(|| E::Builtin("`pow` arguments are incompatible"))?;
+    match (e1, e2) {
+        (Instance::Literal(e1), Instance::Literal(e2)) => lit_powf(&e1, &e2).map(Into::into),
+        (Instance::Vec(e1), Instance::Vec(e2)) => e1.compwise_binary(&e2, lit_powf).map(Into::into),
+        _ => Err(ERR),
+    }
 }
 
 fn call_quantizetof16(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("quantizeToF16".to_string()))
+    Err(E::Todo("quantizeToF16".to_string()))
 }
 
-fn call_radians(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("radians".to_string()))
+fn call_radians(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("radians", e, n => n.to_radians())
 }
 
 fn call_reflect(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("reflect".to_string()))
+    Err(E::Todo("reflect".to_string()))
 }
 
 fn call_refract(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("refract".to_string()))
+    Err(E::Todo("refract".to_string()))
 }
 
 fn call_reversebits(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("reverseBits".to_string()))
+    Err(E::Todo("reverseBits".to_string()))
 }
 
-fn call_round(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("round".to_string()))
+fn call_round(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("round", e, n => n.round())
 }
 
-fn call_saturate(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("saturate".to_string()))
+fn call_saturate(e: &Instance) -> Result<Instance, E> {
+    let zero = LiteralInstance::AbstractFloat(0.0);
+    let one = LiteralInstance::AbstractFloat(1.0);
+    call_clamp(e, &zero.into(), &one.into())
 }
 
-fn call_sign(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("sign".to_string()))
+fn call_sign(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("sign", e, n => n.is_zero().then_some(n.to_owned()).unwrap_or(n.signum()))
 }
 
-fn call_sin(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("sin".to_string()))
+fn call_sin(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("sin", e, n => n.sin())
 }
 
-fn call_sinh(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("sinh".to_string()))
+fn call_sinh(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("sinh", e, n => n.sinh())
 }
 
-fn call_smoothstep(_a1: &Instance, _a2: &Instance, _a3: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("smoothstep".to_string()))
+fn call_smoothstep(_low: &Instance, _high: &Instance, _x: &Instance) -> Result<Instance, E> {
+    Err(E::Todo("smoothstep".to_string()))
 }
 
-fn call_sqrt(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("sqrt".to_string()))
+fn call_sqrt(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("sqrt", e, n => n.sqrt())
 }
 
-fn call_step(_a1: &Instance, _a2: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("step".to_string()))
+fn call_step(edge: &Instance, x: &Instance) -> Result<Instance, E> {
+    const ERR: E = E::Builtin("`step` expects a float or vector of float argument");
+    fn lit_step(edge: &LiteralInstance, x: &LiteralInstance) -> Result<LiteralInstance, E> {
+        match edge {
+            LiteralInstance::Bool(_) => Err(ERR),
+            LiteralInstance::AbstractInt(_) => {
+                let edge = edge
+                    .convert_to(&Type::AbstractFloat)
+                    .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?
+                    .unwrap_abstract_float();
+                let x = x
+                    .convert_to(&Type::AbstractFloat)
+                    .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?
+                    .unwrap_abstract_float();
+                Ok(LiteralInstance::from(
+                    (edge <= x).then_some(1.0).unwrap_or(0.0),
+                ))
+            }
+            LiteralInstance::AbstractFloat(edge) => Ok(LiteralInstance::from(
+                (*edge <= x.unwrap_abstract_float())
+                    .then_some(1.0)
+                    .unwrap_or(0.0),
+            )),
+            LiteralInstance::I32(_) => Err(ERR),
+            LiteralInstance::U32(_) => Err(ERR),
+            LiteralInstance::F32(edge) => Ok(LiteralInstance::from(
+                (*edge <= x.unwrap_f_32()).then_some(1.0).unwrap_or(0.0),
+            )),
+            LiteralInstance::F16(edge) => Ok(LiteralInstance::from(
+                (*edge <= x.unwrap_f_16()).then_some(1.0).unwrap_or(0.0),
+            )),
+        }
+    }
+    let (edge, x) = convert(edge, x).ok_or(E::Builtin("`step` arguments are incompatible"))?;
+    match (edge, x) {
+        (Instance::Literal(edge), Instance::Literal(x)) => lit_step(&edge, &x).map(Into::into),
+        (Instance::Vec(edge), Instance::Vec(x)) => {
+            edge.compwise_binary(&x, lit_step).map(Into::into)
+        }
+        _ => Err(ERR),
+    }
 }
 
-fn call_tan(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("tan".to_string()))
+fn call_tan(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("tan", e, n => n.tan())
 }
 
-fn call_tanh(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("tanh".to_string()))
+fn call_tanh(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("tanh", e, n => n.tanh())
 }
 
-fn call_transpose(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("transpose".to_string()))
+fn call_transpose(e: &Instance) -> Result<Instance, E> {
+    match e {
+        Instance::Mat(e) => Ok(e.transpose().into()),
+        _ => Err(E::Builtin("`transpose` expects a matrix argument")),
+    }
 }
 
-fn call_trunc(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("trunc".to_string()))
+fn call_trunc(e: &Instance) -> Result<Instance, E> {
+    impl_call_float_unary!("trunc", e, n => n.trunc())
 }
 
 // ------------
@@ -1299,70 +1602,71 @@ fn call_trunc(_a1: &Instance) -> Result<Instance, E> {
 // reference: <https://www.w3.org/TR/WGSL/#pack-builtin-functions>
 
 fn call_pack4x8snorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack4x8snorm".to_string()))
+    Err(E::Todo("pack4x8snorm".to_string()))
 }
 
 fn call_pack4x8unorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack4x8unorm".to_string()))
+    Err(E::Todo("pack4x8unorm".to_string()))
 }
 
 fn call_pack4xi8(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack4xI8".to_string()))
+    Err(E::Todo("pack4xI8".to_string()))
 }
 
 fn call_pack4xu8(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack4xU8".to_string()))
+    Err(E::Todo("pack4xU8".to_string()))
 }
 
 fn call_pack4xi8clamp(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack4xI8Clamp".to_string()))
+    Err(E::Todo("pack4xI8Clamp".to_string()))
 }
 
 fn call_pack4xu8clamp(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack4xU8Clamp".to_string()))
+    Err(E::Todo("pack4xU8Clamp".to_string()))
 }
 
 fn call_pack2x16snorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack2x16snorm".to_string()))
+    Err(E::Todo("pack2x16snorm".to_string()))
 }
 
 fn call_pack2x16unorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack2x16unorm".to_string()))
+    Err(E::Todo("pack2x16unorm".to_string()))
 }
 
 fn call_pack2x16float(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("pack2x16float".to_string()))
+    Err(E::Todo("pack2x16float".to_string()))
 }
 
 fn call_unpack4x8snorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("unpack4x8snorm".to_string()))
+    Err(E::Todo("unpack4x8snorm".to_string()))
 }
 
 fn call_unpack4x8unorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("unpack4x8unorm".to_string()))
+    Err(E::Todo("unpack4x8unorm".to_string()))
 }
 
 fn call_unpack4xi8(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("unpack4xI8".to_string()))
+    Err(E::Todo("unpack4xI8".to_string()))
 }
 
 fn call_unpack4xu8(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("unpack4xU8".to_string()))
+    Err(E::Todo("unpack4xU8".to_string()))
 }
 
 fn call_unpack2x16snorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("unpack2x16snorm".to_string()))
+    Err(E::Todo("unpack2x16snorm".to_string()))
 }
 
 fn call_unpack2x16unorm(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("unpack2x16unorm".to_string()))
+    Err(E::Todo("unpack2x16unorm".to_string()))
 }
 
 fn call_unpack2x16float(_a1: &Instance) -> Result<Instance, E> {
-    Err(E::NotImpl("unpack2x16float".to_string()))
+    Err(E::Todo("unpack2x16float".to_string()))
 }
 
 impl VecInstance {
+    /// warning, this function does not check operand types
     pub fn dot(&self, rhs: &VecInstance) -> Result<LiteralInstance, E> {
         self.compwise_binary(rhs, |a, b| a.op_mul(b))?
             .into_iter()
@@ -1373,6 +1677,7 @@ impl VecInstance {
 }
 
 impl MatInstance {
+    /// warning, this function does not check operand types
     pub fn transpose(&self) -> MatInstance {
         let components = (0..self.r())
             .map(|j| {
