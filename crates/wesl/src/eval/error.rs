@@ -111,12 +111,24 @@ pub enum EvalError {
     UninitConst(String),
     #[error("uninitialized let-declaration `{0}`")]
     UninitLet(String),
+    #[error("uninitialized override-declaration `{0}` with no override")]
+    UninitOverride(String),
     #[error("duplicate declaration of `{0}` in the current scope")]
     DuplicateDecl(String),
     #[error("a declaration must have an explicit type or an initializer")]
     UntypedDecl,
     #[error("`{0}` declarations are forbidden in `{1}` scope")]
     ForbiddenDecl(DeclarationKind, ScopeKind),
+    #[error("missing `@group` or `@binding` attributes")]
+    MissingBindAttr,
+    #[error("`@group` and `@binding` attributes must evaluate to positive integers, got `{0}`")]
+    BindNegative(i64),
+    #[error("no resource was bound to `@group({0}) @binding({1})`")]
+    MissingResource(u32, u32),
+    #[error("incorrect resource address space, expected `{0}`, got `{1}`")]
+    AddressSpace(AddressSpace, AddressSpace),
+    #[error("incorrect resource access mode, expected `{0}`, got `{1}`")]
+    AccessMode(AccessMode, AccessMode),
 
     // statements
     #[error("expected a reference, got value `{0}`")]

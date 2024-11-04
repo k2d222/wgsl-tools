@@ -333,7 +333,8 @@ pub struct RefInstance {
 }
 
 impl RefInstance {
-    pub fn new(ptr: Rc<RefCell<Instance>>, space: AddressSpace, access: AccessMode) -> Self {
+    pub fn new(inst: Instance, space: AddressSpace, access: AccessMode) -> Self {
+        let ptr = Rc::new(RefCell::new(inst));
         let ty = ptr.borrow().ty();
         Self {
             ty,

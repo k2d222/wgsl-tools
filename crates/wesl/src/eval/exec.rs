@@ -3,8 +3,8 @@ use std::fmt::Display;
 use crate::eval::conv::Convert;
 
 use super::{
-    AccessMode, Context, Eval, EvalError, EvalStage, EvalTy, Instance, LiteralInstance, ScopeKind,
-    Ty, Type,
+    attrs::eval_group_binding, AccessMode, Context, Eval, EvalError, EvalStage, EvalTy, Instance,
+    LiteralInstance, RefInstance, ScopeKind, Ty, Type,
 };
 
 use wgsl_parse::syntax::*;
@@ -569,9 +569,7 @@ impl Exec for Declaration {
 
                 ctx.scope.add_var(
                     self.name.clone(),
-                    inst,
-                    AddressSpace::Function,
-                    AccessMode::ReadWrite,
+                    RefInstance::new(inst, AddressSpace::Function, AccessMode::ReadWrite),
                     ctx.stage,
                 );
                 Ok(Flow::Next)
@@ -583,11 +581,27 @@ impl Exec for Declaration {
                     // provide a better err msg if one is used.
                     Ok(Flow::Next)
                 } else {
-                    todo!("evaluate module scope")
+                    let inst = ctx
+                        .overridable(&self.name)
+                        .map(|inst| inst.clone())
+                        .ok_or_else(|| E::UninitOverride(self.name.clone()))
+                        .or_else(|e| self.initializer.as_ref().ok_or(e)?.eval(ctx))?;
+
+                    let inst = if let Some(ty) = &self.ty {
+                        let ty = ty.eval_ty(ctx)?;
+                        inst.convert_to(&ty)
+                            .ok_or_else(|| E::Conversion(inst.ty(), ty))?
+                    } else {
+                        inst.concretize()
+                            .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
+                    };
+
+                    ctx.scope.add_val(self.name.clone(), inst, ctx.stage);
+                    Ok(Flow::Next)
                 }
             }
             (DeclarationKind::Let, ScopeKind::Module) => Err(E::LetInMod),
-            (DeclarationKind::Var(_addr_space), ScopeKind::Module) => {
+            (DeclarationKind::Var(addr_space), ScopeKind::Module) => {
                 // TODO: implement  address space
                 if ctx.stage == EvalStage::Const {
                     // in const contexts we just ignore var declarations since they cannot be
@@ -595,7 +609,113 @@ impl Exec for Declaration {
                     // provide a better err msg if one is used.
                     Ok(Flow::Next)
                 } else {
-                    todo!("evaluate module scope")
+                    let addr_space = addr_space.unwrap_or(AddressSpace::Handle);
+
+                    match addr_space {
+                        AddressSpace::Function => {
+                            return Err(E::ForbiddenDecl(self.kind, ctx.kind))
+                        }
+                        AddressSpace::Private => {
+                            let inst = match (&self.ty, &self.initializer) {
+                                (None, None) => Err(E::UntypedDecl),
+                                (None, Some(init)) => {
+                                    let inst =
+                                        with_stage!(ctx, EvalStage::Const, { init.eval(ctx) })?;
+                                    inst.concretize().ok_or_else(|| {
+                                        E::Conversion(inst.ty(), inst.ty().concretize())
+                                    })
+                                }
+                                (Some(ty), None) => {
+                                    let ty = ty.eval_ty(ctx)?;
+                                    Instance::zero_value(&ty, ctx)
+                                }
+                                (Some(ty), Some(init)) => {
+                                    let inst =
+                                        with_stage!(ctx, EvalStage::Const, { init.eval(ctx) })?;
+                                    let ty = ty.eval_ty(ctx)?;
+                                    inst.convert_to(&ty)
+                                        .ok_or_else(|| E::Conversion(inst.ty(), ty))
+                                }
+                            }?;
+
+                            ctx.scope.add_var(
+                                self.name.clone(),
+                                RefInstance::new(
+                                    inst,
+                                    AddressSpace::Private,
+                                    AccessMode::ReadWrite,
+                                ),
+                                ctx.stage,
+                            );
+                        }
+                        AddressSpace::Workgroup => {
+                            // let Some(ty) = &self.ty else {
+                            //     return Err(E::UntypedDecl);
+                            // };
+                            todo!("workgroup address space")
+                        }
+                        AddressSpace::Uniform => {
+                            let Some(ty) = &self.ty else {
+                                return Err(E::UntypedDecl);
+                            };
+                            let ty = ty.eval_ty(ctx)?;
+                            let (group, binding) = eval_group_binding(&self.attributes, ctx)?;
+                            let inst = ctx
+                                .binding(group, binding)
+                                .ok_or_else(|| E::MissingResource(group, binding))?;
+                            if ty != inst.ty() {
+                                return Err(E::Type(ty, inst.ty()));
+                            }
+                            if inst.space != AddressSpace::Uniform {
+                                return Err(E::AddressSpace(AddressSpace::Uniform, inst.space));
+                            }
+                            if inst.access != AccessMode::Read {
+                                return Err(E::AccessMode(AccessMode::Read, inst.access));
+                            }
+                            ctx.scope
+                                .add_var(self.name.clone(), inst.clone(), ctx.stage)
+                        }
+                        AddressSpace::Storage(access_mode) => {
+                            let Some(ty) = &self.ty else {
+                                return Err(E::UntypedDecl);
+                            };
+                            let ty = ty.eval_ty(ctx)?;
+                            let (group, binding) = eval_group_binding(&self.attributes, ctx)?;
+                            let inst = ctx
+                                .binding(group, binding)
+                                .ok_or_else(|| E::MissingResource(group, binding))?;
+                            if ty != inst.ty() {
+                                return Err(E::Type(ty, inst.ty()));
+                            }
+                            if inst.space != AddressSpace::Uniform {
+                                return Err(E::AddressSpace(AddressSpace::Uniform, inst.space));
+                            }
+                            let access_mode = access_mode.unwrap_or(AccessMode::Read);
+                            if inst.access != access_mode {
+                                return Err(E::AccessMode(access_mode, inst.access));
+                            }
+                            ctx.scope
+                                .add_var(self.name.clone(), inst.clone(), ctx.stage)
+                        }
+                        AddressSpace::Handle => todo!("handle address space"),
+                    }
+                    let inst = ctx
+                        .overridable(&self.name)
+                        .map(|inst| inst.clone())
+                        .ok_or_else(|| E::UninitOverride(self.name.clone()))
+                        .or_else(|e| self.initializer.as_ref().ok_or(e)?.eval(ctx))?;
+
+                    let inst = if let Some(ty) = &self.ty {
+                        let ty = ty.eval_ty(ctx)?;
+                        inst.convert_to(&ty)
+                            .ok_or_else(|| E::Conversion(inst.ty(), ty))?
+                    } else {
+                        inst.concretize()
+                            .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
+                    };
+
+                    ctx.scope.add_val(self.name.clone(), inst, ctx.stage);
+                    Ok(Flow::Next)
                 }
             }
         }

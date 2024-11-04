@@ -1,3 +1,4 @@
+mod attrs;
 mod builtin;
 mod conv;
 mod display;
@@ -21,7 +22,7 @@ pub use to_expr::*;
 pub use ty::*;
 
 use derive_more::Display;
-use std::{borrow::Borrow, cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
@@ -63,16 +64,8 @@ impl Scope {
         }
     }
 
-    pub fn add_var(
-        &mut self,
-        name: String,
-        value: Instance,
-        space: AddressSpace,
-        access: AccessMode,
-        stage: EvalStage,
-    ) {
-        let r = RefInstance::new(Rc::new(RefCell::new(value)), space, access);
-        let v = Variable::new(r.into(), stage);
+    pub fn add_var(&mut self, name: String, inst: RefInstance, stage: EvalStage) {
+        let v = Variable::new(inst.into(), stage);
         if self.stack.last_mut().unwrap().insert(name, v).is_some() {
             panic!("duplicate variable insertion")
         }
@@ -132,18 +125,10 @@ pub enum ResourceKind {
     Sampler,
 }
 
-#[derive(Clone, Debug)]
-pub struct Resource {
-    kind: ResourceKind,
-    ty: Type,
-    access: AccessMode,
-    ptr: Rc<RefCell<Instance>>,
-}
-
 pub struct Context<'s> {
     source: &'s TranslationUnit,
     scope: Scope,
-    resources: HashMap<(usize, usize), Resource>,
+    resources: HashMap<(u32, u32), RefInstance>,
     overrides: HashMap<String, Instance>,
     kind: ScopeKind,
     stage: EvalStage,
@@ -194,25 +179,16 @@ impl<'s> Context<'s> {
         self.stage = stage;
     }
 
-    pub fn add_resources(
-        &mut self,
-        resources: impl IntoIterator<Item = ((usize, usize), Instance)>,
-    ) {
+    pub fn add_bindings(&mut self, resources: impl IntoIterator<Item = ((u32, u32), RefInstance)>) {
         for ((group, binding), inst) in resources.into_iter() {
-            self.add_resource(group, binding, inst);
+            self.add_binding(group, binding, inst);
         }
     }
-    pub fn add_resource(&mut self, group: usize, binding: usize, inst: Instance) {
-        let res = Resource {
-            kind: ResourceKind::StorageBuffer,
-            ty: inst.ty(),
-            access: AccessMode::ReadWrite,
-            ptr: Rc::new(RefCell::new(inst)),
-        };
-        self.resources.insert((group, binding), res);
+    pub fn add_binding(&mut self, group: u32, binding: u32, inst: RefInstance) {
+        self.resources.insert((group, binding), inst);
     }
-    pub fn resource(&self, group: usize, binding: usize) -> Option<Rc<RefCell<Instance>>> {
-        self.resources.get(&(group, binding)).map(|r| r.ptr.clone())
+    pub fn binding(&self, group: u32, binding: u32) -> Option<&RefInstance> {
+        self.resources.get(&(group, binding))
     }
     pub fn add_overrides(&mut self, overrides: impl IntoIterator<Item = (String, Instance)>) {
         self.overrides.extend(overrides.into_iter());

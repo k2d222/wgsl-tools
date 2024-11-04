@@ -24,7 +24,7 @@ pub use condcomp::CondCompError;
 pub use import::{resolve, ImportError, Module};
 
 #[cfg(feature = "eval")]
-use eval::{Context, Eval, EvalError, Exec, Instance};
+use eval::{Context, Eval, EvalError, Exec, Instance, RefInstance};
 
 #[cfg(feature = "generics")]
 pub use generics::GenericsError;
@@ -194,11 +194,11 @@ pub fn eval_const<'s>(
 pub fn eval_runtime<'s>(
     expr: &syntax::Expression,
     wgsl: &'s TranslationUnit,
-    bindings: HashMap<(usize, usize), Instance>,
+    bindings: HashMap<(u32, u32), RefInstance>,
     overrides: HashMap<String, Instance>,
 ) -> (Result<Instance, EvalError>, Context<'s>) {
     let mut ctx = Context::new(wgsl);
-    ctx.add_resources(bindings);
+    ctx.add_bindings(bindings);
     ctx.add_overrides(overrides);
     ctx.set_stage(eval::EvalStage::Exec);
     let res = wgsl.exec(&mut ctx).and_then(|_| expr.eval(&mut ctx));
