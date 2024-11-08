@@ -143,6 +143,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytes"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ac0150caa2ae65ca5bd83f25c7de183dea78d4d366469f148435e2acfbad0da"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1134,6 +1140,7 @@ name = "wesl"
 version = "0.0.2"
 dependencies = [
  "annotate-snippets",
+ "bytes",
  "derive_more",
  "half",
  "itertools",

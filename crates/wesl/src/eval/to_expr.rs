@@ -142,16 +142,22 @@ impl ToExpr for Type {
                 name: format!("{s}"),
                 template_args: None,
             }),
-            Type::Array(n, ty) => Ok(TypeExpression {
+            Type::Array(Some(n), ty) => Ok(TypeExpression {
                 name: format!("array"),
                 template_args: Some(vec![
                     TemplateArg {
-                        expression: Expression::TypeOrIdentifier(n.to_string().into()).into(),
-                    },
-                    TemplateArg {
                         expression: ty.to_expr(ctx)?.into(),
                     },
+                    TemplateArg {
+                        expression: Expression::TypeOrIdentifier(n.to_string().into()).into(),
+                    },
                 ]),
+            }),
+            Type::Array(None, ty) => Ok(TypeExpression {
+                name: format!("array"),
+                template_args: Some(vec![TemplateArg {
+                    expression: ty.to_expr(ctx)?.into(),
+                }]),
             }),
             Type::Vec(n, ty) => Ok(TypeExpression {
                 name: format!("vec{n}"),

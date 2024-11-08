@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use super::{
     ArrayInstance, Instance, LiteralInstance, MatInstance, MemView, PtrInstance, RefInstance,
-    StructInstance, Ty, Type, VecInstance,
+    StructInstance, Type, VecInstance,
 };
 
 impl Display for Instance {
@@ -75,19 +75,21 @@ impl Display for MatInstance {
 
 impl Display for PtrInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ty = &self.ty;
-        let view = &self.view;
-        write!(f, "ptr<{ty}>({view})")
+        let space = &self.ptr.space;
+        let ty = &self.ptr.ty;
+        let access = &self.ptr.access;
+        let val = self.ptr.read().expect("invalid reference");
+        write!(f, "ptr<{space}, {ty}, {access}>({val})")
     }
 }
 
 impl Display for RefInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let space = &self.space;
         let ty = &self.ty;
-        let view = &self.view;
-        let ptr_ty = self.ptr.borrow().ty();
+        let access = &self.access;
         let val = self.read().expect("invalid reference");
-        write!(f, "ref<{ty}, {ptr_ty}{view}>({})", *val)
+        write!(f, "ref<{space}, {ty}, {access}>({val})")
     }
 }
 
@@ -122,7 +124,8 @@ impl<'a> Display for Type {
             Type::F32 => write!(f, "f32"),
             Type::F16 => write!(f, "f16"),
             Type::Struct(name) => write!(f, "{name}"),
-            Type::Array(n, ty) => write!(f, "array<{n}, {ty}>"),
+            Type::Array(Some(n), ty) => write!(f, "array<{ty}, {n}>"),
+            Type::Array(None, ty) => write!(f, "array<{ty}>"),
             Type::Vec(n, ty) => write!(f, "vec{n}<{ty}>"),
             Type::Mat(m, n, ty) => write!(f, "mat{m}x{n}<{ty}>"),
             Type::Atomic(ty) => write!(f, "atomic<{ty}>"),

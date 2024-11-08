@@ -148,47 +148,47 @@ impl Exec for AssignmentStatement {
                 .ok_or_else(|| E::AssignType(rhs.ty(), ty))?;
             match self.operator {
                 AssignmentOperator::Equal => {
-                    let _ = r.write(rhs)?;
+                    r.write(rhs)?;
                 }
                 AssignmentOperator::PlusEqual => {
                     let val = r.read()?.op_add(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::MinusEqual => {
                     let val = r.read()?.op_sub(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::TimesEqual => {
                     let val = r.read()?.op_mul(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::DivisionEqual => {
                     let val = r.read()?.op_div(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::ModuloEqual => {
                     let val = r.read()?.op_rem(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::AndEqual => {
                     let val = r.read()?.op_bitand(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::OrEqual => {
                     let val = r.read()?.op_bitor(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::XorEqual => {
                     let val = r.read()?.op_bitxor(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::ShiftRightAssign => {
                     let val = r.read()?.op_shl(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
                 AssignmentOperator::ShiftLeftAssign => {
                     let val = r.read()?.op_shr(&rhs)?;
-                    let _ = r.write(val)?;
+                    r.write(val)?;
                 }
             }
             Ok(Flow::Next)
@@ -569,7 +569,7 @@ impl Exec for Declaration {
 
                 ctx.scope.add_var(
                     self.name.clone(),
-                    RefInstance::new(inst, AddressSpace::Function, AccessMode::ReadWrite),
+                    RefInstance::from_instance(inst, AddressSpace::Function, AccessMode::ReadWrite),
                     ctx.stage,
                 );
                 Ok(Flow::Next)
@@ -640,7 +640,7 @@ impl Exec for Declaration {
 
                             ctx.scope.add_var(
                                 self.name.clone(),
-                                RefInstance::new(
+                                RefInstance::from_instance(
                                     inst,
                                     AddressSpace::Private,
                                     AccessMode::ReadWrite,
@@ -666,8 +666,8 @@ impl Exec for Declaration {
                             if ty != inst.ty() {
                                 return Err(E::Type(ty, inst.ty()));
                             }
-                            if inst.space != AddressSpace::Uniform {
-                                return Err(E::AddressSpace(AddressSpace::Uniform, inst.space));
+                            if inst.space != addr_space {
+                                return Err(E::AddressSpace(addr_space, inst.space));
                             }
                             if inst.access != AccessMode::Read {
                                 return Err(E::AccessMode(AccessMode::Read, inst.access));
@@ -687,8 +687,8 @@ impl Exec for Declaration {
                             if ty != inst.ty() {
                                 return Err(E::Type(ty, inst.ty()));
                             }
-                            if inst.space != AddressSpace::Uniform {
-                                return Err(E::AddressSpace(AddressSpace::Uniform, inst.space));
+                            if inst.space != addr_space {
+                                return Err(E::AddressSpace(addr_space, inst.space));
                             }
                             let access_mode = access_mode.unwrap_or(AccessMode::Read);
                             if inst.access != access_mode {
@@ -699,22 +699,6 @@ impl Exec for Declaration {
                         }
                         AddressSpace::Handle => todo!("handle address space"),
                     }
-                    let inst = ctx
-                        .overridable(&self.name)
-                        .map(|inst| inst.clone())
-                        .ok_or_else(|| E::UninitOverride(self.name.clone()))
-                        .or_else(|e| self.initializer.as_ref().ok_or(e)?.eval(ctx))?;
-
-                    let inst = if let Some(ty) = &self.ty {
-                        let ty = ty.eval_ty(ctx)?;
-                        inst.convert_to(&ty)
-                            .ok_or_else(|| E::Conversion(inst.ty(), ty))?
-                    } else {
-                        inst.concretize()
-                            .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
-                    };
-
-                    ctx.scope.add_val(self.name.clone(), inst, ctx.stage);
                     Ok(Flow::Next)
                 }
             }

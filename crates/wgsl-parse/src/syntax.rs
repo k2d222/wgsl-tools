@@ -129,6 +129,7 @@ pub enum AddressSpace {
     Private,
     Workgroup,
     Uniform,
+    // TODO: move access mode out of here
     Storage(Option<AccessMode>),
     Handle,
 }

@@ -15,8 +15,8 @@ use super::{
     conv::{convert_all, Convert},
     convert, convert_all_inner_to, convert_all_ty,
     ops::Compwise,
-    ArrayInstance, EvalError, EvalTy, Instance, LiteralInstance, MatInstance, RefInstance,
-    StructInstance, SyntaxUtil, Ty, Type, VecInstance,
+    ArrayInstance, EvalError, EvalStage, EvalTy, Instance, LiteralInstance, MatInstance,
+    RefInstance, StructInstance, SyntaxUtil, Ty, Type, VecInstance,
 };
 
 type E = EvalError;
@@ -240,7 +240,8 @@ impl Instance {
             Type::F32 => Ok(LiteralInstance::F32(0.0).into()),
             Type::F16 => Ok(LiteralInstance::F16(f16::zero()).into()),
             Type::Struct(name) => StructInstance::zero_value(name, ctx).map(Into::into),
-            Type::Array(n, a_ty) => ArrayInstance::zero_value(*n, a_ty, ctx).map(Into::into),
+            Type::Array(Some(n), a_ty) => ArrayInstance::zero_value(*n, a_ty, ctx).map(Into::into),
+            Type::Array(None, _) => Err(E::NotConstructible(ty.clone())),
             Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
             Type::Mat(c, r, m_ty) => MatInstance::zero_value(*c, *r, m_ty).map(Into::into),
             Type::Atomic(_) => Err(E::NotConstructible(ty.clone())),
@@ -314,7 +315,7 @@ impl MatInstance {
         let zero = Instance::Literal(LiteralInstance::zero_value(ty)?);
         let zero_col = Instance::Vec(VecInstance::new((0..r).map(|_| zero.clone()).collect_vec()));
         let comps = (0..c).map(|_| zero_col.clone()).collect_vec();
-        Ok(MatInstance::new(comps))
+        Ok(MatInstance::from_cols(comps))
     }
 }
 
@@ -324,7 +325,7 @@ impl MatInstance {
 // reference: <https://www.w3.org/TR/WGSL/#constructor-builtin-function>
 
 pub struct ArrayTemplate {
-    n: usize,
+    n: Option<usize>,
     ty: Type,
 }
 impl ArrayTemplate {
@@ -336,9 +337,10 @@ impl ArrayTemplate {
         let mut it = tplt.into_iter();
         match (it.next(), it.next(), it.next()) {
             (Some(t1), Some(t2), None) => Self::parse_2(t1, t2),
-            (Some(_), _, _) => Err(E::Builtin(
-                "runtime-sized arrays are not supported in const contexts",
-            )),
+            (Some(t1), None, None) => match t1 {
+                Instance::Type(ty) => Ok(ArrayTemplate { n: None, ty }),
+                _ => Err(E::TemplateArgs("array")),
+            },
             _ => Err(E::TemplateArgs("array")),
         }
     }
@@ -356,7 +358,7 @@ impl ArrayTemplate {
                         "the array element count must evaluate to a `u32` or a `i32` greater than `0`",
                     )
                 })?;
-                Ok(ArrayTemplate { n, ty })
+                Ok(ArrayTemplate { n: Some(n), ty })
             }
             _ => Err(E::TemplateArgs("array")),
         }
@@ -367,7 +369,7 @@ impl ArrayTemplate {
     pub fn inner_ty(&self) -> Type {
         self.ty.clone()
     }
-    pub fn n(&self) -> usize {
+    pub fn n(&self) -> Option<usize> {
         self.n
     }
 }
@@ -551,8 +553,12 @@ fn call_array_t(tplt: ArrayTemplate, args: &[Instance]) -> Result<Instance, E> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    if args.len() != tplt.n {
-        return Err(E::ParamCount("array".to_string(), tplt.n, args.len()));
+    if Some(args.len()) != tplt.n {
+        return Err(E::ParamCount(
+            "array".to_string(),
+            tplt.n.unwrap_or_default(),
+            args.len(),
+        ));
     }
 
     Ok(ArrayInstance::new(args).into())
@@ -685,7 +691,7 @@ fn call_mat_t(c: usize, r: usize, tplt: MatTemplate, args: &[Instance]) -> Resul
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(MatInstance::new(comps).into())
+        Ok(MatInstance::from_cols(comps).into())
     } else {
         let args = convert_all_inner_to(&args, &tplt.inner_ty())
             .ok_or_else(|| E::Builtin("matrix components are not compatible"))?;
@@ -700,7 +706,7 @@ fn call_mat_t(c: usize, r: usize, tplt: MatTemplate, args: &[Instance]) -> Resul
                 return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
             }
 
-            Ok(MatInstance::new(args).into())
+            Ok(MatInstance::from_cols(args).into())
         }
         // overload 3: mat from scalar values
         else {
@@ -713,7 +719,7 @@ fn call_mat_t(c: usize, r: usize, tplt: MatTemplate, args: &[Instance]) -> Resul
                 .map(|v| Instance::Vec(VecInstance::new(v.to_vec())))
                 .collect_vec();
 
-            Ok(MatInstance::new(args).into())
+            Ok(MatInstance::from_cols(args).into())
         }
     }
 }
@@ -758,7 +764,7 @@ fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
                 return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
             }
 
-            Ok(MatInstance::new(args).into())
+            Ok(MatInstance::from_cols(args).into())
         }
         // overload 3: mat from scalar values
         else {
@@ -770,7 +776,7 @@ fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
                 .map(|v| Instance::Vec(VecInstance::new(v.to_vec())))
                 .collect_vec();
 
-            Ok(MatInstance::new(args).into())
+            Ok(MatInstance::from_cols(args).into())
         }
     }
 }
@@ -1688,6 +1694,6 @@ impl MatInstance {
                 ))
             })
             .collect_vec();
-        MatInstance::new(components)
+        MatInstance::from_cols(components)
     }
 }

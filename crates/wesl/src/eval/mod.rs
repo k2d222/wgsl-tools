@@ -7,6 +7,7 @@ mod eval;
 mod exec;
 mod instance;
 mod lower;
+mod mem;
 mod ops;
 mod to_expr;
 mod ty;
@@ -18,6 +19,7 @@ pub use eval::*;
 pub use exec::*;
 pub use instance::*;
 pub use lower::*;
+pub use mem::*;
 pub use to_expr::*;
 pub use ty::*;
 

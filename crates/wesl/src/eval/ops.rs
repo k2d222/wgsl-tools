@@ -462,7 +462,7 @@ impl MatInstance {
             .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         let lhs = lhs.transpose();
 
-        Ok(MatInstance::new(
+        Ok(MatInstance::from_cols(
             rhs.iter()
                 .map(|col| {
                     Ok(Instance::Vec(VecInstance::new(

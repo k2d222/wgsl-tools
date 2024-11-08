@@ -20,6 +20,8 @@ pub enum EvalError {
     NotConstructible(Type),
     #[error("expected a scalar type, got `{0}`")]
     NotScalar(Type),
+    #[error("expected a type, got `{0}`")]
+    NotType(Instance),
 
     // references
     #[error("invalid reference to memory view `{0}{1}`")]

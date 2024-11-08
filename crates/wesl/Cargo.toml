@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 annotate-snippets = "0.11.4"
+bytes = "1.8.0"
 derive_more = { version = "1.0.0", features = ["as_ref", "deref", "deref_mut", "display", "from", "unwrap"] }
 half = { version = "2.4.1", features = ["num-traits"] }
 itertools = "0.13.0"

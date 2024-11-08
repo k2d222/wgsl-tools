@@ -1,5 +1,5 @@
 use super::{
-    ArrayInstance, ArrayTemplate, Context, EvalError, Instance, LiteralInstance, MatInstance,
+    ArrayInstance, ArrayTemplate, Context, Eval, EvalError, Instance, LiteralInstance, MatInstance,
     MatTemplate, PtrInstance, PtrTemplate, RefInstance, StructInstance, SyntaxUtil, VecInstance,
     VecTemplate,
 };
@@ -17,7 +17,8 @@ pub enum Type {
     F32,
     F16,
     Struct(String),
-    Array(usize, Box<Type>),
+    // TODO: swap these two members
+    Array(Option<usize>, Box<Type>),
     Vec(u8, Box<Type>),
     Mat(u8, u8, Box<Type>),
     Atomic(Box<Type>),
@@ -168,7 +169,7 @@ impl Ty for StructInstance {
 
 impl Ty for ArrayInstance {
     fn ty(&self) -> Type {
-        Type::Array(self.n(), Box::new(self.inner_ty().clone()))
+        Type::Array(Some(self.n()), Box::new(self.inner_ty().clone()))
     }
     fn inner_ty(&self) -> Type {
         self.get(0).unwrap().ty()
@@ -195,7 +196,7 @@ impl Ty for MatInstance {
 
 impl Ty for PtrInstance {
     fn ty(&self) -> Type {
-        Type::Ptr(self.space, Box::new(self.ty.clone()))
+        Type::Ptr(self.ptr.space, Box::new(self.ptr.ty.clone()))
     }
 }
 
@@ -274,5 +275,14 @@ impl EvalTy for TypeExpression {
         } else {
             self.name.as_str().eval_ty(ctx)
         }
+    }
+}
+
+impl EvalTy for Expression {
+    fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError> {
+        self.eval_value(ctx).and_then(|v| match v {
+            Instance::Type(ty) => Ok(ty),
+            _ => Err(EvalError::NotType(v)),
+        })
     }
 }

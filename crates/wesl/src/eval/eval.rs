@@ -25,6 +25,13 @@ pub trait Eval {
     }
 }
 
+// this impl exists purely for eval_value()
+impl Eval for Instance {
+    fn eval(&self, _ctx: &mut Context) -> Result<Instance, E> {
+        Ok(self.clone())
+    }
+}
+
 impl Eval for Spanned<Expression> {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
         self.node()

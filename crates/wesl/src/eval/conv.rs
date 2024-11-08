@@ -86,12 +86,14 @@ impl Convert for LiteralInstance {
 
 impl Convert for ArrayInstance {
     fn convert_to(&self, ty: &Type) -> Option<Self> {
-        if let Type::Array(n, c_ty) = ty {
+        if let Type::Array(Some(n), c_ty) = ty {
             if *n == self.n() {
                 self.convert_inner_to(c_ty)
             } else {
                 None
             }
+        } else if let Type::Array(None, c_ty) = ty {
+            self.convert_inner_to(c_ty)
         } else {
             None
         }
@@ -143,7 +145,7 @@ impl Convert for MatInstance {
             .iter()
             .map(|c| c.convert_inner_to(ty))
             .collect::<Option<Vec<_>>>()?;
-        Some(MatInstance::new(components))
+        Some(MatInstance::from_cols(components))
     }
 }
 
