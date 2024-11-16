@@ -13,8 +13,10 @@ annotate-snippets = "0.11.4"
 derive_more = { version = "1.0.0", features = ["as_ref", "constructor", "deref", "deref_mut", "from", "is_variant", "try_unwrap", "unwrap"] }
 itertools = "0.13.0"
 lalrpop-util = "0.20.2"
+lazy_static = "1.5.0"
 lexical = { version = "6.1.1", features = ["format", "power-of-two"] }
 logos = "0.14.1"
+serde = { version = "1.0.215", optional = true, features = ["derive"] }
 thiserror = "1.0.63"
 wgsl-parse-macros = { path = "../wgsl-parse-macros" }
 
@@ -23,7 +25,7 @@ wgsl-parse-macros = { path = "../wgsl-parse-macros" }
 lalrpop = { git = "https://github.com/k2d222/lalrpop.git", branch = "more-cfg-attributes" }
 
 [features]
-default = ["imports", "condcomp", "generics"]
+default = ["serde", "imports", "condcomp", "generics"]
 
 # allow attributes on most declarations and statements.
 # reference: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md#appendix-updated-grammar

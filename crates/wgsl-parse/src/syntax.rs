@@ -27,6 +27,7 @@ use derive_more::{From, IsVariant};
 
 use crate::span::Spanned;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct TranslationUnit {
     #[cfg(feature = "imports")]
@@ -35,6 +36,10 @@ pub struct TranslationUnit {
     pub global_declarations: Vec<GlobalDeclaration>,
 }
 
+#[cfg_attr(
+    all(feature = "serde", feature = "imports"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg(feature = "imports")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Import {
@@ -44,6 +49,10 @@ pub struct Import {
     pub content: ImportContent,
 }
 
+#[cfg_attr(
+    all(feature = "serde", feature = "imports"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg(feature = "imports")]
 #[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum ImportContent {
@@ -52,6 +61,10 @@ pub enum ImportContent {
     Collection(Vec<Import>),
 }
 
+#[cfg_attr(
+    all(feature = "serde", feature = "imports"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg(feature = "imports")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ImportItem {
@@ -59,6 +72,7 @@ pub struct ImportItem {
     pub rename: Option<String>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum GlobalDirective {
     Diagnostic(DiagnosticDirective),
@@ -66,6 +80,7 @@ pub enum GlobalDirective {
     Requires(RequiresDirective),
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiagnosticDirective {
     #[cfg(feature = "attributes")]
@@ -74,6 +89,7 @@ pub struct DiagnosticDirective {
     pub rule_name: String,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum DiagnosticSeverity {
     Error,
@@ -82,6 +98,7 @@ pub enum DiagnosticSeverity {
     Off,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnableDirective {
     #[cfg(feature = "attributes")]
@@ -89,6 +106,7 @@ pub struct EnableDirective {
     pub extensions: Vec<String>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequiresDirective {
     #[cfg(feature = "attributes")]
@@ -96,6 +114,7 @@ pub struct RequiresDirective {
     pub extensions: Vec<String>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum GlobalDeclaration {
     Void,
@@ -106,6 +125,7 @@ pub enum GlobalDeclaration {
     ConstAssert(ConstAssert),
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Declaration {
     pub attributes: Attributes,
@@ -115,6 +135,7 @@ pub struct Declaration {
     pub initializer: Option<ExpressionNode>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum DeclarationKind {
     Const,
@@ -123,6 +144,7 @@ pub enum DeclarationKind {
     Var(Option<AddressSpace>),
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, IsVariant)]
 pub enum AddressSpace {
     Function,
@@ -134,6 +156,7 @@ pub enum AddressSpace {
     Handle,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AccessMode {
     Read,
@@ -141,6 +164,7 @@ pub enum AccessMode {
     ReadWrite,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeAlias {
     #[cfg(feature = "attributes")]
@@ -149,6 +173,7 @@ pub struct TypeAlias {
     pub ty: TypeExpression,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Struct {
     #[cfg(feature = "attributes")]
@@ -157,6 +182,7 @@ pub struct Struct {
     pub members: Vec<StructMember>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructMember {
     pub attributes: Attributes,
@@ -164,6 +190,7 @@ pub struct StructMember {
     pub ty: TypeExpression,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub attributes: Attributes,
@@ -174,6 +201,7 @@ pub struct Function {
     pub body: CompoundStatement,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct FormalParameter {
     pub attributes: Attributes,
@@ -181,6 +209,7 @@ pub struct FormalParameter {
     pub ty: TypeExpression,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConstAssert {
     #[cfg(feature = "attributes")]
@@ -188,6 +217,7 @@ pub struct ConstAssert {
     pub expression: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum BuiltinValue {
     VertexIndex,
@@ -204,6 +234,7 @@ pub enum BuiltinValue {
     NumWorkgroups,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum InterpolationType {
     Perspective,
@@ -211,6 +242,7 @@ pub enum InterpolationType {
     Flat,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum InterpolationSampling {
     Center,
@@ -220,18 +252,21 @@ pub enum InterpolationSampling {
     Either,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiagnosticAttribute {
     pub severity: DiagnosticSeverity,
     pub rule: String,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct InterpolateAttribute {
     pub ty: InterpolationType,
     pub sampling: InterpolationSampling,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorkgroupSizeAttribute {
     pub x: ExpressionNode,
@@ -239,12 +274,14 @@ pub struct WorkgroupSizeAttribute {
     pub z: Option<ExpressionNode>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct CustomAttribute {
     pub name: String,
     pub arguments: Option<Vec<ExpressionNode>>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum Attribute {
     Align(ExpressionNode),
@@ -271,6 +308,10 @@ pub enum Attribute {
     Custom(CustomAttribute),
 }
 
+#[cfg_attr(
+    all(feature = "serde", feature = "generics"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg(feature = "generics")]
 #[derive(Clone, Debug, PartialEq, From)]
 pub struct TypeConstraint {
@@ -280,6 +321,7 @@ pub struct TypeConstraint {
 
 pub type Attributes = Vec<Attribute>;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum Expression {
     Literal(LiteralExpression),
@@ -294,6 +336,7 @@ pub enum Expression {
 
 pub type ExpressionNode = Spanned<Expression>;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, From, IsVariant)]
 pub enum LiteralExpression {
     Bool(bool),
@@ -306,29 +349,34 @@ pub enum LiteralExpression {
     F16(f32),
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParenthesizedExpression {
     pub expression: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedComponentExpression {
     pub base: ExpressionNode,
     pub component: String,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct IndexingExpression {
     pub base: ExpressionNode,
     pub index: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
     pub operand: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum UnaryOperator {
     LogicalNegation,
@@ -338,6 +386,7 @@ pub enum UnaryOperator {
     Indirection,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
@@ -345,6 +394,7 @@ pub struct BinaryExpression {
     pub right: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, IsVariant)]
 pub enum BinaryOperator {
     ShortCircuitOr,
@@ -367,6 +417,7 @@ pub enum BinaryOperator {
     ShiftRight,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCall {
     pub ty: TypeExpression,
@@ -375,18 +426,21 @@ pub struct FunctionCall {
 
 pub type FunctionCallExpression = FunctionCall;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeExpression {
     pub name: String,
     pub template_args: TemplateArgs,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TemplateArg {
     pub expression: ExpressionNode,
 }
 pub type TemplateArgs = Option<Vec<TemplateArg>>;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, From, IsVariant)]
 pub enum Statement {
     Void,
@@ -410,12 +464,14 @@ pub enum Statement {
 
 pub type StatementNode = Spanned<Statement>;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompoundStatement {
     pub attributes: Attributes,
     pub statements: Vec<StatementNode>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct AssignmentStatement {
     #[cfg(feature = "attributes")]
@@ -425,6 +481,7 @@ pub struct AssignmentStatement {
     pub rhs: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, IsVariant)]
 pub enum AssignmentOperator {
     Equal,
@@ -440,6 +497,7 @@ pub enum AssignmentOperator {
     ShiftLeftAssign,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct IncrementStatement {
     #[cfg(feature = "attributes")]
@@ -447,6 +505,7 @@ pub struct IncrementStatement {
     pub expression: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecrementStatement {
     #[cfg(feature = "attributes")]
@@ -454,6 +513,7 @@ pub struct DecrementStatement {
     pub expression: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfStatement {
     pub attributes: Attributes,
@@ -462,12 +522,14 @@ pub struct IfStatement {
     pub else_clause: Option<ElseClause>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfClause {
     pub expression: ExpressionNode,
     pub body: CompoundStatement,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseIfClause {
     #[cfg(feature = "attributes")]
@@ -476,6 +538,7 @@ pub struct ElseIfClause {
     pub body: CompoundStatement,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseClause {
     #[cfg(feature = "attributes")]
@@ -483,6 +546,7 @@ pub struct ElseClause {
     pub body: CompoundStatement,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct SwitchStatement {
     pub attributes: Attributes,
@@ -491,6 +555,7 @@ pub struct SwitchStatement {
     pub clauses: Vec<SwitchClause>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct SwitchClause {
     #[cfg(feature = "attributes")]
@@ -499,12 +564,14 @@ pub struct SwitchClause {
     pub body: CompoundStatement,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, From)]
 pub enum CaseSelector {
     Default,
     Expression(ExpressionNode),
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct LoopStatement {
     pub attributes: Attributes,
@@ -515,6 +582,7 @@ pub struct LoopStatement {
     pub continuing: Option<ContinuingStatement>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinuingStatement {
     #[cfg(feature = "attributes")]
@@ -526,6 +594,7 @@ pub struct ContinuingStatement {
     pub break_if: Option<BreakIfStatement>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BreakIfStatement {
     #[cfg(feature = "attributes")]
@@ -533,6 +602,7 @@ pub struct BreakIfStatement {
     pub expression: ExpressionNode,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForStatement {
     pub attributes: Attributes,
@@ -542,6 +612,7 @@ pub struct ForStatement {
     pub body: CompoundStatement,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct WhileStatement {
     pub attributes: Attributes,
@@ -549,18 +620,21 @@ pub struct WhileStatement {
     pub body: CompoundStatement,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BreakStatement {
     #[cfg(feature = "attributes")]
     pub attributes: Attributes,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinueStatement {
     #[cfg(feature = "attributes")]
     pub attributes: Attributes,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnStatement {
     #[cfg(feature = "attributes")]
@@ -568,12 +642,14 @@ pub struct ReturnStatement {
     pub expression: Option<ExpressionNode>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiscardStatement {
     #[cfg(feature = "attributes")]
     pub attributes: Attributes,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCallStatement {
     #[cfg(feature = "attributes")]

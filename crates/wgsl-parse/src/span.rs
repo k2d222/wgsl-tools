@@ -4,6 +4,7 @@ use derive_more::derive::{AsMut, AsRef, Deref, DerefMut, From};
 
 pub type Id = u32;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Default, Clone, Debug, PartialEq, Eq, Deref, DerefMut, AsRef, AsMut, From)]
 pub struct Span(Range<usize>);
 
@@ -19,6 +20,7 @@ impl Span {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Default, Clone, Debug, Deref, DerefMut, AsRef, AsMut, From)]
 pub struct Spanned<T> {
     pub span: Span,
