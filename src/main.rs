@@ -13,7 +13,7 @@ use std::{
     str::FromStr,
 };
 use wesl::{
-    eval::{Eval, EvalError, Instance, RefInstance},
+    eval::{Eval, EvalError, HostShareable, Instance, RefInstance},
     syntax::{self, AccessMode, AddressSpace},
     BasicSourceMap, CompileOptions, Diagnostic, FileResolver, Mangler, Resource, MANGLER_ESCAPE,
     MANGLER_HASH, MANGLER_NONE,
@@ -144,7 +144,6 @@ struct Binding {
     group: u32,
     binding: u32,
     kind: BindingType,
-    ty: String,
     data: PathBuf,
 }
 
@@ -170,11 +169,6 @@ impl FromStr for Binding {
                     .ok_or("missing resource binding type")?
                     .parse()
                     .map_err(|()| format!("invalid resource binding type"))?,
-                ty: it
-                    .next()
-                    .ok_or("missing wgsl type")?
-                    .parse()
-                    .map_err(|e| format!("failed to parse wgsl type: {e}"))?,
                 data: PathBuf::from(it.next().ok_or("missing data")?),
             })
         })();
@@ -229,6 +223,8 @@ impl Display for ManglerKind {
 enum CliError {
     #[error("input file not found")]
     FileNotFound,
+    #[error("binding not found: @group({0}) @binding({1})")]
+    Binding(u32, u32),
     #[error("{0}")]
     CompileError(#[from] wesl::Error),
 }
@@ -291,11 +287,48 @@ fn parse_binding(
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)
         .expect("failed to read binding file");
-    let ty_expr =
-        b.ty.parse::<syntax::Expression>()
-            .map_err(|e| Diagnostic::from(e).with_source(b.ty.to_string()))
-            .map_err(wesl::Error::Error)?;
     let mut ctx = wesl::eval::Context::new(wgsl);
+
+    let ty_expr = wgsl
+        .global_declarations
+        .iter()
+        .find_map(|d| match d {
+            syntax::GlobalDeclaration::Declaration(d) => {
+                let group = d.attributes.iter().find_map(|a| match a {
+                    syntax::Attribute::Group(g) => g.eval_value(&mut ctx).ok(),
+                    _ => None,
+                })?;
+                let binding = d.attributes.iter().find_map(|a| match a {
+                    syntax::Attribute::Binding(b) => b.eval_value(&mut ctx).ok(),
+                    _ => None,
+                })?;
+                let correct_group = match group {
+                    Instance::Literal(l) => match l {
+                        wesl::eval::LiteralInstance::AbstractInt(n) => b.group as i64 == n,
+                        wesl::eval::LiteralInstance::I32(n) => b.group as i32 == n,
+                        wesl::eval::LiteralInstance::U32(n) => b.group == n,
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                let correct_binding = match binding {
+                    Instance::Literal(l) => match l {
+                        wesl::eval::LiteralInstance::AbstractInt(n) => b.binding as i64 == n,
+                        wesl::eval::LiteralInstance::I32(n) => b.binding as i32 == n,
+                        wesl::eval::LiteralInstance::U32(n) => b.binding == n,
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                if correct_group && correct_binding {
+                    d.ty.clone()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .ok_or_else(|| CliError::Binding(b.group, b.binding))?;
     let ty = ty_expr
         .eval_value(&mut ctx)
         .and_then(|inst| match inst {
@@ -306,7 +339,7 @@ fn parse_binding(
             wesl::Error::Error(
                 Diagnostic::from(e)
                     .with_ctx(&ctx)
-                    .with_source(b.ty.to_string()),
+                    .with_source(ty_expr.to_string()),
             )
         })?;
     let (storage, access) = match b.kind {
@@ -389,6 +422,8 @@ fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
             let binding = ctx.binding(b.group, b.binding).unwrap();
             let binding = Instance::Ref(binding.clone()).eval_value(&mut ctx).unwrap();
             println!("{}, {} = {binding}", b.group, b.binding);
+            let buf = binding.to_buffer(&mut ctx).unwrap();
+            println!("{:?}", buf);
         }
 
         let res = res.map_err(|e| {
