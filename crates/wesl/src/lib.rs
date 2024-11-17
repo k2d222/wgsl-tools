@@ -49,12 +49,11 @@ pub use wgsl_parse::syntax;
 
 pub use lower::{lower, lower_sourcemap};
 
-use syntax_util::entry_points;
-
 use itertools::Itertools;
 use std::collections::HashMap;
 use wgsl_parse::syntax::TranslationUnit;
 
+#[derive(Debug)]
 pub struct CompileOptions {
     pub use_imports: bool,
     pub use_condcomp: bool,
@@ -82,7 +81,7 @@ fn compile_impl(
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
-    entry_names: &mut Vec<String>,
+    main_names: &mut Vec<String>,
 ) -> Result<TranslationUnit, Error> {
     let resolver = Box::new(resolver);
     let resolver: Box<dyn Resolver> = if cfg!(feature = "condcomp") && options.use_condcomp {
@@ -98,7 +97,13 @@ fn compile_impl(
     let wesl = resolver.source_to_module(&source, entrypoint)?;
 
     // hack, entry_names is passed by &mut just to return it from the function even in error case.
-    *entry_names = entry_points(&wesl)
+    // *main_names = entry_points(&wesl)
+    //     .map(|name| name.to_string())
+    //     .collect_vec();
+    *main_names = wesl
+        .global_declarations
+        .iter()
+        .filter_map(|decl| decl.name())
         .map(|name| name.to_string())
         .collect_vec();
 
@@ -118,7 +123,7 @@ fn compile_impl(
     };
 
     if options.strip {
-        let entry_names = options.entry_points.as_ref().unwrap_or(entry_names);
+        let entry_names = options.entry_points.as_ref().unwrap_or(main_names);
         // TODO: should we mangle names in main?
         // let mangled_names = entry_names
         //     .iter()
@@ -161,16 +166,16 @@ pub fn compile_with_sourcemap(
     let resolver = Box::new(resolver);
     let mangler = Box::new(mangler);
     let sourcemapper = SourceMapper::new(resolver, mangler);
-    let mut entry_names = Vec::new();
+    let mut main_names = Vec::new();
     let comp = compile_impl(
         entrypoint,
         &sourcemapper,
         &sourcemapper,
         options,
-        &mut entry_names,
+        &mut main_names,
     );
     let mut sourcemap = sourcemapper.finish();
-    for entry in &entry_names {
+    for entry in &main_names {
         sourcemap.add_decl(entry.clone(), entrypoint.clone(), entry.clone());
     }
     let comp = comp.and_then(|mut wesl| {

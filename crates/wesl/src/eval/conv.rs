@@ -68,7 +68,7 @@ impl Convert for LiteralInstance {
         }
 
         // TODO: check that these conversions are correctly implemented.
-        // I think they are correct.
+        // I think they are incorrect. the to_xyz() functions do not perform rounding.
         // reference: <https://www.w3.org/TR/WGSL/#floating-point-conversion>
         match (self, ty) {
             (Self::AbstractInt(n), Type::AbstractFloat) => n.to_f64().map(Self::AbstractFloat),
@@ -103,7 +103,7 @@ impl Convert for ArrayInstance {
             .iter()
             .map(|c| c.convert_to(ty))
             .collect::<Option<Vec<_>>>()?;
-        Some(ArrayInstance::new(components))
+        Some(ArrayInstance::new(components, self.runtime_sized))
     }
 }
 
@@ -142,7 +142,7 @@ impl Convert for MatInstance {
     }
     fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
         let components = self
-            .iter()
+            .iter_cols()
             .map(|c| c.convert_inner_to(ty))
             .collect::<Option<Vec<_>>>()?;
         Some(MatInstance::from_cols(components))
@@ -161,7 +161,23 @@ impl Convert for Instance {
             Self::Vec(v) => v.convert_to(ty).map(Self::Vec),
             Self::Mat(m) => m.convert_to(ty).map(Self::Mat),
             Self::Ptr(_) => None,
-            Self::Ref(r) => r.read().ok().map(|r| (*r).clone()), // this is the "load rule". Also performed by `eval_value`.
+            Self::Ref(r) => r.read().ok().and_then(|r| r.convert_to(ty)), // this is the "load rule". Also performed by `eval_value`.
+            Instance::Atomic(_) => None,
+            Self::Type(_) => None,
+            Self::Void => None,
+        }
+    }
+
+    fn convert_inner_to(&self, ty: &Type) -> Option<Self> {
+        match self {
+            Self::Literal(l) => l.convert_inner_to(ty).map(Self::Literal),
+            Self::Struct(_) => None,
+            Self::Array(a) => a.convert_inner_to(ty).map(Self::Array),
+            Self::Vec(v) => v.convert_inner_to(ty).map(Self::Vec),
+            Self::Mat(m) => m.convert_inner_to(ty).map(Self::Mat),
+            Self::Ptr(_) => None,
+            Self::Ref(r) => r.read().ok().and_then(|r| r.convert_inner_to(ty)), // this is the "load rule". Also performed by `eval_value`.
+            Instance::Atomic(_) => None,
             Self::Type(_) => None,
             Self::Void => None,
         }
@@ -220,7 +236,7 @@ pub fn convert_inner<T1: Convert + Ty + Clone, T2: Convert + Ty + Clone>(
     i1: &T1,
     i2: &T2,
 ) -> Option<(T1, T2)> {
-    let (ty1, ty2) = (i1.ty(), i2.ty());
+    let (ty1, ty2) = (i1.inner_ty(), i2.inner_ty());
     let ty = convert_ty(&ty1, &ty2)?;
     let i1 = i1.convert_inner_to(&ty)?;
     let i2 = i2.convert_inner_to(&ty)?;

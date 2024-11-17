@@ -12,6 +12,7 @@ mod ops;
 mod to_expr;
 mod ty;
 
+pub use attrs::*;
 pub use builtin::*;
 pub use conv::*;
 pub use error::*;

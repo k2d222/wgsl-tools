@@ -2,9 +2,11 @@ use std::fmt::Display;
 
 use itertools::Itertools;
 
+use crate::eval::Ty;
+
 use super::{
-    ArrayInstance, Instance, LiteralInstance, MatInstance, MemView, PtrInstance, RefInstance,
-    StructInstance, Type, VecInstance,
+    ArrayInstance, AtomicInstance, Instance, LiteralInstance, MatInstance, MemView, PtrInstance,
+    RefInstance, StructInstance, Type, VecInstance,
 };
 
 impl Display for Instance {
@@ -17,6 +19,7 @@ impl Display for Instance {
             Instance::Mat(inst) => write!(f, "{inst}"),
             Instance::Ptr(inst) => write!(f, "{inst}"),
             Instance::Ref(inst) => write!(f, "{inst}"),
+            Instance::Atomic(inst) => write!(f, "{inst}"),
             Instance::Type(ty) => write!(f, "{ty}"),
             Instance::Void => write!(f, ""),
         }
@@ -39,11 +42,10 @@ impl Display for LiteralInstance {
 
 impl Display for StructInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = &self.name;
+        let name = self.name();
         let comps = self
-            .members
-            .iter()
-            .map(|(k, v)| format!("{k} = {v}"))
+            .iter_members()
+            .map(|(_, v)| format!("{v}"))
             .format(", ");
         write!(f, "{name}({comps})")
     }
@@ -110,6 +112,14 @@ impl Display for MemView {
         }
 
         fmt_view(f, &self)
+    }
+}
+
+impl Display for AtomicInstance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ty = &self.inner_ty();
+        let val = self.inner();
+        write!(f, "atomic<{ty}>({val})")
     }
 }
 

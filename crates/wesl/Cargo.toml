@@ -14,6 +14,7 @@ half = { version = "2.4.1", features = ["num-traits"] }
 itertools = "0.13.0"
 lazy_static = "1.5.0"
 num-traits = "0.2.19"
+serde = { version = "1.0.215", features = ["derive"], optional = true }
 sourcemap = "9.0.0"
 thiserror = "1.0.63"
 wgsl-parse = { path = "../wgsl-parse", features = ["imports", "condcomp"] }
@@ -26,3 +27,4 @@ attributes = ["wgsl-parse/attributes"]
 condcomp = ["attributes", "wgsl-parse/condcomp"]
 eval = []
 generics = ["attributes"]
+serde = ["dep:serde"]

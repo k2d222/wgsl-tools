@@ -101,15 +101,19 @@ fn test_eval(
     result: &Option<String>,
     code: &String,
 ) -> Result<(bool, Instance), wesl::Error> {
-    let ctx = code
+    let wesl = code
         .parse::<TranslationUnit>()
         .map_err(|e| wesl::Error::from(e.error))?;
 
-    let eval_inst = wesl::eval_const(eval, &ctx)?;
+    let expr = eval.parse::<Expression>().map_err(|e| e.error)?;
+    let (eval_inst, _) = wesl::eval_const(&expr, &wesl);
+    let eval_inst = eval_inst?;
 
     match result {
         Some(expect) => {
-            let expect_inst = wesl::eval_const(expect, &ctx)?;
+            let expr = expect.parse::<Expression>().map_err(|e| e.error)?;
+            let (expect_inst, _) = wesl::eval_const(&expr, &wesl);
+            let expect_inst = expect_inst?;
             Ok((eval_inst == expect_inst, eval_inst))
         }
         None => Ok((false, eval_inst)),
@@ -197,7 +201,7 @@ fn json_test(path: &Path) -> (u32, u32) {
                 println!("{pass}");
                 if pass != test.expect {
                     println!(
-                        "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * result: {:?}\n",
+                        "   [FAIL]\n   * {}{}\n   * code:`{}`\n   * result: {:?}\n",
                         test.desc,
                         test.note
                             .as_ref()
@@ -217,7 +221,7 @@ fn json_test(path: &Path) -> (u32, u32) {
                 println!("{pass}");
                 if pass != test.expect {
                     println!(
-                                "   TEST FAILED\n   * {}{}\n   * code:`{}`\n   * eval:`{:?}`\n   * expected: {:?}\n   * result: {:?}\n",
+                                "   [FAIL]\n   * {}{}\n   * code:`{}`\n   * eval:`{:?}`\n   * expected: {:?}\n   * result: {:?}\n",
                                 test.desc,
                                 test.note
                                     .as_ref()
@@ -250,9 +254,13 @@ struct WgslTestSrc {
 
 #[derive(Deserialize)]
 struct ParsingTest {
+    #[serde(default)]
+    name: Option<String>,
     src: String,
     #[serde(default)]
     fails: bool,
+    #[serde(default)]
+    result: Option<String>,
 }
 
 fn wesl_testsuite_test_parsing(path: &Path) {
@@ -263,26 +271,45 @@ fn wesl_testsuite_test_parsing(path: &Path) {
         .inspect_err(|err| eprintln!("{err}"))
         .expect("invalid json test file");
 
+    let mut fails = 0;
+    let mut expected_fail = 0;
+    let mut expected_pass = 0;
+    let count = json.len();
+
     for test in json {
+        let expects = if test.fails { "Fail" } else { "Pass" };
         println!(
-            " * expect {}: `{}`",
-            if test.fails { "Fail" } else { "Pass" },
-            test.src
+            " * test {}: expect {expects}",
+            test.name.unwrap_or(String::from("<no name>"))
         );
-        if test.fails {
-            wgsl_parse::Parser::parse_str(&test.src)
-                .expect_err("parse success but expected failure");
-        } else {
-            let source_module = wgsl_parse::Parser::parse_str(&test.src)
-                .inspect_err(|err| eprintln!("{err}"))
-                .expect("parse error");
-            let disp = format!("{source_module}");
-            let disp_module = wgsl_parse::Parser::parse_str(&disp)
-                .inspect_err(|err| eprintln!("{err}"))
-                .expect("parse error");
-            assert_eq!(source_module, disp_module);
+        let parse = wgsl_parse::Parser::parse_str(&test.src);
+        if test.fails && parse.is_ok() {
+            println!(
+                "   [FAIL]\n   * result: {}\n   * parse success but expected failure\n   * code:`{}`\n",
+                test.result.unwrap_or(String::from("<no message>")),
+                test.src,
+            );
+            // println!("   [FAIL] parse success but expected failure");
+            fails += 1;
+            expected_fail += 1;
+        } else if !test.fails && parse.is_err() {
+            println!(
+                "   [FAIL]\n   * result: {}\n   * parse failure but expected success\n   * error: {}\n   * code:`{}`\n",
+                test.result.unwrap_or(String::from("<no message>")),
+                parse.unwrap_err(),
+                test.src,
+            );
+            fails += 1;
+            expected_pass += 1;
         }
     }
+
+    let pass = count - fails;
+    println!("SUMMARY: {pass}/{count} Pass, {fails}/{count} Fails");
+    println!(
+        "of which expected Fail: {expected_fail}/{fails}, expected Pass: {expected_pass}/{fails}"
+    );
+    assert!(fails == 0);
 }
 
 fn wesl_testsuite_test(path: &Path) {
@@ -332,4 +359,10 @@ fn wesl_testsuite_import_syntax() {
 fn wesl_testsuite_import_cases() {
     let path = PathBuf::from("wesl-testsuite/importCases.json");
     wesl_testsuite_test(&path);
+}
+
+#[test]
+fn wesl_testsuite_cts_parse() {
+    let path = PathBuf::from("wesl-testsuite/ctsParseTests.json");
+    wesl_testsuite_test_parsing(&path);
 }

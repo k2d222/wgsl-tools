@@ -2,7 +2,8 @@ use std::iter::zip;
 
 use super::{
     call_builtin, Context, Convert, EvalError, EvalStage, EvalTy, Exec, Flow, Instance,
-    LiteralInstance, PtrInstance, RefInstance, SyntaxUtil, Ty, Type, VecInstance, ATTR_INTRINSIC,
+    LiteralInstance, PtrInstance, RefInstance, StructInstance, SyntaxUtil, Ty, Type, VecInstance,
+    ATTR_INTRINSIC,
 };
 
 use half::f16;
@@ -15,13 +16,12 @@ pub trait Eval {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E>;
 
     fn eval_value(&self, ctx: &mut Context) -> Result<Instance, E> {
-        let inst = self.eval(ctx)?;
-        if let Instance::Ref(r) = inst {
+        let mut inst = self.eval(ctx)?;
+        while let Instance::Ref(r) = inst {
             let r = r.read()?;
-            Ok((*r).clone())
-        } else {
-            Ok(inst)
+            inst = (*r).clone();
         }
+        Ok(inst)
     }
 }
 
@@ -127,10 +127,9 @@ impl Eval for NamedComponentExpression {
         fn inst_comp(base: Instance, comp: &String) -> Result<Instance, E> {
             match &base {
                 Instance::Struct(s) => {
-                    let val = s
-                        .members
-                        .get(comp)
-                        .ok_or_else(|| E::Component(Type::Struct(s.name.clone()), comp.clone()))?;
+                    let val = s.member(comp).ok_or_else(|| {
+                        E::Component(Type::Struct(s.name().to_string()), comp.clone())
+                    })?;
                     Ok(val.clone())
                 }
                 Instance::Vec(v) => vec_comp(v, comp, None),
@@ -240,11 +239,11 @@ impl Eval for BinaryExpression {
             let rhs = self.right.eval_value(ctx)?;
             match self.operator {
                 BinaryOperator::ShortCircuitOr | BinaryOperator::ShortCircuitAnd => unreachable!(),
-                BinaryOperator::Addition => lhs.op_add(&rhs),
-                BinaryOperator::Subtraction => lhs.op_sub(&rhs),
-                BinaryOperator::Multiplication => lhs.op_mul(&rhs),
-                BinaryOperator::Division => lhs.op_div(&rhs),
-                BinaryOperator::Remainder => lhs.op_rem(&rhs),
+                BinaryOperator::Addition => lhs.op_add(&rhs, ctx.stage),
+                BinaryOperator::Subtraction => lhs.op_sub(&rhs, ctx.stage),
+                BinaryOperator::Multiplication => lhs.op_mul(&rhs, ctx.stage),
+                BinaryOperator::Division => lhs.op_div(&rhs, ctx.stage),
+                BinaryOperator::Remainder => lhs.op_rem(&rhs, ctx.stage),
                 BinaryOperator::Equality => lhs.op_eq(&rhs),
                 BinaryOperator::Inequality => lhs.op_ne(&rhs),
                 BinaryOperator::LessThan => lhs.op_lt(&rhs),
@@ -280,74 +279,102 @@ impl Eval for FunctionCall {
             .map(|a| a.eval_value(ctx))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let decl = ctx
-            .source
-            .decl_function(&ty.name)
-            .ok_or_else(|| E::UnknownFunction(ty.name.clone()))?;
-
-        if !decl.attributes.contains(&Attribute::Const) && ctx.stage == EvalStage::Const {
-            return Err(E::NotConst(decl.name.clone()));
+        // struct constructor
+        if let Some(decl) = ctx.source.decl_struct(&ty.name) {
+            if args.len() == decl.members.len() {
+                let members = decl
+                    .members
+                    .iter()
+                    .zip(args)
+                    .map(|(member, inst)| {
+                        let ty = member.ty.eval_ty(ctx)?;
+                        let inst = inst
+                            .convert_to(&ty)
+                            .ok_or_else(|| E::ParamType(ty, inst.ty()))?;
+                        Ok((member.name.clone(), inst))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(StructInstance::new(ty.name.to_string(), members).into())
+            } else if args.is_empty() {
+                StructInstance::zero_value(&decl.name, ctx).map(Into::into)
+            } else {
+                Err(E::ParamCount(
+                    decl.name.clone(),
+                    decl.members.len(),
+                    args.len(),
+                ))
+            }
         }
-
-        if decl.body.attributes.contains(&ATTR_INTRINSIC) {
-            return call_builtin(&ty, args, ctx);
-        }
-
-        if self.arguments.len() != decl.parameters.len() {
-            return Err(E::ParamCount(
-                decl.name.clone(),
-                decl.parameters.len(),
-                self.arguments.len(),
-            ));
-        }
-
-        let ret_ty = decl
-            .return_type
-            .as_ref()
-            .map(|e| e.eval_ty(ctx))
-            .unwrap_or(Ok(Type::Void))
-            .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
-
-        ctx.scope.push();
-        let flow = {
-            let args = args
-                .iter()
-                .zip(&decl.parameters)
-                .map(|(a, p)| {
-                    let p_ty = p.ty.eval_ty(ctx)?;
-                    a.convert_inner_to(&p_ty)
-                        .ok_or_else(|| E::ParamType(p_ty.clone(), a.ty()))
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
-
-            for (a, p) in zip(args, &decl.parameters) {
-                ctx.scope.add_val(p.name.clone(), a, ctx.stage);
+        // function call
+        else if let Some(decl) = ctx.source.decl_function(&ty.name) {
+            if !decl.attributes.contains(&Attribute::Const) && ctx.stage == EvalStage::Const {
+                return Err(E::NotConst(decl.name.clone()));
             }
 
-            let flow = decl
-                .body
-                .exec(ctx)
-                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
-            flow
-        };
-        ctx.scope.pop();
+            if decl.body.attributes.contains(&ATTR_INTRINSIC) {
+                return call_builtin(&ty, args, ctx);
+            }
 
-        let inst = match flow {
-            Flow::Next => {
-                if ret_ty == Type::Void {
-                    Ok(Instance::Void)
-                } else {
-                    Err(E::ReturnType(Type::Void, ret_ty))
+            if self.arguments.len() != decl.parameters.len() {
+                return Err(E::ParamCount(
+                    decl.name.clone(),
+                    decl.parameters.len(),
+                    self.arguments.len(),
+                ));
+            }
+
+            let ret_ty = decl
+                .return_type
+                .as_ref()
+                .map(|e| e.eval_ty(ctx))
+                .unwrap_or(Ok(Type::Void))
+                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
+
+            ctx.scope.push();
+            let flow = {
+                let args = args
+                    .iter()
+                    .zip(&decl.parameters)
+                    .map(|(arg, param)| {
+                        let param_ty = param.ty.eval_ty(ctx)?;
+                        arg.convert_to(&param_ty)
+                            .ok_or_else(|| E::ParamType(param_ty.clone(), arg.ty()))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
+
+                for (a, p) in zip(args, &decl.parameters) {
+                    ctx.scope.add_val(p.name.clone(), a, ctx.stage);
                 }
-            }
-            Flow::Break | Flow::Continue => Err(E::FlowInFunction(flow)),
-            Flow::Return(inst) => inst
-                .convert_to(&ret_ty)
-                .ok_or(E::ReturnType(inst.ty(), ret_ty))
-                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name)),
-        };
-        inst
+
+                let flow = decl
+                    .body
+                    .exec(ctx)
+                    .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
+                flow
+            };
+            ctx.scope.pop();
+
+            let inst = match flow {
+                Flow::Next => {
+                    if ret_ty == Type::Void {
+                        Ok(Instance::Void)
+                    } else {
+                        Err(E::ReturnType(Type::Void, ret_ty))
+                    }
+                }
+                Flow::Break | Flow::Continue => Err(E::FlowInFunction(flow)),
+                Flow::Return(inst) => inst
+                    .convert_to(&ret_ty)
+                    .ok_or(E::ReturnType(inst.ty(), ret_ty))
+                    .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name)),
+            };
+            inst
+        }
+        // not struct constructor and not function
+        else {
+            Err(E::UnknownFunction(ty.name.clone()))
+        }
     }
 }
 

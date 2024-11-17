@@ -1,19 +1,17 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
-    collections::HashMap,
     ops::Index,
     rc::Rc,
 };
 
-use bytes::Bytes;
 use derive_more::derive::{From, IsVariant, Unwrap};
 use half::f16;
 use itertools::Itertools;
 use wgsl_parse::syntax::{AccessMode, AddressSpace};
 
-use crate::eval::{HostShareable, Ty};
+use crate::eval::Ty;
 
-use super::{Context, EvalError, Type};
+use super::{EvalError, Type};
 
 type E = EvalError;
 
@@ -27,6 +25,7 @@ pub enum Instance {
     Mat(MatInstance),
     Ptr(PtrInstance),
     Ref(RefInstance),
+    Atomic(AtomicInstance),
     Type(Type),
     Void,
 }
@@ -37,10 +36,7 @@ impl Instance {
             MemView::Whole => Ok(self),
             MemView::Member(m, v) => match self {
                 Instance::Struct(s) => {
-                    let inst = s
-                        .members
-                        .get(m)
-                        .ok_or_else(|| E::Component(s.ty(), m.clone()))?;
+                    let inst = s.member(m).ok_or_else(|| E::Component(s.ty(), m.clone()))?;
                     inst.view(v)
                 }
                 _ => Err(E::Component(self.ty(), m.clone())),
@@ -77,10 +73,7 @@ impl Instance {
             MemView::Whole => Ok(self),
             MemView::Member(m, v) => match self {
                 Instance::Struct(s) => {
-                    let inst = s
-                        .members
-                        .get_mut(m)
-                        .ok_or_else(|| E::Component(ty, m.clone()))?;
+                    let inst = s.member_mut(m).ok_or_else(|| E::Component(ty, m.clone()))?;
                     inst.view_mut(v)
                 }
                 _ => Err(E::Component(ty, m.clone())),
@@ -144,22 +137,36 @@ pub enum LiteralInstance {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructInstance {
-    pub name: String,
-    pub members: HashMap<String, Instance>,
+    name: String,
+    members: Vec<(String, Instance)>,
 }
 
 impl StructInstance {
-    pub fn new(name: String, members: HashMap<String, Instance>) -> Self {
+    pub fn new(name: String, members: Vec<(String, Instance)>) -> Self {
         Self { name, members }
     }
     pub fn name(&self) -> &str {
         &self.name
+    }
+    pub fn member(&self, name: &str) -> Option<&Instance> {
+        self.members
+            .iter()
+            .find_map(|(n, inst)| (n == name).then_some(inst))
+    }
+    pub fn member_mut(&mut self, name: &str) -> Option<&mut Instance> {
+        self.members
+            .iter_mut()
+            .find_map(|(n, inst)| (n == name).then_some(inst))
+    }
+    pub fn iter_members(&self) -> impl Iterator<Item = &(String, Instance)> {
+        self.members.iter()
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ArrayInstance {
     components: Vec<Instance>,
+    pub runtime_sized: bool,
 }
 
 impl ArrayInstance {
@@ -167,10 +174,13 @@ impl ArrayInstance {
     /// # Panics
     /// * if the components is empty
     /// * if the components are not all the same type
-    pub(crate) fn new(components: Vec<Instance>) -> Self {
+    pub(crate) fn new(components: Vec<Instance>, runtime_sized: bool) -> Self {
         assert!(!components.is_empty());
         assert!(components.iter().map(|c| c.ty()).all_equal());
-        Self { components }
+        Self {
+            components,
+            runtime_sized,
+        }
     }
     pub fn n(&self) -> usize {
         self.components.len()
@@ -212,7 +222,7 @@ impl VecInstance {
     /// * if the type is not a scalar
     pub(crate) fn new(components: Vec<Instance>) -> Self {
         assert!((2..=4).contains(&components.len()));
-        let components = ArrayInstance::new(components);
+        let components = ArrayInstance::new(components, false);
         assert!(components.inner_ty().is_scalar());
         Self { components }
     }
@@ -299,10 +309,10 @@ impl MatInstance {
     pub fn get_mut(&mut self, i: usize, j: usize) -> Option<&mut Instance> {
         self.col_mut(i).and_then(|v| v.unwrap_vec_mut().get_mut(j))
     }
-    pub fn iter(&self) -> impl Iterator<Item = &Instance> {
+    pub fn iter_cols(&self) -> impl Iterator<Item = &Instance> {
         self.components.iter()
     }
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
+    pub fn iter_cols_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
         self.components.iter_mut()
     }
 }
@@ -492,5 +502,25 @@ impl MemView {
             MemView::Whole => *self = MemView::Index(index, Box::new(MemView::Whole)),
             MemView::Member(_, v) | MemView::Index(_, v) => v.append_index(index),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AtomicInstance {
+    content: Box<Instance>,
+}
+
+impl AtomicInstance {
+    /// # Panics
+    /// * if the instance is not an i32 or u32
+    pub fn new(inst: Instance) -> Self {
+        assert!(matches!(inst.ty(), Type::I32 | Type::U32));
+        Self {
+            content: inst.into(),
+        }
+    }
+
+    pub fn inner(&self) -> &Instance {
+        &self.content
     }
 }

@@ -1,7 +1,7 @@
 use super::{
-    ArrayInstance, ArrayTemplate, Context, Eval, EvalError, Instance, LiteralInstance, MatInstance,
-    MatTemplate, PtrInstance, PtrTemplate, RefInstance, StructInstance, SyntaxUtil, VecInstance,
-    VecTemplate,
+    ArrayInstance, ArrayTemplate, AtomicInstance, AtomicTemplate, Context, Eval, EvalError,
+    Instance, LiteralInstance, MatInstance, MatTemplate, PtrInstance, PtrTemplate, RefInstance,
+    StructInstance, SyntaxUtil, VecInstance, VecTemplate,
 };
 
 use derive_more::derive::{IsVariant, Unwrap};
@@ -58,6 +58,14 @@ impl Type {
     pub fn is_integer(&self) -> bool {
         match self {
             Type::AbstractInt | Type::I32 | Type::U32 => true,
+            _ => false,
+        }
+    }
+
+    /// reference: <https://www.w3.org/TR/WGSL/#floating-point-types>
+    pub fn is_float(&self) -> bool {
+        match self {
+            Type::AbstractFloat | Type::F32 | Type::F16 => true,
             _ => false,
         }
     }
@@ -142,7 +150,22 @@ impl Ty for Instance {
             Instance::Mat(m) => m.ty(),
             Instance::Ptr(p) => p.ty(),
             Instance::Ref(r) => r.ty(),
-            Instance::Type(t) => t.clone(),
+            Instance::Atomic(a) => a.ty(),
+            Instance::Type(t) => t.ty(),
+            Instance::Void => Type::Void,
+        }
+    }
+    fn inner_ty(&self) -> Type {
+        match self {
+            Instance::Literal(l) => l.inner_ty(),
+            Instance::Struct(s) => s.inner_ty(),
+            Instance::Array(a) => a.inner_ty(),
+            Instance::Vec(v) => v.inner_ty(),
+            Instance::Mat(m) => m.inner_ty(),
+            Instance::Ptr(p) => p.inner_ty(),
+            Instance::Ref(r) => r.inner_ty(),
+            Instance::Atomic(a) => a.inner_ty(),
+            Instance::Type(t) => t.inner_ty(),
             Instance::Void => Type::Void,
         }
     }
@@ -169,7 +192,10 @@ impl Ty for StructInstance {
 
 impl Ty for ArrayInstance {
     fn ty(&self) -> Type {
-        Type::Array(Some(self.n()), Box::new(self.inner_ty().clone()))
+        Type::Array(
+            (!self.runtime_sized).then_some(self.n()),
+            Box::new(self.inner_ty().clone()),
+        )
     }
     fn inner_ty(&self) -> Type {
         self.get(0).unwrap().ty()
@@ -203,6 +229,15 @@ impl Ty for PtrInstance {
 impl Ty for RefInstance {
     fn ty(&self) -> Type {
         self.ty.clone()
+    }
+}
+
+impl Ty for AtomicInstance {
+    fn ty(&self) -> Type {
+        Type::Atomic(self.inner_ty().into())
+    }
+    fn inner_ty(&self) -> Type {
+        self.inner().ty()
     }
 }
 
@@ -262,6 +297,10 @@ impl EvalTy for TypeExpression {
                 }
                 "ptr" => {
                     let tplt = PtrTemplate::parse(&tplt, ctx)?;
+                    Ok(tplt.ty())
+                }
+                "atomic" => {
+                    let tplt = AtomicTemplate::parse(&tplt, ctx)?;
                     Ok(tplt.ty())
                 }
                 _ => {

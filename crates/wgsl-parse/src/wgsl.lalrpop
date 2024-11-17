@@ -530,6 +530,16 @@ AdditiveExpression: Expression = {
     <left: Spanned<AdditiveExpression>> <operator: AdditiveOperator> <right: Spanned<MultiplicativeExpression>> => Expression::Binary(BinaryExpression {
         operator, left, right
     }),
+    // this handles the special case `x = 5--7` which must be parsed as `x = 5 - (-7)`
+    <left: Spanned<AdditiveExpression>> <l: @L> "--" <right: Spanned<MultiplicativeExpression>> => {
+        let outer_span = Span::new((l+1)..right.span.range().end);
+        let right = Spanned::new(Expression::Unary(UnaryExpression {
+            operator: UnaryOperator::Negation, operand: right,
+        }), outer_span);
+        Expression::Binary(BinaryExpression {
+            operator: BinaryOperator::Subtraction, left, right
+        })
+    },
 };
 
 AdditiveOperator: BinaryOperator = {

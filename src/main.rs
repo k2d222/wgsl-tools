@@ -13,7 +13,7 @@ use std::{
     str::FromStr,
 };
 use wesl::{
-    eval::{Eval, EvalError, HostShareable, Instance, RefInstance},
+    eval::{Eval, EvalAttrs, EvalError, HostShareable, Instance, RefInstance},
     syntax::{self, AccessMode, AddressSpace},
     BasicSourceMap, CompileOptions, Diagnostic, FileResolver, Mangler, Resource, MANGLER_ESCAPE,
     MANGLER_HASH, MANGLER_NONE,
@@ -144,7 +144,7 @@ struct Binding {
     group: u32,
     binding: u32,
     kind: BindingType,
-    data: PathBuf,
+    data: Box<[u8]>,
 }
 
 impl FromStr for Binding {
@@ -169,7 +169,14 @@ impl FromStr for Binding {
                     .ok_or("missing resource binding type")?
                     .parse()
                     .map_err(|()| format!("invalid resource binding type"))?,
-                data: PathBuf::from(it.next().ok_or("missing data")?),
+                data: {
+                    let path = PathBuf::from(it.next().ok_or("missing data")?);
+                    let mut file = File::open(&path).expect("failed to open binding file");
+                    let mut buf = Vec::new();
+                    file.read_to_end(&mut buf)
+                        .expect("failed to read binding file");
+                    buf.into_boxed_slice()
+                },
             })
         })();
         binding.map_err(|e: String| format!("failed to parse binding: {e}").into())
@@ -223,8 +230,12 @@ impl Display for ManglerKind {
 enum CliError {
     #[error("input file not found")]
     FileNotFound,
-    #[error("binding not found: @group({0}) @binding({1})")]
-    Binding(u32, u32),
+    #[error("binding `@group({0}) @binding({1})` not found")]
+    BindingNotFound(u32, u32),
+    #[error(
+        "binding `@group({0}) @binding({1})` ({2} bytes) incompatible with type `{3}` ({4} bytes)"
+    )]
+    BindingIncompatible(u32, u32, u32, wesl::eval::Type, u32),
     #[error("{0}")]
     CompileError(#[from] wesl::Error),
 }
@@ -283,10 +294,6 @@ fn parse_binding(
     b: &Binding,
     wgsl: &TranslationUnit,
 ) -> Result<((u32, u32), RefInstance), CliError> {
-    let mut file = File::open(&b.data).expect("failed to open binding file");
-    let mut buf = Vec::new();
-    file.read_to_end(&mut buf)
-        .expect("failed to read binding file");
     let mut ctx = wesl::eval::Context::new(wgsl);
 
     let ty_expr = wgsl
@@ -294,33 +301,8 @@ fn parse_binding(
         .iter()
         .find_map(|d| match d {
             syntax::GlobalDeclaration::Declaration(d) => {
-                let group = d.attributes.iter().find_map(|a| match a {
-                    syntax::Attribute::Group(g) => g.eval_value(&mut ctx).ok(),
-                    _ => None,
-                })?;
-                let binding = d.attributes.iter().find_map(|a| match a {
-                    syntax::Attribute::Binding(b) => b.eval_value(&mut ctx).ok(),
-                    _ => None,
-                })?;
-                let correct_group = match group {
-                    Instance::Literal(l) => match l {
-                        wesl::eval::LiteralInstance::AbstractInt(n) => b.group as i64 == n,
-                        wesl::eval::LiteralInstance::I32(n) => b.group as i32 == n,
-                        wesl::eval::LiteralInstance::U32(n) => b.group == n,
-                        _ => false,
-                    },
-                    _ => false,
-                };
-                let correct_binding = match binding {
-                    Instance::Literal(l) => match l {
-                        wesl::eval::LiteralInstance::AbstractInt(n) => b.binding as i64 == n,
-                        wesl::eval::LiteralInstance::I32(n) => b.binding as i32 == n,
-                        wesl::eval::LiteralInstance::U32(n) => b.binding == n,
-                        _ => false,
-                    },
-                    _ => false,
-                };
-                if correct_group && correct_binding {
+                let (group, binding) = d.eval_group_binding(&mut ctx).ok()?;
+                if group == b.group && binding == b.binding {
                     d.ty.clone()
                 } else {
                     None
@@ -328,7 +310,8 @@ fn parse_binding(
             }
             _ => None,
         })
-        .ok_or_else(|| CliError::Binding(b.group, b.binding))?;
+        .ok_or_else(|| CliError::BindingNotFound(b.group, b.binding))?;
+
     let ty = ty_expr
         .eval_value(&mut ctx)
         .and_then(|inst| match inst {
@@ -364,9 +347,15 @@ fn parse_binding(
         BindingType::ReadWrite => todo!(),
         BindingType::ReadOnly => todo!(),
     };
-    let inst = Instance::from_buffer(&buf, &ty, &mut ctx)
-        .ok_or_else(|| EvalError::NotConstructible(ty))
-        .map_err(|e| wesl::Error::Error(Diagnostic::from(e)))?;
+    let inst = Instance::from_buffer(&b.data, &ty, &mut ctx).ok_or_else(|| {
+        CliError::BindingIncompatible(
+            b.group,
+            b.binding,
+            b.data.len() as u32,
+            ty.clone(),
+            ty.size_of(&mut ctx).unwrap_or_default(),
+        )
+    })?;
     Ok((
         (b.group, b.binding),
         RefInstance::from_instance(inst, storage, access),
@@ -388,7 +377,7 @@ fn parse_override(src: &str, wgsl: &TranslationUnit) -> Result<Instance, CliErro
     Ok(inst)
 }
 
-fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
+fn run_eval(args: &EvalArgs) -> Result<(Instance, Vec<Binding>), CliError> {
     let (wgsl, sourcemap) = run_compile(&args.compile)?;
 
     let bindings = args
@@ -405,41 +394,44 @@ fn run_eval(args: &EvalArgs) -> Result<Instance, CliError> {
         })
         .collect::<Result<_, _>>()?;
 
-    let inst = (|| {
-        let expr = args
-            .expr
-            .parse::<syntax::Expression>()
-            .map_err(|e| Diagnostic::from(e).with_source(args.expr.to_string()))?;
+    let expr = args
+        .expr
+        .parse::<syntax::Expression>()
+        .map_err(|e| wesl::Error::Error(Diagnostic::from(e).with_source(args.expr.to_string())))?;
 
-        let (res, mut ctx) = if args.runtime {
-            wesl::eval_runtime(&expr, &wgsl, bindings, overrides)
-        } else {
-            wesl::eval_const(&expr, &wgsl)
-        };
+    let (res, mut ctx) = if args.runtime {
+        wesl::eval_runtime(&expr, &wgsl, bindings, overrides)
+    } else {
+        wesl::eval_const(&expr, &wgsl)
+    };
 
-        // TODO: remove this
-        for b in &args.bindings {
-            let binding = ctx.binding(b.group, b.binding).unwrap();
-            let binding = Instance::Ref(binding.clone()).eval_value(&mut ctx).unwrap();
-            println!("{}, {} = {binding}", b.group, b.binding);
-            let buf = binding.to_buffer(&mut ctx).unwrap();
-            println!("{:?}", buf);
-        }
+    let res = res.map_err(|e| {
+        Diagnostic::from(e)
+            .with_source(args.expr.clone())
+            .with_ctx(&ctx)
+    });
+    let inst = if let Some(sourcemap) = sourcemap {
+        res.map_err(|e| wesl::Error::Error(e.with_sourcemap(&sourcemap)))
+    } else {
+        res.map_err(|e| wesl::Error::Error(e))
+    }?;
 
-        let res = res.map_err(|e| {
-            Diagnostic::from(e)
-                .with_source(args.expr.clone())
-                .with_ctx(&ctx)
-        });
-        if let Some(sourcemap) = sourcemap {
-            res.map_err(|e| e.with_sourcemap(&sourcemap))
-        } else {
-            res
-        }
-    })()
-    .map_err(|e| CliError::CompileError(wesl::Error::Error(e)))?;
+    let bindings = args
+        .bindings
+        .iter()
+        .filter_map(|b| {
+            let inst = ctx.binding(b.group, b.binding)?.clone();
+            let buf = inst.read().ok()?.to_buffer(&mut ctx)?;
+            Some(Binding {
+                group: b.group,
+                binding: b.binding,
+                kind: b.kind,
+                data: buf.into(),
+            })
+        })
+        .collect();
 
-    Ok(inst)
+    Ok((inst, bindings))
 }
 
 fn main() {
@@ -482,7 +474,7 @@ fn main() {
         }
         Command::Eval(args) => {
             match run_eval(args) {
-                Ok(module) => println!("{module}"),
+                Ok((inst, bindings)) => println!("{inst}\n{bindings:?}"),
                 Err(err) => eprintln!("{err}"),
             };
         }

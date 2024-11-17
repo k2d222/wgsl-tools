@@ -1,6 +1,7 @@
 //! Prefer using [`Parser::parse_str`]. You shouldn't need to manipulate the lexer.
 
 use crate::{error::CustomLalrError, parser::Parser};
+use lazy_static::lazy_static;
 use logos::{Logos, SpannedIter};
 use std::{fmt::Display, num::NonZeroU8};
 
@@ -44,6 +45,8 @@ fn decr_depth(lex: &mut logos::Lexer<Token>) {
     lex.extras.depth -= 1;
 }
 
+// TODO: get rid of crate `lexical`
+
 // don't have to be super strict, the lexer regex already did the heavy lifting
 const DEC_FORMAT: u128 = lexical::NumberFormatBuilder::new().build();
 
@@ -54,6 +57,15 @@ const HEX_FORMAT: u128 = lexical::NumberFormatBuilder::new()
     .exponent_base(NonZeroU8::new(16))
     .exponent_radix(NonZeroU8::new(10))
     .build();
+
+lazy_static! {
+    static ref FLOAT_HEX_OPTIONS: lexical::parse_float_options::Options =
+        lexical::parse_float_options::OptionsBuilder::new()
+            .exponent(b'p')
+            .decimal_point(b'.')
+            .build()
+            .unwrap();
+}
 
 fn parse_dec_abstract_int(lex: &mut logos::Lexer<Token>) -> Option<i64> {
     let options = &lexical::parse_integer_options::STANDARD;
@@ -106,9 +118,10 @@ fn parse_dec_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
 }
 
 fn parse_hex_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
-    let options = &lexical::parse_float_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_with_options::<f64, _, HEX_FORMAT>(str, options).ok()
+    lexical::parse_with_options::<f64, _, HEX_FORMAT>(str, &FLOAT_HEX_OPTIONS)
+        .inspect_err(|e| println!("ERR {str} {e}"))
+        .ok()
 }
 
 fn parse_dec_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
@@ -120,8 +133,9 @@ fn parse_dec_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
 }
 
 fn parse_hex_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
-    let options = &lexical::parse_float_options::STANDARD;
     let str = lex.slice();
+    // TODO
+    let options = &lexical::parse_float_options::STANDARD;
     lexical::parse_partial_with_options::<f32, _, HEX_FORMAT>(str, options)
         .ok()
         .map(|(x, _)| x)
@@ -136,9 +150,8 @@ fn parse_dec_f16(lex: &mut logos::Lexer<Token>) -> Option<f32> {
 }
 
 fn parse_hex_f16(lex: &mut logos::Lexer<Token>) -> Option<f32> {
-    let options = &lexical::parse_float_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial_with_options::<f32, _, HEX_FORMAT>(str, options)
+    lexical::parse_partial_with_options::<f32, _, HEX_FORMAT>(str, &FLOAT_HEX_OPTIONS)
         .ok()
         .map(|(x, _)| x)
 }
@@ -172,7 +185,7 @@ pub struct LexerState {
 // follwing the spec at this date: https://www.w3.org/TR/2024/WD-WGSL-20240731/
 #[derive(Logos, Clone, Debug, PartialEq)]
 #[logos(
-    skip r"\s+",
+    skip r"[\s\u0085\u200e\u200f\u2028\u2029]+",
     // see line breaks: https://www.w3.org/TR/WGSL/#line-break
     skip r"//[^\n\v\f\r\u0085\u2028\u2029]*", // line comment
     extras = LexerState,
@@ -284,7 +297,7 @@ pub enum Token {
     KwBreak,
     #[token("case")]
     KwCase,
-    #[token("const")]
+    #[token("const", priority = 2)]
     KwConst,
     #[token("const_assert")]
     KwConstAssert,
@@ -332,35 +345,35 @@ pub enum Token {
     KwWhile,
 
     // XXX: should we also register reserved words as tokens?
-    #[regex(r#"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])"#, |lex| lex.slice().to_string())]
+    #[regex(r#"([_\p{XID_Start}][\p{XID_Continue}]+)|([\p{XID_Start}])"#, |lex| lex.slice().to_string(), priority = 1)]
     Ident(String),
-    #[regex(r#"0|[1-9][0-9]*"#, parse_dec_abstract_int)]
-    #[regex(r#"0[xX][0-9a-fA-F]+"#, parse_hex_abstract_int)]
+    #[regex(r#"0|[1-9]\d*"#, parse_dec_abstract_int)]
+    #[regex(r#"0[xX][\da-fA-F]+"#, parse_hex_abstract_int)]
     AbstractInt(i64),
     #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?"#, parse_dec_abs_float)]
     #[regex(r#"\d+[eE][+-]?\d+"#, parse_dec_abs_float)]
-    #[regex(r#"0[xX][\da-fA-F]*\.[\da-fA-F]*([pP][+-]?\d+)?"#, parse_hex_abs_float)]
+    #[regex(r#"0[xX][\da-fA-F]+\.[\da-fA-F]*([pP][+-]?\d+)?"#, parse_hex_abs_float)]
     #[regex(r#"0[xX]\.[\da-fA-F]+([pP][+-]?\d+)?"#, parse_hex_abs_float)]
     #[regex(r#"0[xX][\da-fA-F]+[pP][+-]?\d+"#, parse_hex_abs_float)]
     // hex
     AbstractFloat(f64),
-    #[regex(r#"(0|[1-9][0-9]*)i"#, parse_dec_i32)]
-    #[regex(r#"0[xX][0-9a-fA-F]+i"#, parse_hex_i32)]
+    #[regex(r#"(0|[1-9]\d*)i"#, parse_dec_i32)]
+    #[regex(r#"0[xX][\da-fA-F]+i"#, parse_hex_i32)]
     // hex
     I32(i32),
-    #[regex(r#"(0|[1-9][0-9]*)u"#, parse_dec_u32)]
-    #[regex(r#"0[xX][0-9a-fA-F]+u"#, parse_hex_u32)]
+    #[regex(r#"(0|[1-9]\d*)u"#, parse_dec_u32)]
+    #[regex(r#"0[xX][\da-fA-F]+u"#, parse_hex_u32)]
     // hex
     U32(u32),
     #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?f"#, parse_dec_f32)]
     #[regex(r#"\d+([eE][+-]?\d+)?f"#, parse_dec_f32)]
-    #[regex(r#"0[xX][\da-fA-F]*\.[\da-fA-F]*[pP][+-]?\d+f"#, parse_hex_f32)]
+    #[regex(r#"0[xX][\da-fA-F]+\.[\da-fA-F]*[pP][+-]?\d+f"#, parse_hex_f32)]
     #[regex(r#"0[xX]\.[\da-fA-F]+[pP][+-]?\d+f"#, parse_hex_f32)]
     #[regex(r#"0[xX][\da-fA-F]+[pP][+-]?\d+f"#, parse_hex_f32)]
     F32(f32),
     #[regex(r#"(\d+\.\d*|\.\d+)([eE][+-]?\d+)?h"#, parse_dec_f16)]
     #[regex(r#"\d+([eE][+-]?\d+)?h"#, parse_dec_f16)]
-    #[regex(r#"0[xX][\da-fA-F]*\.[\da-fA-F]*[pP][+-]?\d+h"#, parse_hex_f16)]
+    #[regex(r#"0[xX][\da-fA-F]+\.[\da-fA-F]*[pP][+-]?\d+h"#, parse_hex_f16)]
     #[regex(r#"0[xX]\.[\da-fA-F]+[pP][+-]?\d+h"#, parse_hex_f16)]
     #[regex(r#"0[xX][\da-fA-F]+[pP][+-]?\d+h"#, parse_hex_f16)]
     F16(f32),
@@ -558,7 +571,7 @@ impl Display for Token {
             Token::KwTrue => f.write_str("true"),
             Token::KwVar => f.write_str("var"),
             Token::KwWhile => f.write_str("while"),
-            Token::Ident(s) => write!(f, "identifier `{s}`"),
+            Token::Ident(s) => write!(f, "identifier `{s}` ({})", s.len()),
             Token::AbstractInt(n) => write!(f, "{n}"),
             Token::AbstractFloat(n) => write!(f, "{n}"),
             Token::I32(n) => write!(f, "{n}i"),

@@ -129,7 +129,7 @@ impl<E: std::error::Error> Diagnostic<E> {
         self
     }
 
-    pub fn with_sourcemap(mut self, sourcemap: &impl SourceMap) -> Self {
+    pub fn with_sourcemap(mut self, sourcemap: &(impl SourceMap + std::fmt::Debug)) -> Self {
         if let Some(decl) = &self.declaration {
             if let Some((resource, decl)) = sourcemap.get_decl(&decl) {
                 self.file = Some(resource.clone());

@@ -20,7 +20,7 @@ impl ToExpr for Instance {
             Instance::Vec(inst) => inst.to_expr(ctx),
             Instance::Mat(inst) => inst.to_expr(ctx),
             Instance::Type(inst) => inst.to_expr(ctx),
-            Instance::Ptr(_) | Instance::Ref(_) | Instance::Void => {
+            Instance::Atomic(_) | Instance::Ptr(_) | Instance::Ref(_) | Instance::Void => {
                 Err(E::NotConstructible(self.ty()))
             }
         }
@@ -46,19 +46,18 @@ impl ToExpr for StructInstance {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         let decl = ctx
             .source
-            .decl_struct(&self.name)
+            .decl_struct(self.name())
             .expect("struct declaration not found");
         Ok(Expression::FunctionCall(FunctionCall {
             ty: TypeExpression {
-                name: self.name.clone(),
+                name: self.name().to_string(),
                 template_args: None,
             },
             arguments: decl
                 .members
                 .iter()
                 .map(|m| {
-                    self.members
-                        .get(&m.name)
+                    self.member(&m.name)
                         .expect("struct member not found")
                         .to_expr(ctx)
                         .map(Spanned::from)
@@ -106,7 +105,7 @@ impl ToExpr for MatInstance {
                 template_args: None,
             },
             arguments: self
-                .iter()
+                .iter_cols()
                 .map(|c| c.to_expr(ctx).map(Spanned::from))
                 .collect::<Result<Vec<_>, _>>()?,
         }))

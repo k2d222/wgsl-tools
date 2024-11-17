@@ -3,7 +3,7 @@ use std::fmt::Display;
 use crate::eval::conv::Convert;
 
 use super::{
-    attrs::eval_group_binding, AccessMode, Context, Eval, EvalError, EvalStage, EvalTy, Instance,
+    attrs::EvalAttrs, AccessMode, Context, Eval, EvalError, EvalStage, EvalTy, Instance,
     LiteralInstance, RefInstance, ScopeKind, Ty, Type,
 };
 
@@ -139,35 +139,35 @@ impl Exec for CompoundStatement {
 impl Exec for AssignmentStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         let lhs = self.lhs.eval(ctx)?;
-        let ty = lhs.ty();
+        let ty = lhs.ty().concretize();
 
         if let Instance::Ref(mut r) = lhs {
             let rhs = self.rhs.eval_value(ctx)?;
-            let rhs = rhs
-                .convert_to(&ty)
-                .ok_or_else(|| E::AssignType(rhs.ty(), ty))?;
             match self.operator {
                 AssignmentOperator::Equal => {
+                    let rhs = rhs
+                        .convert_to(&ty)
+                        .ok_or_else(|| E::AssignType(rhs.ty(), ty))?;
                     r.write(rhs)?;
                 }
                 AssignmentOperator::PlusEqual => {
-                    let val = r.read()?.op_add(&rhs)?;
+                    let val = r.read()?.op_add(&rhs, ctx.stage)?;
                     r.write(val)?;
                 }
                 AssignmentOperator::MinusEqual => {
-                    let val = r.read()?.op_sub(&rhs)?;
+                    let val = r.read()?.op_sub(&rhs, ctx.stage)?;
                     r.write(val)?;
                 }
                 AssignmentOperator::TimesEqual => {
-                    let val = r.read()?.op_mul(&rhs)?;
+                    let val = r.read()?.op_mul(&rhs, ctx.stage)?;
                     r.write(val)?;
                 }
                 AssignmentOperator::DivisionEqual => {
-                    let val = r.read()?.op_div(&rhs)?;
+                    let val = r.read()?.op_div(&rhs, ctx.stage)?;
                     r.write(val)?;
                 }
                 AssignmentOperator::ModuloEqual => {
-                    let val = r.read()?.op_rem(&rhs)?;
+                    let val = r.read()?.op_rem(&rhs, ctx.stage)?;
                     r.write(val)?;
                 }
                 AssignmentOperator::AndEqual => {
@@ -659,14 +659,14 @@ impl Exec for Declaration {
                                 return Err(E::UntypedDecl);
                             };
                             let ty = ty.eval_ty(ctx)?;
-                            let (group, binding) = eval_group_binding(&self.attributes, ctx)?;
+                            let (group, binding) = self.eval_group_binding(ctx)?;
                             let inst = ctx
                                 .binding(group, binding)
                                 .ok_or_else(|| E::MissingResource(group, binding))?;
                             if ty != inst.ty() {
                                 return Err(E::Type(ty, inst.ty()));
                             }
-                            if inst.space != addr_space {
+                            if !inst.space.is_uniform() {
                                 return Err(E::AddressSpace(addr_space, inst.space));
                             }
                             if inst.access != AccessMode::Read {
@@ -680,14 +680,14 @@ impl Exec for Declaration {
                                 return Err(E::UntypedDecl);
                             };
                             let ty = ty.eval_ty(ctx)?;
-                            let (group, binding) = eval_group_binding(&self.attributes, ctx)?;
+                            let (group, binding) = self.eval_group_binding(ctx)?;
                             let inst = ctx
                                 .binding(group, binding)
                                 .ok_or_else(|| E::MissingResource(group, binding))?;
                             if ty != inst.ty() {
                                 return Err(E::Type(ty, inst.ty()));
                             }
-                            if inst.space != addr_space {
+                            if !inst.space.is_storage() {
                                 return Err(E::AddressSpace(addr_space, inst.space));
                             }
                             let access_mode = access_mode.unwrap_or(AccessMode::Read);
