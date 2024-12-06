@@ -13,7 +13,7 @@ use std::{
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("failed to read file `{0}`")]
+    #[error("file not found: {0}")]
     FileNotFound(String),
     #[error("{0}")]
     Error(#[from] Diagnostic<Error>),
@@ -21,7 +21,7 @@ pub enum ResolveError {
 
 /// A resource uniquely identify an importable module (file).
 ///
-/// Each module must be associated with a unique Resource, and a Resource must
+/// Each module must be associated with a unique `Resource`, and a `Resource` must
 /// identify a unique Module.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Resource {
@@ -46,8 +46,11 @@ impl Display for Resource {
     }
 }
 
-/// a Resolver is responsible for turning a import path into a unique resource identifer (`Resource`),
+/// a Resolver is responsible for turning a import path into a unique resource identifer ([`Resource`]),
 /// and providing the source file.
+///
+/// `Resolver` implementations must respect the following constraints:
+/// * TODO
 pub trait Resolver {
     /// Tries to resolve a source file identified by a resource.
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError>;
@@ -102,6 +105,22 @@ impl<T: Resolver> Resolver for &T {
     }
 }
 
+/// A resolver that never resolves anything.
+///
+/// Returns [`ResolveError::FileNotFound`] when calling [`Resolver::resolve_source`].
+#[derive(Default, Clone, Debug)]
+pub struct NoResolver;
+
+pub const RESOLVER_NONE: NoResolver = NoResolver;
+
+impl Resolver for NoResolver {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+        Err(ResolveError::FileNotFound(format!(
+            "`{resource}` (no resolver)"
+        )))
+    }
+}
+
 pub struct CacheResolver<'a> {
     resolver: Box<dyn Resolver + 'a>,
     cache: RefCell<HashMap<Resource, String>>,
@@ -139,8 +158,10 @@ pub struct FileResolver {
 
 impl FileResolver {
     /// `base` is the root directory to which absolute paths refer to.
-    pub fn new(base: PathBuf) -> Self {
-        Self { base }
+    pub fn new(base: impl AsRef<Path>) -> Self {
+        Self {
+            base: base.as_ref().to_path_buf(),
+        }
     }
 }
 
@@ -151,7 +172,7 @@ impl Resolver for FileResolver {
         path.set_extension("wgsl");
 
         let source = fs::read_to_string(&path).map_err(|_| {
-            ResolveError::FileNotFound(format!("{} (physical file)", path.display()))
+            ResolveError::FileNotFound(format!("`{}` (physical file)", path.display()))
         })?;
 
         Ok(source.into())
@@ -171,15 +192,14 @@ impl VirtualFileResolver {
         }
     }
 
-    pub fn add_file(&mut self, path: PathBuf, file: String) -> Result<(), ResolveError> {
-        self.files.insert(path, file);
-        Ok(())
+    pub fn add_file(&mut self, path: impl AsRef<Path>, file: String) {
+        self.files.insert(path.as_ref().to_path_buf(), file);
     }
 
     pub fn get_file(&self, resource: &Resource) -> Result<&str, Error> {
         let path = resource.path().with_extension("wgsl");
         let source = self.files.get(&path).ok_or_else(|| {
-            ResolveError::FileNotFound(format!("{} (virtual file)", path.display()))
+            ResolveError::FileNotFound(format!("`{}` (virtual file)", path.display()))
         })?;
         Ok(source)
     }
@@ -236,13 +256,13 @@ impl<'a, F: ResolveFn> Resolver for PreprocessResolver<'a, F> {
     }
 }
 
-pub struct DispatchResolver {
+pub struct RouterResolver {
     mount_points: Vec<(PathBuf, Box<dyn Resolver>)>,
     fallback: Option<(PathBuf, Box<dyn Resolver>)>,
 }
 
 /// Dispatches resolution of a resource to sub-resolvers.
-impl DispatchResolver {
+impl RouterResolver {
     pub fn new() -> Self {
         Self {
             mount_points: Vec::new(),
@@ -250,7 +270,9 @@ impl DispatchResolver {
         }
     }
 
-    pub fn mount_resolver(&mut self, path: PathBuf, resolver: Box<dyn Resolver>) {
+    pub fn mount_resolver(&mut self, path: impl AsRef<Path>, resolver: impl Resolver + 'static) {
+        let path = path.as_ref().to_path_buf();
+        let resolver: Box<dyn Resolver> = Box::new(resolver);
         if path.iter().count() == 0 {
             self.fallback = Some((path, resolver));
         } else {
@@ -258,12 +280,12 @@ impl DispatchResolver {
         }
     }
 
-    pub fn mount_fallback_resolver(&mut self, resolver: Box<dyn Resolver>) {
+    pub fn mount_fallback_resolver(&mut self, resolver: impl Resolver + 'static) {
         self.mount_resolver(PathBuf::new(), resolver);
     }
 }
 
-impl Resolver for DispatchResolver {
+impl Resolver for RouterResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let (mount_path, resolver) = self
             .mount_points
@@ -271,14 +293,14 @@ impl Resolver for DispatchResolver {
             .filter(|(path, _)| resource.path().starts_with(path))
             .max_by_key(|(path, _)| path.iter().count())
             .or(self.fallback.as_ref())
-            .ok_or_else(|| ResolveError::FileNotFound(format!("{resource} (no mount point)")))?;
+            .ok_or_else(|| ResolveError::FileNotFound(format!("`{resource}` (no mount point)")))?;
 
         // SAFETY: we just checked that resource.path() starts with mount_path
         let suffix = resource.path().strip_prefix(mount_path).unwrap();
         let resource = Resource::from(suffix.to_path_buf());
         resolver.resolve_source(&resource).map_err(|e| match e {
             ResolveError::FileNotFound(msg) => {
-                ResolveError::FileNotFound(format!("{}/{msg}", mount_path.display()))
+                ResolveError::FileNotFound(format!("`{}`::{msg}", mount_path.display()))
             }
             ResolveError::Error(_) => e,
         })

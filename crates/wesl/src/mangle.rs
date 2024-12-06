@@ -12,6 +12,14 @@ use wgsl_parse::syntax::TypeExpression;
 
 use super::Resource;
 
+/// A name mangler is responsible for renaming import-qualified identifiers into valid
+/// WGSL identifiers.
+///
+/// `Mangler` implementations must respect the following constraints:
+/// * TODO
+///
+/// # WESL Reference
+/// spec: not yet available.
 pub trait Mangler {
     fn mangle(&self, resource: &Resource, item: &str) -> String;
     fn unmangle(&self, _mangled: &str) -> Option<(Resource, String)> {

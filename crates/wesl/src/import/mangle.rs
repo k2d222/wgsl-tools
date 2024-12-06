@@ -6,56 +6,58 @@ use crate::syntax_util::IterUses;
 use crate::{Mangler, Resource};
 use wgsl_parse::syntax::*;
 
-pub trait Mangle {
-    fn mangle(&mut self, resource: &Resource, mangler: &impl Mangler);
+fn mangle_decls(wgsl: &mut TranslationUnit, resource: &Resource, mangler: &impl Mangler) {
+    // find declared idents
+    let replace: HashMap<String, String> = wgsl
+        .global_declarations
+        .iter_mut()
+        .filter_map(|decl| decl.name_mut())
+        .map(|decl_ident| {
+            let old_ident = decl_ident.to_string();
+            let new_ident = mangler.mangle(&resource, &old_ident);
+            *decl_ident = new_ident.clone();
+            (old_ident, new_ident)
+        })
+        .collect();
+
+    replace_idents(wgsl, &replace);
 }
 
-impl Mangle for TranslationUnit {
-    fn mangle(&mut self, resource: &Resource, mangler: &impl Mangler) {
-        // find declared idents
-        let mut replace: HashMap<String, String> = self
-            .global_declarations
-            .iter_mut()
-            .filter_map(|decl| decl.name_mut())
-            .map(|decl_ident| {
-                let old_ident = decl_ident.to_string();
-                let new_ident = mangler.mangle(&resource, &old_ident);
-                *decl_ident = new_ident.clone();
-                (old_ident, new_ident)
-            })
-            .collect();
+fn mangle_imports(wgsl: &mut TranslationUnit, resource: &Resource, mangler: &impl Mangler) {
+    // find imported idents
+    let imports = imports_to_resources(&wgsl.imports, &resource);
+    let mut replace: HashMap<String, String> = HashMap::new();
+    for (resource, items) in imports.iter() {
+        for item in items {
+            let old_ident = item.rename.as_ref().unwrap_or(&item.name).clone();
+            let new_ident = mangler.mangle(&resource, &item.name);
+            replace.insert(old_ident, new_ident);
+        }
+    }
 
-        // find imported idents
-        let imports = imports_to_resources(&self.imports, &resource);
-        for (resource, items) in imports.iter() {
-            for item in items {
-                let old_ident = item.rename.as_ref().unwrap_or(&item.name).clone();
-                let new_ident = mangler.mangle(&resource, &item.name);
-                replace.insert(old_ident, new_ident);
-            }
-        }
+    replace_idents(wgsl, &replace);
+}
 
-        // run replacements
-        fn rec(ty: &mut TypeExpression, replace: &HashMap<String, String>) {
-            if let Some(new_name) = replace.get(&ty.name) {
-                ty.name = new_name.clone();
-            }
-            for ty in ty.uses_mut() {
-                rec(ty, replace);
-            }
+fn replace_idents(wgsl: &mut TranslationUnit, replace: &HashMap<String, String>) {
+    fn rec(ty: &mut TypeExpression, replace: &HashMap<String, String>) {
+        if let Some(new_name) = replace.get(&ty.name) {
+            ty.name = new_name.clone();
         }
-        for ty in self.uses_mut() {
-            rec(ty, &replace);
+        for ty in ty.uses_mut() {
+            rec(ty, replace);
         }
+    }
+    for ty in wgsl.uses_mut() {
+        rec(ty, &replace);
     }
 }
 
 impl Module {
     pub fn mangle(&mut self, mangler: &impl Mangler) {
-        // TODO: should we mangle items in main?
-        // self.source.mangle(resource, mangler);
+        mangle_imports(&mut self.source, &self.resource, mangler);
         for (resource, source) in &mut self.resolutions {
-            source.mangle(resource, mangler);
+            mangle_decls(source, resource, mangler);
+            mangle_imports(source, resource, mangler);
         }
     }
 }

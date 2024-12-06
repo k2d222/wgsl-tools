@@ -275,14 +275,14 @@ fn run_compile(args: &CompileArgs) -> Result<(TranslationUnit, Option<BasicSourc
         use_imports: !args.no_imports,
         use_condcomp: !args.no_cond_comp,
         use_generics: !args.no_generics,
-        strip: !args.no_strip,
+        use_stripping: !args.no_strip,
         entry_points: args.entry_points.clone(),
         features,
     };
 
     if !args.no_sourcemap {
         let (wgsl, sourcemap) =
-            wesl::compile_with_sourcemap(&entrypoint, &resolver, &mangler, &compile_options);
+            wesl::compile_sourcemap(&entrypoint, &resolver, &mangler, &compile_options);
         Ok((wgsl?, Some(sourcemap)))
     } else {
         let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)?;

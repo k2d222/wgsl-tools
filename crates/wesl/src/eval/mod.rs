@@ -116,12 +116,12 @@ pub enum ResourceKind {
 }
 
 pub struct Context<'s> {
-    source: &'s TranslationUnit,
-    scope: Scope,
-    resources: HashMap<(u32, u32), RefInstance>,
-    overrides: HashMap<String, Instance>,
-    kind: ScopeKind,
-    stage: EvalStage,
+    pub(crate) source: &'s TranslationUnit,
+    pub(crate) scope: Scope,
+    pub(crate) resources: HashMap<(u32, u32), RefInstance>,
+    pub(crate) overrides: HashMap<String, Instance>,
+    pub(crate) kind: ScopeKind,
+    pub(crate) stage: EvalStage,
     err_decl: Option<String>,
     err_expr: Option<Span>,
 }
