@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use wgsl_parse::syntax::{self, TranslationUnit};
+use wgsl_parse::syntax;
 
 use crate::{error::Diagnostic, ImportError, ResolveError, Resolver, Resource};
 
@@ -134,14 +134,4 @@ pub(crate) fn imports_to_resources(imports: &[syntax::Import], resource: &Resour
     }
 
     res
-}
-
-pub fn resolve(
-    source: TranslationUnit,
-    resource: Resource,
-    resolver: &impl Resolver,
-) -> Result<Module, ImportError> {
-    let mut module = Module::new(source, resource);
-    module.resolve(resolver)?;
-    Ok(module)
 }

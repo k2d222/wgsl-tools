@@ -5,7 +5,7 @@ mod mangle;
 mod module;
 
 use itertools::Itertools;
-pub use module::{resolve, Module};
+pub use module::Module;
 
 use crate::ResolveError;
 

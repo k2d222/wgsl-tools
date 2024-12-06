@@ -1,6 +1,8 @@
-use crate::{
-    attributes::query_attributes, sourcemap::NoSourceMap, syntax_util::IterUses, Error, SourceMap,
-};
+use crate::{sourcemap::NoSourceMap, syntax_util::IterUses, Error, SourceMap};
+
+#[cfg(feature = "attributes")]
+use crate::attributes::query_attributes;
+
 use wgsl_parse::syntax::*;
 
 /// Like [`lower`], but provides better error diagnostics.
@@ -8,21 +10,21 @@ pub fn lower_sourcemap(
     wesl: &mut TranslationUnit,
     _sourcemap: &impl SourceMap,
 ) -> Result<(), Error> {
-    if cfg!(feature = "imports") {
-        wesl.imports.clear();
-    }
-    if cfg!(feature = "attributes") {
-        for attrs in query_attributes(wesl) {
-            attrs.retain(|attr| match attr {
-                Attribute::Custom(CustomAttribute { name, .. }) if name == "generic" => false,
-                _ => true,
-            })
-        }
+    #[cfg(feature = "imports")]
+    wesl.imports.clear();
+
+    #[cfg(feature = "attributes")]
+    for attrs in query_attributes(wesl) {
+        attrs.retain(|attr| match attr {
+            Attribute::Custom(CustomAttribute { name, .. }) if name == "generic" => false,
+            _ => true,
+        })
     }
 
     remove_type_aliases(wesl);
 
-    if cfg!(feature = "eval") {
+    #[cfg(feature = "eval")]
+    {
         // TODO
         // let mut ctx = Context::new(wesl);
         // let mut new_wesl = wesl.clone();

@@ -357,6 +357,7 @@ impl IterUses for Vec<StatementNode> {
     }
 }
 
+#[allow(unused)]
 pub fn decl_name(decl: &GlobalDeclaration) -> Option<&str> {
     match decl {
         wgsl_parse::syntax::GlobalDeclaration::Void => None,
@@ -368,6 +369,7 @@ pub fn decl_name(decl: &GlobalDeclaration) -> Option<&str> {
     }
 }
 
+#[allow(unused)]
 pub fn decl_name_mut(decl: &mut GlobalDeclaration) -> Option<&mut String> {
     match decl {
         wgsl_parse::syntax::GlobalDeclaration::Void => None,
@@ -379,6 +381,7 @@ pub fn decl_name_mut(decl: &mut GlobalDeclaration) -> Option<&mut String> {
     }
 }
 
+#[allow(unused)]
 pub fn rename_decl(wesl: &mut TranslationUnit, old_name: &str, new_name: &str) {
     fn rec(ty: &mut TypeExpression, old_name: &str, new_name: &str) {
         if &ty.name == old_name {
@@ -402,6 +405,7 @@ pub fn rename_decl(wesl: &mut TranslationUnit, old_name: &str, new_name: &str) {
     }
 }
 
+#[allow(unused)]
 pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &str> {
     wesl.global_declarations
         .iter()

@@ -144,18 +144,21 @@ fn query_impl(input: QueryInput, mutable: bool) -> proc_macro::TokenStream {
                             let mut iter = content.components.into_iter();
                             let first = match iter.next() {
                                 Some(QueryComponent::Member(member)) => {
-                                    quote! { #(#attrs)* std::iter::once(#ref_ x.#member) }
+                                    quote! { std::iter::once(#ref_ x.#member) }
                                 }
                                 _ => return None,
                             };
                             let rest = iter.map(|comp| quote_component(comp, ref_.clone()));
-                            Some(quote! { #first #(.#rest)* })
+                            Some(quote! {
+                                #(#attrs)*
+                                let iter = std::iter::Iterator::chain(iter, #first #(.#rest)*);
+                            })
                         });
-                    quote! {
-                        flat_map(|x| {
-                            itertools::chain!( #(#cases),* )
-                        })
-                    }
+                    quote! { flat_map(|x| {
+                        let iter = std::iter::empty();
+                        #(#cases)*
+                        iter
+                    }) }
                 }
             },
             QueryComponent::Iter => {

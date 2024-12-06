@@ -1,7 +1,7 @@
 use super::{
     ArrayInstance, LiteralInstance, MatInstance, StructInstance, SyntaxUtil, Ty, Type, VecInstance,
 };
-use crate::{Context, EvalError, Instance};
+use crate::eval::{Context, EvalError, Instance};
 use wgsl_parse::{span::Spanned, syntax::*};
 
 type E = EvalError;

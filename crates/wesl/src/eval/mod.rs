@@ -29,20 +29,8 @@ use std::collections::HashMap;
 use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
-pub struct Variable {
-    reference: Instance,
-    stage: EvalStage,
-}
-
-impl Variable {
-    pub fn new(reference: Instance, stage: EvalStage) -> Self {
-        Self { reference, stage }
-    }
-}
-
-#[derive(Clone, Debug)]
 pub struct Scope {
-    stack: Vec<HashMap<String, Variable>>,
+    stack: Vec<HashMap<String, Instance>>,
 }
 
 impl Scope {
@@ -60,16 +48,15 @@ impl Scope {
         self.stack.pop().expect("failed to pop scope");
     }
 
-    pub fn add_val(&mut self, name: String, value: Instance, stage: EvalStage) {
-        let v = Variable::new(value, stage);
-        if self.stack.last_mut().unwrap().insert(name, v).is_some() {
+    pub fn add_val(&mut self, name: String, value: Instance) {
+        if self.stack.last_mut().unwrap().insert(name, value).is_some() {
             panic!("duplicate variable insertion")
         }
     }
 
-    pub fn add_var(&mut self, name: String, inst: RefInstance, stage: EvalStage) {
-        let v = Variable::new(inst.into(), stage);
-        if self.stack.last_mut().unwrap().insert(name, v).is_some() {
+    pub fn add_var(&mut self, name: String, inst: RefInstance) {
+        let value = Instance::from(inst);
+        if self.stack.last_mut().unwrap().insert(name, value).is_some() {
             panic!("duplicate variable insertion")
         }
     }
@@ -78,7 +65,7 @@ impl Scope {
         self.stack
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).map(|v| v.reference.clone()))
+            .find_map(|scope| scope.get(name).cloned())
     }
 
     pub fn has(&self, name: &str) -> bool {

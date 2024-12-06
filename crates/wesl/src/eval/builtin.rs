@@ -8,7 +8,7 @@ use wgsl_parse::syntax::{
     LiteralExpression, TemplateArg, TranslationUnit, TypeExpression,
 };
 
-use crate::{Context, Eval};
+use crate::eval::{Context, Eval};
 
 use super::{
     conv::{convert_all, Convert},

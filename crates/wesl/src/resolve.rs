@@ -1,6 +1,6 @@
 use crate::{Diagnostic, Error};
 
-use wgsl_parse::{error::ParseError, syntax::TranslationUnit};
+use wgsl_parse::syntax::TranslationUnit;
 
 use std::{
     borrow::Cow,

@@ -5,7 +5,7 @@ use wgsl_parse::syntax::TranslationUnit;
 use crate::syntax_util::{decl_name, IterUses};
 
 /// removes unused declarations.
-pub fn strip(wgsl: &mut TranslationUnit, keep: &[String]) {
+pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
     let mut keep: HashSet<String> = HashSet::from_iter(keep.iter().cloned());
     let mut next_keep: HashSet<String> = HashSet::new();
 

@@ -520,7 +520,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::Conversion(inst.ty(), ty))?;
                 }
 
-                ctx.scope.add_val(self.name.clone(), inst, EvalStage::Const);
+                ctx.scope.add_val(self.name.clone(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Function) => Err(E::OverrideInFn),
@@ -540,7 +540,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
                 };
 
-                ctx.scope.add_val(self.name.clone(), inst, ctx.stage);
+                ctx.scope.add_val(self.name.clone(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Var(space), ScopeKind::Function) => {
@@ -570,7 +570,6 @@ impl Exec for Declaration {
                 ctx.scope.add_var(
                     self.name.clone(),
                     RefInstance::from_instance(inst, AddressSpace::Function, AccessMode::ReadWrite),
-                    ctx.stage,
                 );
                 Ok(Flow::Next)
             }
@@ -596,7 +595,7 @@ impl Exec for Declaration {
                             .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
                     };
 
-                    ctx.scope.add_val(self.name.clone(), inst, ctx.stage);
+                    ctx.scope.add_val(self.name.clone(), inst);
                     Ok(Flow::Next)
                 }
             }
@@ -645,7 +644,6 @@ impl Exec for Declaration {
                                     AddressSpace::Private,
                                     AccessMode::ReadWrite,
                                 ),
-                                ctx.stage,
                             );
                         }
                         AddressSpace::Workgroup => {
@@ -672,8 +670,7 @@ impl Exec for Declaration {
                             if inst.access != AccessMode::Read {
                                 return Err(E::AccessMode(AccessMode::Read, inst.access));
                             }
-                            ctx.scope
-                                .add_var(self.name.clone(), inst.clone(), ctx.stage)
+                            ctx.scope.add_var(self.name.clone(), inst.clone())
                         }
                         AddressSpace::Storage(access_mode) => {
                             let Some(ty) = &self.ty else {
@@ -694,8 +691,7 @@ impl Exec for Declaration {
                             if inst.access != access_mode {
                                 return Err(E::AccessMode(access_mode, inst.access));
                             }
-                            ctx.scope
-                                .add_var(self.name.clone(), inst.clone(), ctx.stage)
+                            ctx.scope.add_var(self.name.clone(), inst.clone())
                         }
                         AddressSpace::Handle => todo!("handle address space"),
                     }

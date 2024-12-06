@@ -21,17 +21,17 @@ mod syntax_util;
 pub use condcomp::CondCompError;
 
 #[cfg(feature = "imports")]
-pub use import::{resolve, ImportError, Module};
+pub use import::ImportError;
 
 #[cfg(feature = "eval")]
-use eval::{Context, Eval, EvalError, Exec, Instance, RefInstance};
+pub use eval::{Eval, EvalError, Exec};
 
 #[cfg(feature = "generics")]
 pub use generics::GenericsError;
 
 pub use mangle::{
-    CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, MANGLER_ESCAPE,
-    MANGLER_HASH, MANGLER_NONE,
+    CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, UnicodeMangler,
+    MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE, MANGLER_UNICODE,
 };
 
 pub use resolve::{
@@ -43,7 +43,7 @@ pub use error::{Diagnostic, Error};
 
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 
-pub use strip::strip;
+pub use strip::strip_except;
 
 pub use wgsl_parse::syntax;
 
@@ -84,7 +84,9 @@ fn compile_impl(
     main_names: &mut Vec<String>,
 ) -> Result<TranslationUnit, Error> {
     let resolver = Box::new(resolver);
-    let resolver: Box<dyn Resolver> = if cfg!(feature = "condcomp") && options.use_condcomp {
+
+    #[cfg(feature = "condcomp")]
+    let resolver: Box<dyn Resolver> = if options.use_condcomp {
         Box::new(PreprocessResolver::new(resolver, |wesl| {
             condcomp::run(wesl, &options.features)?;
             Ok(())
@@ -107,8 +109,9 @@ fn compile_impl(
         .map(|name| name.to_string())
         .collect_vec();
 
-    let mut wesl = if cfg!(feature = "imports") && options.use_imports {
-        let mut module = Module::new(wesl, entrypoint.clone());
+    #[cfg(feature = "imports")]
+    let wesl = if options.use_imports {
+        let mut module = import::Module::new(wesl, entrypoint.clone());
         module.resolve(&resolver)?;
         module.mangle(mangler);
         let wesl = module.assemble();
@@ -116,31 +119,18 @@ fn compile_impl(
     } else {
         wesl
     };
+    let mut wesl = wesl;
 
-    if cfg!(feature = "generics") && options.use_generics {
+    #[cfg(feature = "generics")]
+    if options.use_generics {
         generics::generate_variants(&mut wesl)?;
         generics::replace_calls(&mut wesl)?;
     };
 
     if options.strip {
         let entry_names = options.entry_points.as_ref().unwrap_or(main_names);
-        // TODO: should we mangle names in main?
-        // let mangled_names = entry_names
-        //     .iter()
-        //     .map(|name| mangler.mangle(entrypoint, name))
-        //     .collect_vec();
-        // strip(&mut wesl, &mangled_names);
-        strip(&mut wesl, entry_names);
+        strip_except(&mut wesl, entry_names);
     }
-
-    // TODO: should we mangle names in main?
-    // for entry_name in entry_names {
-    //     rename_decl(
-    //         &mut wesl,
-    //         &mangler.mangle(entrypoint, &entry_name),
-    //         entry_name,
-    //     );
-    // }
 
     Ok(wesl)
 }
@@ -189,8 +179,8 @@ pub fn compile_with_sourcemap(
 pub fn eval_const<'s>(
     expr: &syntax::Expression,
     wgsl: &'s TranslationUnit,
-) -> (Result<Instance, EvalError>, Context<'s>) {
-    let mut ctx = Context::new(wgsl);
+) -> (Result<eval::Instance, EvalError>, eval::Context<'s>) {
+    let mut ctx = eval::Context::new(wgsl);
     let res = wgsl.exec(&mut ctx).and_then(|_| expr.eval(&mut ctx));
     (res, ctx)
 }
@@ -199,10 +189,10 @@ pub fn eval_const<'s>(
 pub fn eval_runtime<'s>(
     expr: &syntax::Expression,
     wgsl: &'s TranslationUnit,
-    bindings: HashMap<(u32, u32), RefInstance>,
-    overrides: HashMap<String, Instance>,
-) -> (Result<Instance, EvalError>, Context<'s>) {
-    let mut ctx = Context::new(wgsl);
+    bindings: HashMap<(u32, u32), eval::RefInstance>,
+    overrides: HashMap<String, eval::Instance>,
+) -> (Result<eval::Instance, EvalError>, eval::Context<'s>) {
+    let mut ctx = eval::Context::new(wgsl);
     ctx.add_bindings(bindings);
     ctx.add_overrides(overrides);
     ctx.set_stage(eval::EvalStage::Exec);

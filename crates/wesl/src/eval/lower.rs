@@ -1,4 +1,4 @@
-use crate::{eval::exec::with_stage, Context, Eval, EvalError, Exec};
+use crate::eval::{exec::with_stage, Context, Eval, EvalError, Exec};
 use wgsl_parse::{span::Spanned, syntax::*};
 
 use super::{to_expr::ToExpr, EvalStage, EXPR_TRUE};

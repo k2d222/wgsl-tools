@@ -2,7 +2,14 @@ use std::fmt::Display;
 
 use wgsl_parse::{error::ParseError, span::Span};
 
-use crate::{CondCompError, GenericsError, ImportError, ResolveError, Resource, SourceMap};
+use crate::{ResolveError, Resource, SourceMap};
+
+#[cfg(feature = "condcomp")]
+use crate::CondCompError;
+#[cfg(feature = "generics")]
+use crate::GenericsError;
+#[cfg(feature = "imports")]
+use crate::ImportError;
 
 #[cfg(feature = "eval")]
 use crate::eval::{Context, EvalError};
@@ -61,6 +68,7 @@ impl From<ResolveError> for Diagnostic<Error> {
     }
 }
 
+#[cfg(feature = "imports")]
 impl From<ImportError> for Diagnostic<Error> {
     fn from(error: ImportError) -> Self {
         match error {
@@ -70,18 +78,21 @@ impl From<ImportError> for Diagnostic<Error> {
     }
 }
 
+#[cfg(feature = "condcomp")]
 impl From<CondCompError> for Diagnostic<Error> {
     fn from(error: CondCompError) -> Self {
         Self::new(error.into())
     }
 }
 
+#[cfg(feature = "generics")]
 impl From<GenericsError> for Diagnostic<Error> {
     fn from(error: GenericsError) -> Self {
         Self::new(error.into())
     }
 }
 
+#[cfg(feature = "eval")]
 impl From<EvalError> for Diagnostic<Error> {
     fn from(error: EvalError) -> Self {
         Self::new(error.into())
@@ -93,9 +104,13 @@ impl From<Error> for Diagnostic<Error> {
         match error {
             Error::ParseError(e) => e.into(),
             Error::ResolveError(e) => e.into(),
+            #[cfg(feature = "imports")]
             Error::ImportError(e) => e.into(),
+            #[cfg(feature = "condcomp")]
             Error::CondCompError(e) => e.into(),
+            #[cfg(feature = "generics")]
             Error::GenericsError(e) => e.into(),
+            #[cfg(feature = "eval")]
             Error::EvalError(e) => e.into(),
             Error::Error(e) => return e,
         }
