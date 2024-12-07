@@ -46,7 +46,7 @@ impl Display for Resource {
     }
 }
 
-/// a Resolver is responsible for turning a import path into a unique resource identifer ([`Resource`]),
+/// A Resolver is responsible for turning a import path into a unique resource identifer ([`Resource`]),
 /// and providing the source file.
 ///
 /// `Resolver` implementations must respect the following constraints:
@@ -111,8 +111,6 @@ impl<T: Resolver> Resolver for &T {
 #[derive(Default, Clone, Debug)]
 pub struct NoResolver;
 
-pub const RESOLVER_NONE: NoResolver = NoResolver;
-
 impl Resolver for NoResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         Err(ResolveError::FileNotFound(format!(
@@ -121,6 +119,7 @@ impl Resolver for NoResolver {
     }
 }
 
+/// A resolver that remembers to avoid multiple fetches.
 pub struct CacheResolver<'a> {
     resolver: Box<dyn Resolver + 'a>,
     cache: RefCell<HashMap<Resource, String>>,
@@ -151,9 +150,13 @@ impl<'a> Resolver for CacheResolver<'a> {
     }
 }
 
+/// A resolver that looks for files in the filesystem.
+///
+/// This is the default resolver.
 #[derive(Default)]
 pub struct FileResolver {
     base: PathBuf,
+    extension: &'static str,
 }
 
 impl FileResolver {
@@ -161,7 +164,13 @@ impl FileResolver {
     pub fn new(base: impl AsRef<Path>) -> Self {
         Self {
             base: base.as_ref().to_path_buf(),
+            extension: "wesl",
         }
+    }
+
+    /// Look for files that ends with a different extension. Default: "wesl".
+    pub fn set_extension(&mut self, extension: &'static str) {
+        self.extension = extension;
     }
 }
 
@@ -169,7 +178,7 @@ impl Resolver for FileResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let mut path = self.base.to_path_buf();
         path.extend(resource.path());
-        path.set_extension("wgsl");
+        path.set_extension(self.extension);
 
         let source = fs::read_to_string(&path).map_err(|_| {
             ResolveError::FileNotFound(format!("`{}` (physical file)", path.display()))
@@ -179,36 +188,40 @@ impl Resolver for FileResolver {
     }
 }
 
+/// A resolver that resolves WESL modules added with [`VirtualResolver::add_module`].
+///
+/// This can be used in platforms that lack a filesystem (e.g. WASM) or for
+/// runtime-generated files.
 #[derive(Default)]
-pub struct VirtualFileResolver {
+pub struct VirtualResolver {
     files: HashMap<PathBuf, String>,
 }
 
-impl VirtualFileResolver {
-    /// `base` is the root directory to which absolute paths refer to.
+impl VirtualResolver {
     pub fn new() -> Self {
         Self {
             files: HashMap::new(),
         }
     }
 
-    pub fn add_file(&mut self, path: impl AsRef<Path>, file: String) {
+    /// resolves imports in `path` with the given WESL string.
+    pub fn add_module(&mut self, path: impl AsRef<Path>, file: String) {
         self.files.insert(path.as_ref().to_path_buf(), file);
     }
 
-    pub fn get_file(&self, resource: &Resource) -> Result<&str, Error> {
-        let path = resource.path().with_extension("wgsl");
-        let source = self.files.get(&path).ok_or_else(|| {
-            ResolveError::FileNotFound(format!("`{}` (virtual file)", path.display()))
+    pub fn get_module(&self, resource: &Resource) -> Result<&str, Error> {
+        let path = resource.path();
+        let source = self.files.get(path).ok_or_else(|| {
+            ResolveError::FileNotFound(format!("`{}` (virtual module)", path.display()))
         })?;
         Ok(source)
     }
 }
 
-impl Resolver for VirtualFileResolver {
+impl Resolver for VirtualResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let source = self
-            .get_file(resource)
+            .get_module(resource)
             .map_err(|e| Diagnostic::from(e).with_file(resource.clone()))?;
         Ok(source.into())
     }
@@ -218,12 +231,19 @@ impl Resolver for VirtualFileResolver {
 pub trait ResolveFn: Fn(&mut TranslationUnit) -> Result<(), Error> {}
 impl<T: Fn(&mut TranslationUnit) -> Result<(), Error>> ResolveFn for T {}
 
-pub struct PreprocessResolver<'a, F: ResolveFn> {
+/// A WESL module preprocessor.
+///
+/// The preprocess function will be called each time the WESL compiler tries accesses a
+/// module. The preprocessor can modify the module syntax tree at will.
+///
+/// The preprocess function *must* always return the same syntax tree for a given module
+/// path.
+pub struct Preprocessor<'a, F: ResolveFn> {
     pub resolver: Box<dyn Resolver + 'a>,
     pub preprocess: F,
 }
 
-impl<'a, F: ResolveFn> PreprocessResolver<'a, F> {
+impl<'a, F: ResolveFn> Preprocessor<'a, F> {
     pub fn new(resolver: Box<dyn Resolver + 'a>, preprocess: F) -> Self {
         Self {
             resolver,
@@ -232,7 +252,7 @@ impl<'a, F: ResolveFn> PreprocessResolver<'a, F> {
     }
 }
 
-impl<'a, F: ResolveFn> Resolver for PreprocessResolver<'a, F> {
+impl<'a, F: ResolveFn> Resolver for Preprocessor<'a, F> {
     fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, ResolveError> {
         let res = self.resolver.resolve_source(resource)?;
         Ok(res)
@@ -256,13 +276,17 @@ impl<'a, F: ResolveFn> Resolver for PreprocessResolver<'a, F> {
     }
 }
 
-pub struct RouterResolver {
+/// A router is a resolver that can dispatch imports to several sub-resolvers based on the
+/// import path prefix.
+///
+/// Add sub-resolvers with [`Router::mount_resolver`].
+pub struct Router {
     mount_points: Vec<(PathBuf, Box<dyn Resolver>)>,
     fallback: Option<(PathBuf, Box<dyn Resolver>)>,
 }
 
 /// Dispatches resolution of a resource to sub-resolvers.
-impl RouterResolver {
+impl Router {
     pub fn new() -> Self {
         Self {
             mount_points: Vec::new(),
@@ -270,6 +294,8 @@ impl RouterResolver {
         }
     }
 
+    /// Mount a resolver at a given path prefix. All imports that start with this prefix
+    /// will be dispatched to that resolver.
     pub fn mount_resolver(&mut self, path: impl AsRef<Path>, resolver: impl Resolver + 'static) {
         let path = path.as_ref().to_path_buf();
         let resolver: Box<dyn Resolver> = Box::new(resolver);
@@ -280,12 +306,13 @@ impl RouterResolver {
         }
     }
 
+    /// Mount a fallback resolver that is used when no other prefix match.
     pub fn mount_fallback_resolver(&mut self, resolver: impl Resolver + 'static) {
         self.mount_resolver(PathBuf::new(), resolver);
     }
 }
 
-impl Resolver for RouterResolver {
+impl Resolver for Router {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let (mount_path, resolver) = self
             .mount_points

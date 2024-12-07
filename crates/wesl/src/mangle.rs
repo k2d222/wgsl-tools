@@ -57,11 +57,9 @@ impl<T: Mangler> Mangler for &T {
 /// A mangler for the filesystem resources hashes the resource identifier.
 /// e.g. `foo/bar/baz.wgsl item => item_32938483840293402930392`
 #[derive(Default, Clone, Debug)]
-pub struct FileManglerHash;
+pub struct HashMangler;
 
-pub const MANGLER_HASH: FileManglerHash = FileManglerHash;
-
-impl Mangler for FileManglerHash {
+impl Mangler for HashMangler {
     fn mangle(&self, resource: &Resource, item: &str) -> String {
         let mut hasher = DefaultHasher::new();
         resource.hash(&mut hasher);
@@ -76,11 +74,9 @@ impl Mangler for FileManglerHash {
 ///
 /// Warning: the file path segments must be valid wgsl identifiers.
 #[derive(Default, Clone, Debug)]
-pub struct FileManglerEscape;
+pub struct EscapeMangler;
 
-pub const MANGLER_ESCAPE: FileManglerEscape = FileManglerEscape;
-
-impl Mangler for FileManglerEscape {
+impl Mangler for EscapeMangler {
     fn mangle(&self, resource: &Resource, item: &str) -> String {
         let path = resource.path().with_extension("");
         let path = path
@@ -121,8 +117,6 @@ impl Mangler for FileManglerEscape {
 #[derive(Default, Clone, Debug)]
 pub struct NoMangler;
 
-pub const MANGLER_NONE: NoMangler = NoMangler;
-
 impl Mangler for NoMangler {
     fn mangle(&self, _resource: &Resource, item: &str) -> String {
         item.to_string()
@@ -133,12 +127,12 @@ impl Mangler for NoMangler {
 }
 
 /// A mangler that remembers and can unmangle.
-pub struct CachedMangler<'a, T: Mangler> {
+pub struct CacheMangler<'a, T: Mangler> {
     cache: RefCell<HashMap<String, (Resource, String)>>,
     mangler: &'a T,
 }
 
-impl<'a, T: Mangler> CachedMangler<'a, T> {
+impl<'a, T: Mangler> CacheMangler<'a, T> {
     pub fn new(mangler: &'a T) -> Self {
         Self {
             cache: Default::default(),
@@ -147,7 +141,7 @@ impl<'a, T: Mangler> CachedMangler<'a, T> {
     }
 }
 
-impl<'a, T: Mangler> Mangler for CachedMangler<'a, T> {
+impl<'a, T: Mangler> Mangler for CacheMangler<'a, T> {
     fn mangle(&self, resource: &Resource, item: &str) -> String {
         let res = self.mangler.mangle(resource, item);
         let mut cache = self.cache.borrow_mut();
@@ -175,8 +169,6 @@ impl<'a, T: Mangler> Mangler for CachedMangler<'a, T> {
 /// if the TypeExpression is not normalized (i.e. contains only identifiers and literals)
 #[derive(Default, Clone, Debug)]
 pub struct UnicodeMangler;
-
-pub const MANGLER_UNICODE: UnicodeMangler = UnicodeMangler;
 
 impl UnicodeMangler {
     const LT: char = 'ᐸ'; // U+1438

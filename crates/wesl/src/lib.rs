@@ -38,7 +38,7 @@
 //! # use wesl::{Wesl, FileResolver};
 //! fn main() {
 //!     Wesl::new_spec_compliant()
-//!         .set_custom_resolver(FileResolver::new("src/shaders"))
+//!         .set_resolver(FileResolver::new("src/shaders"))
 //!         .build("main.wesl");
 //! }
 //! ```
@@ -68,14 +68,14 @@
 //!
 //! Custom resolver: customize how import paths are translated to wesl modules.
 //!```rust
-//! # use wesl::{FileResolver, RouterResolver, VirtualFileResolver, Wesl};
+//! # use wesl::{FileResolver, Router, VirtualResolver, Wesl};
 //! // in this example, `import runtime::constants::PI` is in a custom module mounted at runtime.
-//! let mut resolver = VirtualFileResolver::new();
+//! let mut resolver = VirtualResolver::new();
 //! resolver.add_file("constants", "const PI = 3.1415; const TAU = PI * 2.0;");
-//! let mut router = RouterResolver::new();
+//! let mut router = Router::new();
 //! router.mount_fallback_resolver(FileResolver::new("src/shaders"));
 //! router.mount_resolver("runtime", resolver);
-//! let compiler = Wesl::new_spec_compliant().set_custom_resolver(router);
+//! let compiler = Wesl::new_spec_compliant().set_resolver(router);
 //! ```
 //!
 //! ## Features
@@ -122,14 +122,12 @@ pub use eval::{Eval, EvalError, Exec};
 #[cfg(feature = "generics")]
 pub use generics::GenericsError;
 
-pub use mangle::{
-    CachedMangler, FileManglerEscape, FileManglerHash, Mangler, NoMangler, UnicodeMangler,
-    MANGLER_ESCAPE, MANGLER_HASH, MANGLER_NONE, MANGLER_UNICODE,
-};
+pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
 
+use resolve::NoResolver;
 pub use resolve::{
-    CacheResolver, FileResolver, PreprocessResolver, ResolveError, Resolver, Resource,
-    RouterResolver, VirtualFileResolver, RESOLVER_NONE,
+    CacheResolver, FileResolver, Preprocessor, ResolveError, Resolver, Resource, Router,
+    VirtualResolver,
 };
 
 pub use error::{Diagnostic, Error};
@@ -161,7 +159,7 @@ impl Default for CompileOptions {
         Self {
             use_imports: true,
             use_condcomp: true,
-            use_generics: true,
+            use_generics: false,
             use_stripping: true,
             entry_points: Default::default(),
             features: Default::default(),
@@ -185,10 +183,10 @@ pub enum ManglerKind {
 
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
     match kind {
-        ManglerKind::Escape => Box::new(MANGLER_ESCAPE),
-        ManglerKind::Hash => Box::new(MANGLER_HASH),
-        ManglerKind::Unicode => Box::new(MANGLER_UNICODE),
-        ManglerKind::None => Box::new(MANGLER_NONE),
+        ManglerKind::Escape => Box::new(EscapeMangler),
+        ManglerKind::Hash => Box::new(HashMangler),
+        ManglerKind::Unicode => Box::new(UnicodeMangler),
+        ManglerKind::None => Box::new(NoMangler),
     }
 }
 
@@ -243,7 +241,7 @@ impl Wesl {
             },
             use_sourcemap: true,
             resolver: Box::new(FileResolver::new("")),
-            mangler: Box::new(MANGLER_ESCAPE),
+            mangler: Box::new(EscapeMangler),
         }
     }
 
@@ -270,14 +268,14 @@ impl Wesl {
             },
             use_sourcemap: true,
             resolver: Box::new(FileResolver::new("")),
-            mangler: Box::new(MANGLER_ESCAPE),
+            mangler: Box::new(EscapeMangler),
         }
     }
 
     /// Get WESL compiler with all extensions disabled.
     ///
     /// You *must* set a [`Mangler`] and a [`Resolver`] manually to use this compiler, see
-    /// [`Wesl::set_custom_mangler`] and [`Wesl::set_custom_resolver`].
+    /// [`Wesl::set_mangler`] and [`Wesl::set_resolver`].
     ///
     /// # WESL Reference
     /// This Wesl compiler is *not* spec-compliant because it does not enable *mandatory*
@@ -293,14 +291,19 @@ impl Wesl {
                 features: Default::default(),
             },
             use_sourcemap: false,
-            resolver: Box::new(RESOLVER_NONE),
-            mangler: Box::new(MANGLER_NONE),
+            resolver: Box::new(NoResolver),
+            mangler: Box::new(EscapeMangler),
         }
+    }
+
+    pub fn with_options(mut self, options: CompileOptions) -> Self {
+        self.options = options;
+        self
     }
 
     /// Set the [`Mangler`].
     ///
-    /// The default mangler is a [`FileManglerEscape`].
+    /// The default mangler is [`EscapeMangler`].
     ///
     /// # WESL Reference
     /// Custom manglers *must* conform to the constraints described in [`Mangler`].
@@ -312,7 +315,7 @@ impl Wesl {
 
     /// Set a custom [`Mangler`].
     ///
-    /// The default mangler is a [`FileManglerEscape`].
+    /// The default mangler is [`EscapeMangler`].
     ///
     /// # WESL Reference
     /// All [builtin manglers](ManglerKind) are spec-compliant, except [`NoMangler`] ([`ManglerKind::None`]).
@@ -327,10 +330,10 @@ impl Wesl {
     /// The default resolver is a [`FileResolver`] rooted in the current directory.
     ///
     /// # WESL Reference
-    /// Both [`FileResolver`] and [`VirtualFileResolver`] are spec-compliant.
+    /// Both [`FileResolver`] and [`VirtualResolver`] are spec-compliant.
     /// Custom resolvers *must* conform to the constraints described in [`Resolver`].
     /// Spec: not yet available.
-    pub fn set_custom_resolver(mut self, resolver: impl Resolver + 'static) -> Self {
+    pub fn set_resolver(mut self, resolver: impl Resolver + 'static) -> Self {
         self.resolver = Box::new(resolver);
         self
     }
@@ -678,7 +681,7 @@ fn compile_impl(
 
     #[cfg(feature = "condcomp")]
     let resolver: Box<dyn Resolver> = if options.use_condcomp {
-        Box::new(PreprocessResolver::new(resolver, |wesl| {
+        Box::new(Preprocessor::new(resolver, |wesl| {
             condcomp::run(wesl, &options.features)?;
             Ok(())
         }))

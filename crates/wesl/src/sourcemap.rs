@@ -2,14 +2,20 @@ use std::{cell::RefCell, collections::HashMap};
 
 use crate::{Mangler, ResolveError, Resolver, Resource};
 
+/// A SourceMap is a lookup from compiled WGSL to source WESL. It translates a mangled
+/// name into a pair (module path, declaration name).
 pub trait SourceMap {
+    /// Get the module path and declaration name from a mangled name.
     fn get_decl(&self, decl: &str) -> Option<(&Resource, &str)>;
+    /// Get a module contents.
     fn get_source(&self, resource: &Resource) -> Option<&str>;
+    /// Get the default module contents.
     fn get_default_source(&self) -> Option<&str> {
         None
     }
 }
 
+/// Basic implementation of [`SourceMap`].
 #[derive(Clone, Debug, Default)]
 pub struct BasicSourceMap {
     mappings: HashMap<String, (Resource, String)>,
@@ -32,7 +38,59 @@ impl BasicSourceMap {
     }
 }
 
-/// generate sourcemaps by keeping track of name mangling and file resolutions
+impl<'a> Resolver for SourceMapper<'a> {
+    fn resolve_source<'b>(
+        &'b self,
+        resource: &Resource,
+    ) -> Result<std::borrow::Cow<'b, str>, ResolveError> {
+        let res = self.resolver.resolve_source(resource)?;
+        let mut sourcemap = self.sourcemap.borrow_mut();
+        sourcemap.add_source(resource.clone(), res.clone().into());
+        Ok(res)
+    }
+}
+
+impl SourceMap for BasicSourceMap {
+    fn get_decl(&self, decl: &str) -> Option<(&Resource, &str)> {
+        let (resource, decl) = self.mappings.get(decl)?;
+        Some((resource, decl))
+    }
+
+    fn get_source(&self, resource: &Resource) -> Option<&str> {
+        self.sources.get(resource).map(|source| source.as_str())
+    }
+    fn get_default_source(&self) -> Option<&str> {
+        self.default_source.as_ref().map(|source| source.as_str())
+    }
+}
+
+impl<T: SourceMap> SourceMap for Option<T> {
+    fn get_decl(&self, decl: &str) -> Option<(&Resource, &str)> {
+        self.as_ref().and_then(|map| map.get_decl(decl))
+    }
+    fn get_source(&self, resource: &Resource) -> Option<&str> {
+        self.as_ref().and_then(|map| map.get_source(resource))
+    }
+    fn get_default_source(&self) -> Option<&str> {
+        self.as_ref().and_then(|map| map.get_default_source())
+    }
+}
+
+pub struct NoSourceMap;
+
+impl SourceMap for NoSourceMap {
+    fn get_decl(&self, _decl: &str) -> Option<(&Resource, &str)> {
+        None
+    }
+    fn get_source(&self, _resource: &Resource) -> Option<&str> {
+        None
+    }
+    fn get_default_source(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// Generate a SourceMap by keeping track of name mangling and file resolutions.
 pub struct SourceMapper<'a> {
     pub resolver: Box<dyn Resolver + 'a>,
     pub mangler: Box<dyn Mangler + 'a>,
@@ -52,49 +110,11 @@ impl<'a> SourceMapper<'a> {
     }
 }
 
-impl SourceMap for BasicSourceMap {
-    fn get_decl(&self, decl: &str) -> Option<(&Resource, &str)> {
-        let (resource, decl) = self.mappings.get(decl)?;
-        Some((resource, decl))
-    }
-
-    fn get_source(&self, resource: &Resource) -> Option<&str> {
-        self.sources.get(resource).map(|source| source.as_str())
-    }
-    fn get_default_source(&self) -> Option<&str> {
-        self.default_source.as_ref().map(|source| source.as_str())
-    }
-}
-
-pub struct NoSourceMap;
-
-impl SourceMap for NoSourceMap {
-    fn get_decl(&self, _decl: &str) -> Option<(&Resource, &str)> {
-        None
-    }
-
-    fn get_source(&self, _resource: &Resource) -> Option<&str> {
-        None
-    }
-}
-
 impl<'a> Mangler for SourceMapper<'a> {
     fn mangle(&self, resource: &Resource, item: &str) -> String {
         let res = self.mangler.mangle(resource, item);
         let mut sourcemap = self.sourcemap.borrow_mut();
         sourcemap.add_decl(res.clone(), resource.clone(), item.to_string());
         res
-    }
-}
-
-impl<'a> Resolver for SourceMapper<'a> {
-    fn resolve_source<'b>(
-        &'b self,
-        resource: &Resource,
-    ) -> Result<std::borrow::Cow<'b, str>, ResolveError> {
-        let res = self.resolver.resolve_source(resource)?;
-        let mut sourcemap = self.sourcemap.borrow_mut();
-        sourcemap.add_source(resource.clone(), res.clone().into());
-        Ok(res)
     }
 }
