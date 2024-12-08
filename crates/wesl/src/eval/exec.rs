@@ -659,7 +659,7 @@ impl Exec for Declaration {
                             let ty = ty.eval_ty(ctx)?;
                             let (group, binding) = self.eval_group_binding(ctx)?;
                             let inst = ctx
-                                .binding(group, binding)
+                                .resource(group, binding)
                                 .ok_or_else(|| E::MissingResource(group, binding))?;
                             if ty != inst.ty() {
                                 return Err(E::Type(ty, inst.ty()));
@@ -679,7 +679,7 @@ impl Exec for Declaration {
                             let ty = ty.eval_ty(ctx)?;
                             let (group, binding) = self.eval_group_binding(ctx)?;
                             let inst = ctx
-                                .binding(group, binding)
+                                .resource(group, binding)
                                 .ok_or_else(|| E::MissingResource(group, binding))?;
                             if ty != inst.ty() {
                                 return Err(E::Type(ty, inst.ty()));

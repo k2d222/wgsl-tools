@@ -113,6 +113,7 @@ mod syntax_util;
 #[cfg(feature = "condcomp")]
 pub use condcomp::CondCompError;
 
+use eval::HostShareable;
 #[cfg(feature = "imports")]
 pub use import::ImportError;
 
@@ -122,6 +123,7 @@ pub use eval::{Eval, EvalError, Exec};
 #[cfg(feature = "generics")]
 pub use generics::GenericsError;
 
+use lazy_static::lazy_static;
 pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
 
 use resolve::NoResolver;
@@ -167,17 +169,17 @@ impl Default for CompileOptions {
     }
 }
 
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ManglerKind {
-    /// escaped path mangler. `foo/bar/{item} -> foo_bar_item`
+    /// Escaped path mangler. `foo/bar/{item} -> foo_bar_item`
     #[default]
     Escape,
-    /// hash mangler. `foo/bar/{item} -> item_1985638328947`
+    /// Hash mangler. `foo/bar/{item} -> item_1985638328947`
     Hash,
-    /// make valid identifiers with unicode "confusables" characters.
+    /// Make valid identifiers with unicode "confusables" characters.
     /// `foo/{bar<baz, moo>} -> foo::barᐸbazˏmooᐳ`
     Unicode,
-    /// disable mangling (warning: will break if case of name conflicts!).
+    /// Disable mangling (warning: will break if case of name conflicts!)
     None,
 }
 
@@ -296,7 +298,7 @@ impl Wesl {
         }
     }
 
-    pub fn with_options(mut self, options: CompileOptions) -> Self {
+    pub fn set_options(mut self, options: CompileOptions) -> Self {
         self.options = options;
         self
     }
@@ -393,6 +395,18 @@ impl Wesl {
         self.options.features.insert(feat.to_string(), val);
         self
     }
+    /// Set conditional compilation feature flags.
+    ///
+    /// # WESL Reference
+    /// Conditional translation is a *mandatory* WESL extension.
+    /// Spec: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
+    #[cfg(feature = "condcomp")]
+    pub fn set_features<'a>(mut self, feats: impl IntoIterator<Item = (&'a str, bool)>) -> Self {
+        self.options
+            .features
+            .extend(feats.into_iter().map(|(k, v)| (k.to_string(), v)));
+        self
+    }
     /// Unset a conditional compilation feature flag.
     ///
     /// # WESL Reference
@@ -445,29 +459,32 @@ impl Wesl {
 
 #[derive(Clone)]
 pub struct CompileResult {
-    pub ast: TranslationUnit,
+    pub syntax: TranslationUnit,
     pub sourcemap: Option<BasicSourceMap>,
 }
 
 impl CompileResult {
-    /// Get the WGSL string resulting from the compilation of a WESL source.
-    pub fn to_string(&self) -> String {
-        self.ast.to_string()
-    }
-
     pub fn to_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
         std::fs::write(path, self.to_string())
     }
 }
 
-#[cfg(feature = "eval")]
-#[derive(Clone)]
-pub struct ExecResult {
-    inst: eval::Instance,
-    resources: HashMap<(u32, u32), eval::RefInstance>,
+impl ToString for CompileResult {
+    /// Get the WGSL string resulting from the compilation of a WESL source.
+    fn to_string(&self) -> String {
+        self.syntax.to_string()
+    }
 }
 
-impl ExecResult {
+#[cfg(feature = "eval")]
+pub struct ExecResult<'a> {
+    /// The executed function return value
+    pub inst: eval::Instance,
+    /// Context after execution
+    pub ctx: eval::Context<'a>,
+}
+
+impl<'a> ExecResult<'a> {
     /// Get the function return value.
     ///
     /// "void" functions return [`eval::Instance::Void`].
@@ -478,9 +495,39 @@ impl ExecResult {
     /// Get a [shader resource](https://www.w3.org/TR/WGSL/#resource).
     ///
     /// Shader resources (aka. bindings) with `write` [access mode](https://www.w3.org/TR/WGSL/#memory-access-mode)
-    /// can be modified after executing an entry-point.
+    /// can be modified after executing an entry point.
     pub fn resource(&self, group: u32, binding: u32) -> Option<&eval::RefInstance> {
-        self.resources.get(&(group, binding))
+        self.ctx.resource(group, binding)
+    }
+}
+
+impl<'a> ToString for ExecResult<'a> {
+    /// Get the WGSL string representing the function return value expression.
+    fn to_string(&self) -> String {
+        self.inst.to_string()
+    }
+}
+
+#[cfg(feature = "eval")]
+pub struct EvalResult<'a> {
+    /// The expression evaluation result
+    pub inst: eval::Instance,
+    /// Context after evaluation
+    pub ctx: eval::Context<'a>,
+}
+
+impl<'a> EvalResult<'a> {
+    // TODO: make context non-mut
+    /// Get the WGSL string representing the evaluated expression.
+    pub fn to_buffer(&mut self) -> Option<Vec<u8>> {
+        self.inst.to_buffer(&mut self.ctx)
+    }
+}
+
+impl<'a> ToString for EvalResult<'a> {
+    /// Get the WGSL string representing the evaluated expression.
+    fn to_string(&self) -> String {
+        self.inst.to_string()
     }
 }
 
@@ -494,12 +541,14 @@ impl CompileResult {
     ///
     /// # WESL Reference
     /// The `@const` attribute is non-standard.
-    pub fn eval(&self, source: &str) -> Result<eval::Instance, Error> {
+    pub fn eval(&self, source: &str) -> Result<EvalResult, Error> {
+        lazy_static! {
+            static ref EMPTY_MODULE: TranslationUnit = TranslationUnit::default();
+        }
         let expr = source
             .parse::<syntax::Expression>()
             .map_err(|e| Error::Error(Diagnostic::from(e).with_source(source.to_string())))?;
-        let wgsl = TranslationUnit::default();
-        let (inst, ctx) = eval_const(&expr, &wgsl);
+        let (inst, ctx) = eval_const(&expr, &EMPTY_MODULE);
         let inst = inst.map_err(|e| {
             Diagnostic::from(e)
                 .with_source(source.to_string())
@@ -512,7 +561,8 @@ impl CompileResult {
             inst.map_err(|e| Error::Error(e))
         }?;
 
-        Ok(inst)
+        let res = EvalResult { inst, ctx };
+        Ok(res)
     }
 
     /// Execute an entrypoint in the same way it would be executed on the GPU.
@@ -537,7 +587,7 @@ impl CompileResult {
             arguments: Vec::new(),
         });
 
-        let (inst, ctx) = eval_runtime(&expr, &self.ast, bindings, overrides);
+        let (inst, ctx) = eval_runtime(&expr, &self.syntax, bindings, overrides);
         let inst = inst.map_err(|e| {
             Diagnostic::from(e)
                 .with_source(expr.to_string())
@@ -550,10 +600,7 @@ impl CompileResult {
             inst.map_err(|e| Error::Error(e))
         }?;
 
-        Ok(ExecResult {
-            inst,
-            resources: ctx.resources,
-        })
+        Ok(ExecResult { inst, ctx })
     }
 }
 
@@ -569,16 +616,16 @@ impl Wesl {
         let entrypoint = Resource::from(entrypoint.as_ref().to_path_buf());
 
         if self.use_sourcemap {
-            let (ast, sourcemap) =
+            let (syntax, sourcemap) =
                 compile_sourcemap(&entrypoint, &self.resolver, &self.mangler, &self.options);
             Ok(CompileResult {
-                ast: ast?,
+                syntax: syntax?,
                 sourcemap: Some(sourcemap),
             })
         } else {
-            let ast = compile(&entrypoint, &self.resolver, &self.mangler, &self.options);
+            let syntax = compile(&entrypoint, &self.resolver, &self.mangler, &self.options);
             Ok(CompileResult {
-                ast: ast?,
+                syntax: syntax?,
                 sourcemap: None,
             })
         }
@@ -595,16 +642,16 @@ impl Wesl {
         let entrypoint = Resource::from(entrypoint.as_ref().to_path_buf());
 
         if self.use_sourcemap {
-            let (ast, sourcemap) =
+            let (syntax, sourcemap) =
                 compile_sourcemap(&entrypoint, &self.resolver, &self.mangler, &self.options);
             Ok(CompileResult {
-                ast: ast?,
+                syntax: syntax?,
                 sourcemap: Some(sourcemap),
             })
         } else {
-            let ast = compile(&entrypoint, &self.resolver, &self.mangler, &self.options);
+            let syntax = compile(&entrypoint, &self.resolver, &self.mangler, &self.options);
             Ok(CompileResult {
-                ast: ast?,
+                syntax: syntax?,
                 sourcemap: None,
             })
         }

@@ -6,80 +6,140 @@ use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{
     collections::HashMap,
     error::Error,
-    fmt::Display,
     fs::{self, File},
-    io::Read,
+    io::{Read, Write},
     path::PathBuf,
     str::FromStr,
 };
 use wesl::{
-    eval::{Eval, EvalAttrs, EvalError, HostShareable, Instance, RefInstance},
+    eval::{Eval, EvalAttrs, EvalError, HostShareable, Instance, RefInstance, Ty},
     syntax::{self, AccessMode, AddressSpace},
-    BasicSourceMap, CompileOptions, Diagnostic, FileResolver, Mangler, Resource, MANGLER_ESCAPE,
-    MANGLER_HASH, MANGLER_NONE,
+    CompileOptions, CompileResult, Diagnostic, FileResolver, ManglerKind, Router, VirtualResolver,
+    Wesl,
 };
-use wgsl_parse::{error::FormatError, syntax::TranslationUnit, Parser as WgslParser};
+use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 
 #[derive(Parser)]
 #[command(version, author, about)]
 #[command(propagate_version = true)]
 struct Cli {
-    /// main command
+    /// Main command
     #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Subcommand, Clone, Debug)]
 enum Command {
-    /// check correctness of the source file
-    Check(CommonArgs),
-    /// parse the source and convert it back to code from the syntax tree
-    Parse(CommonArgs),
-    /// output the syntax tree to stdout
-    Dump(CommonArgs),
-    /// compile a source file and outputs the compiled file to stdout
+    /// Check correctness of the source file
+    Check(CheckArgs),
+    /// Parse the source and convert it back to code from the syntax tree
+    // Parse(CommonArgs),
+    // /// Output the syntax tree to stdout
+    // Dump(CommonArgs),
+    // /// Compile a source file and outputs the compiled file to stdout
     Compile(CompileArgs),
-    /// evaluate a const expression
+    /// Evaluate a const-expression
     Eval(EvalArgs),
+    /// Execute a WGSL shader function on the CPU
+    Exec(ExecArgs),
+}
+
+#[derive(Default, Clone, Copy, Debug, ValueEnum)]
+pub enum ClapManglerKind {
+    /// Escaped path mangler. `foo/bar/{item} -> foo_bar_item`
+    #[default]
+    Escape,
+    /// Hash mangler. `foo/bar/{item} -> item_1985638328947`
+    Hash,
+    /// Make valid identifiers with unicode "confusables" characters.
+    /// `foo/{bar<baz, moo>} -> foo::barᐸbazˏmooᐳ`
+    Unicode,
+    /// Disable mangling (warning: will break if case of name conflicts!)
+    None,
+}
+
+impl From<ClapManglerKind> for ManglerKind {
+    fn from(value: ClapManglerKind) -> Self {
+        match value {
+            ClapManglerKind::Escape => ManglerKind::Escape,
+            ClapManglerKind::Hash => ManglerKind::Hash,
+            ClapManglerKind::Unicode => ManglerKind::Unicode,
+            ClapManglerKind::None => ManglerKind::None,
+        }
+    }
 }
 
 #[derive(Args, Clone, Debug)]
-struct CommonArgs {
-    /// wgsl file entry-point
-    input: PathBuf,
+struct CompOptsArgs {
+    /// Name mangling strategy
+    #[arg(long, default_value = "escape")]
+    mangler: ClapManglerKind,
+    /// Show nicer error messages by computing a sourcemap
+    #[arg(long)]
+    no_sourcemap: bool,
+    /// Disable imports
+    #[arg(long)]
+    no_imports: bool,
+    /// Disable conditional compilation
+    #[arg(long)]
+    no_cond_comp: bool,
+    /// Disable generics
+    #[arg(long)]
+    no_generics: bool,
+    /// Disable stripping unused declarations
+    #[arg(long)]
+    no_strip: bool,
+    /// Exposed shader entry points
+    #[arg(long)]
+    entry_points: Option<Vec<String>>,
+    /// Conditional compilation features to enable
+    #[arg(long)]
+    enable_features: Vec<String>,
+    /// Conditional compilation features to disable
+    #[arg(long)]
+    disable_features: Vec<String>,
+}
+
+impl From<&CompOptsArgs> for CompileOptions {
+    fn from(opts: &CompOptsArgs) -> Self {
+        let mut features = HashMap::new();
+        features.extend(opts.enable_features.iter().map(|f| (f.clone(), true)));
+        features.extend(opts.disable_features.iter().map(|f| (f.clone(), false)));
+
+        Self {
+            use_imports: !opts.no_imports,
+            use_condcomp: !opts.no_cond_comp,
+            use_generics: !opts.no_generics,
+            use_stripping: !opts.no_strip,
+            entry_points: opts.entry_points.clone(),
+            features,
+        }
+    }
 }
 
 #[derive(Args, Clone, Debug)]
 struct CompileArgs {
     #[command(flatten)]
-    common: CommonArgs,
-    #[arg(short, long, default_value_t = ManglerKind::Escape)]
-    /// name mangling strategy
-    mangler: ManglerKind,
-    /// show nicer error messages by computing a sourcemap
+    options: CompOptsArgs,
+    /// WESL file entry point
+    file: Option<PathBuf>,
+}
+
+#[derive(Args, Clone, Debug)]
+struct CheckArgs {
     #[arg(long)]
-    no_sourcemap: bool,
-    /// disable imports
-    #[arg(long)]
-    no_imports: bool,
-    /// disable conditional compilation
-    #[arg(long)]
-    no_cond_comp: bool,
-    /// disable generics
-    #[arg(long)]
-    no_generics: bool,
-    /// disable stripping unused declarations
-    #[arg(long)]
-    no_strip: bool,
-    /// exposed shader entry-points
-    #[arg(long)]
-    entry_points: Option<Vec<String>>,
-    /// conditional compilation features to enable
-    #[arg(long)]
-    enable_features: Vec<String>,
-    /// conditional compilation features to disable
-    #[arg(long)]
-    disable_features: Vec<String>,
+    kind: CheckKind,
+    /// WGSL file entry point
+    file: PathBuf,
+}
+
+#[derive(ValueEnum, Clone, Debug, Default)]
+enum CheckKind {
+    /// Check that an input file is valid WGSL
+    Wgsl,
+    /// Check that an input file is valid WESL
+    #[default]
+    Wesl,
 }
 
 // from clap cookbook: https://docs.rs/clap/latest/clap/_derive/_cookbook/typed_derive/index.html
@@ -185,108 +245,125 @@ impl FromStr for Binding {
 
 #[derive(Args, Clone, Debug)]
 struct EvalArgs {
-    /// context to evaluate the expression into
+    /// Context to evaluate the expression into
     #[command(flatten)]
-    compile: CompileArgs,
-    /// run the eval() to at shader-execution-time instead of at pipeline-creation-time
+    options: CompOptsArgs,
+    /// Output as binary (WGSL memory representation) for storable types
+    #[arg(short, long)]
+    binary: bool,
+    /// Optional WESL entrypoint module to evaluate the expression into
     #[arg(long)]
-    runtime: bool,
-    /// the expression to evaluate
+    file: Option<PathBuf>,
+    /// Const-expression to evaluate
     expr: String,
-    /// bindings. Only `Uniform` and `buffer` bindings are supported at the moment.
-    /// syntax: colon-separated group,binding,binding_type,wgsl_type,path
-    ///  * group and binding are @group and @binding numbers
-    ///  * binding_type is the `GPU*BindingType`
-    ///  * path is a path to a binary file of the buffer contents.
-    /// example: 0:0:storage:array<vec3<u32>,5>:./my_buffer.bin
-    #[arg(long, value_parser = Binding::from_str)]
-    bindings: Vec<Binding>,
-    #[arg(long, value_parser = parse_key_val::<String, String>)]
+}
+
+#[derive(Args, Clone, Debug)]
+struct ExecArgs {
+    /// Context to evaluate the expression into
+    #[command(flatten)]
+    options: CompOptsArgs,
+    /// Bound resources. Only buffer bindings are supported at the moment.
+    /// Syntax: colon-separated group,binding,binding_type,path
+    ///  - group and binding are @group and @binding numbers
+    ///  - binding_type is the `GPUBufferBindingType` (uniform, storage, read-only-storage)
+    ///  - path is a path to a binary file of the buffer contents
+    /// Example: 0:0:storage:./my_buffer.bin
+    #[arg(long = "resource", value_parser = Binding::from_str, verbatim_doc_comment)]
+    resources: Vec<Binding>,
+    /// Pipeline-overridable constants.
+    /// Syntax: name=expression
+    #[arg(long = "override", value_parser = parse_key_val::<String, String>)]
     overrides: Vec<(String, String)>,
+    /// Output as binary (WGSL memory representation) for storable types
+    #[arg(short, long = "out-binary")]
+    binary: bool,
+    /// WESL entrypoint module to evaluate the expression into
+    file: Option<PathBuf>,
+    /// Function name to execute
+    entrypoint: String,
 }
 
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-enum ManglerKind {
-    /// escaped path mangler  foo/bar/{item} -> foo_bar_item
-    #[default]
-    Escape,
-    /// hash mangler          foo/bar/{item} -> item_1985638328947
-    Hash,
-    /// disable mangling (warning: will break if case of name conflicts!)
-    None,
-}
+// #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+// enum ManglerKind {
+//     /// escaped path mangler. `foo/bar/{item} -> foo_bar_item`
+//     #[default]
+//     Escape,
+//     /// hash mangler. `foo/bar/{item} -> item_1985638328947`
+//     Hash,
+//     /// make valid identifiers with unicode "confusables" characters.
+//     /// `foo/{bar<baz, moo>} -> foo::barᐸbazˏmooᐳ`
+//     Unicode,
+//     /// disable mangling (warning: will break if case of name conflicts!).
+//     None,
+// }
 
-impl Display for ManglerKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ManglerKind::Escape => f.write_str("escape"),
-            ManglerKind::Hash => f.write_str("hash"),
-            ManglerKind::None => f.write_str("none"),
-        }
-    }
-}
+// impl Display for ManglerKind {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             ManglerKind::Escape => f.write_str("escape"),
+//             ManglerKind::Hash => f.write_str("hash"),
+//             ManglerKind::Unicode => f.write_str("unicode"),
+//             ManglerKind::None => f.write_str("none"),
+//         }
+//     }
+// }
 
 #[derive(Clone, Debug, thiserror::Error)]
 enum CliError {
     #[error("input file not found")]
     FileNotFound,
-    #[error("binding `@group({0}) @binding({1})` not found")]
-    BindingNotFound(u32, u32),
+    #[error("resource `@group({0}) @binding({1})` not found")]
+    ResourceNotFound(u32, u32),
     #[error(
-        "binding `@group({0}) @binding({1})` ({2} bytes) incompatible with type `{3}` ({4} bytes)"
+        "resource `@group({0}) @binding({1})` ({2} bytes) incompatible with type `{3}` ({4} bytes)"
     )]
-    BindingIncompatible(u32, u32, u32, wesl::eval::Type, u32),
+    ResourceIncompatible(u32, u32, u32, wesl::eval::Type, u32),
+    #[error("Could not convert instance to buffer (type `{0}` is not storable)")]
+    NotStorable(wesl::eval::Type),
     #[error("{0}")]
-    CompileError(#[from] wesl::Error),
+    WeslError(#[from] wesl::Error),
+    #[error("{0}")]
+    WeslDiagnostic(#[from] wesl::Diagnostic<wesl::Error>),
 }
 
-fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
-    match kind {
-        ManglerKind::Escape => Box::new(MANGLER_ESCAPE),
-        ManglerKind::Hash => Box::new(MANGLER_HASH),
-        ManglerKind::None => Box::new(MANGLER_NONE),
-    }
+enum FileOrSource {
+    File(PathBuf),
+    Source(String),
 }
 
-fn run_compile(args: &CompileArgs) -> Result<(TranslationUnit, Option<BasicSourceMap>), CliError> {
-    let base = args
-        .common
-        .input
-        .parent()
-        .ok_or(CliError::FileNotFound)?
-        .to_path_buf();
-    let name = PathBuf::from(
-        args.common
-            .input
-            .file_name()
-            .ok_or(CliError::FileNotFound)?,
-    );
+fn run_compile(
+    options: &CompOptsArgs,
+    file_or_source: FileOrSource,
+) -> Result<CompileResult, CliError> {
+    let compile_options = CompileOptions::from(options);
 
-    let resolver = FileResolver::new(base);
-    let entrypoint: Resource = name.into();
+    let compiler = Wesl::new_barebones()
+        .set_options(compile_options)
+        .use_sourcemap(!options.no_sourcemap)
+        .set_mangler(options.mangler.into());
 
-    let mangler = make_mangler(args.mangler);
+    match file_or_source {
+        FileOrSource::File(path) => {
+            let base = path.parent().ok_or(CliError::FileNotFound)?;
+            let name = path.file_name().ok_or(CliError::FileNotFound)?;
+            let resolver = FileResolver::new(base);
 
-    let mut features = HashMap::new();
-    features.extend(args.enable_features.iter().map(|f| (f.clone(), true)));
-    features.extend(args.disable_features.iter().map(|f| (f.clone(), false)));
+            let res = compiler.set_resolver(resolver).compile(name)?;
+            Ok(res)
+        }
+        FileOrSource::Source(source) => {
+            let base = std::env::current_dir().unwrap();
+            let name = "command-line";
+            let mut router = Router::new();
+            let mut resolver = VirtualResolver::new();
+            resolver.add_module("", source);
+            router.mount_resolver(name, resolver);
+            router.mount_fallback_resolver(FileResolver::new(base));
 
-    let compile_options = CompileOptions {
-        use_imports: !args.no_imports,
-        use_condcomp: !args.no_cond_comp,
-        use_generics: !args.no_generics,
-        use_stripping: !args.no_strip,
-        entry_points: args.entry_points.clone(),
-        features,
-    };
-
-    if !args.no_sourcemap {
-        let (wgsl, sourcemap) =
-            wesl::compile_sourcemap(&entrypoint, &resolver, &mangler, &compile_options);
-        Ok((wgsl?, Some(sourcemap)))
-    } else {
-        let wgsl = wesl::compile(&entrypoint, &resolver, &mangler, &compile_options)?;
-        Ok((wgsl, None))
+            let res = compiler.set_resolver(router).compile(name)?;
+            Ok(res)
+        }
     }
 }
 
@@ -310,7 +387,7 @@ fn parse_binding(
             }
             _ => None,
         })
-        .ok_or_else(|| CliError::BindingNotFound(b.group, b.binding))?;
+        .ok_or_else(|| CliError::ResourceNotFound(b.group, b.binding))?;
 
     let ty = ty_expr
         .eval_value(&mut ctx)
@@ -319,11 +396,9 @@ fn parse_binding(
             _ => Err(EvalError::UnknownType(inst.to_string())),
         })
         .map_err(|e| {
-            wesl::Error::Error(
-                Diagnostic::from(e)
-                    .with_ctx(&ctx)
-                    .with_source(ty_expr.to_string()),
-            )
+            Diagnostic::from(e)
+                .with_ctx(&ctx)
+                .with_source(ty_expr.to_string())
         })?;
     let (storage, access) = match b.kind {
         BindingType::Uniform => (AddressSpace::Uniform, AccessMode::Read),
@@ -348,7 +423,7 @@ fn parse_binding(
         BindingType::ReadOnly => todo!(),
     };
     let inst = Instance::from_buffer(&b.data, &ty, &mut ctx).ok_or_else(|| {
-        CliError::BindingIncompatible(
+        CliError::ResourceIncompatible(
             b.group,
             b.binding,
             b.data.len() as u32,
@@ -366,117 +441,137 @@ fn parse_override(src: &str, wgsl: &TranslationUnit) -> Result<Instance, CliErro
     let mut ctx = wesl::eval::Context::new(wgsl);
     let expr = src
         .parse::<syntax::Expression>()
-        .map_err(|e| wesl::Error::Error(Diagnostic::from(e).with_source(src.to_string())))?;
+        .map_err(|e| Diagnostic::from(e).with_source(src.to_string()))?;
     let inst = expr.eval_value(&mut ctx).map_err(|e| {
-        wesl::Error::Error(
-            Diagnostic::from(e)
-                .with_ctx(&ctx)
-                .with_source(src.to_string()),
-        )
+        Diagnostic::from(e)
+            .with_ctx(&ctx)
+            .with_source(src.to_string())
     })?;
     Ok(inst)
 }
 
-fn run_eval(args: &EvalArgs) -> Result<(Instance, Vec<Binding>), CliError> {
-    let (wgsl, sourcemap) = run_compile(&args.compile)?;
-
-    let bindings = args
-        .bindings
-        .iter()
-        .map(|b| parse_binding(b, &wgsl))
-        .collect::<Result<_, _>>()?;
-
-    let overrides = args
-        .overrides
-        .iter()
-        .map(|(name, expr)| -> Result<(String, Instance), CliError> {
-            Ok((name.to_string(), parse_override(expr, &wgsl)?))
-        })
-        .collect::<Result<_, _>>()?;
-
-    let expr = args
-        .expr
-        .parse::<syntax::Expression>()
-        .map_err(|e| wesl::Error::Error(Diagnostic::from(e).with_source(args.expr.to_string())))?;
-
-    let (res, mut ctx) = if args.runtime {
-        wesl::eval_runtime(&expr, &wgsl, bindings, overrides)
-    } else {
-        wesl::eval_const(&expr, &wgsl)
-    };
-
-    let res = res.map_err(|e| {
-        Diagnostic::from(e)
-            .with_source(args.expr.clone())
-            .with_ctx(&ctx)
-    });
-    let inst = if let Some(sourcemap) = sourcemap {
-        res.map_err(|e| wesl::Error::Error(e.with_sourcemap(&sourcemap)))
-    } else {
-        res.map_err(|e| wesl::Error::Error(e))
-    }?;
-
-    let bindings = args
-        .bindings
-        .iter()
-        .filter_map(|b| {
-            let inst = ctx.binding(b.group, b.binding)?.clone();
-            let buf = inst.read().ok()?.to_buffer(&mut ctx)?;
-            Some(Binding {
-                group: b.group,
-                binding: b.binding,
-                kind: b.kind,
-                data: buf.into(),
-            })
-        })
-        .collect();
-
-    Ok((inst, bindings))
-}
-
 fn main() {
     let cli = Cli::parse();
+    run(cli).inspect_err(|e| eprintln!("{e}")).ok();
+}
 
-    match &cli.command {
-        Command::Check(args) | Command::Parse(args) | Command::Dump(args) => {
-            let source = fs::read_to_string(&args.input).expect("could not open input file");
+fn file_or_source(path: Option<PathBuf>) -> Option<FileOrSource> {
+    path.map(|file| FileOrSource::File(file)).or_else(|| {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .ok()
+            .map(|_| FileOrSource::Source(buf))
+    })
+}
 
-            match &cli.command {
-                Command::Check(_) => {
-                    print!("{} -- ", args.input.display());
-                    match WgslParser::recognize_str(&source) {
-                        Ok(()) => println!("OK"),
-                        Err(err) => eprintln!("{}", err.with_source((&source).into())),
-                    };
+fn run(cli: Cli) -> Result<(), CliError> {
+    match cli.command {
+        Command::Check(args) => {
+            let source = fs::read_to_string(&args.file).map_err(|_| CliError::FileNotFound)?;
+
+            match &args.kind {
+                CheckKind::Wgsl => {
+                    WgslParser::recognize_str(&source)
+                        .map_err(|e| Diagnostic::from(e).with_source(source))?;
                 }
-                Command::Parse(_) => {
-                    match WgslParser::parse_str(&source) {
-                        Ok(module) => {
-                            println!("{module}")
-                        }
-                        Err(err) => eprintln!("{}", err.with_source((&source).into())),
-                    };
+                CheckKind::Wesl => {
+                    WgslParser::parse_str(&source)
+                        .map_err(|e| Diagnostic::from(e).with_source(source))?;
                 }
-                Command::Dump(_) => {
-                    match WgslParser::parse_str(&source) {
-                        Ok(module) => println!("{module:?}"),
-                        Err(err) => eprintln!("{}", err.with_source((&source).into())),
-                    };
-                }
-                _ => unreachable!(),
             }
+            println!("OK");
         }
         Command::Compile(args) => {
-            match run_compile(args) {
-                Ok(module) => println!("{}", module.0),
-                Err(err) => eprintln!("{err}"),
-            };
+            let comp = file_or_source(args.file)
+                .map(|input| run_compile(&args.options, input))
+                .unwrap_or_else(|| {
+                    Ok(CompileResult {
+                        syntax: TranslationUnit::default(),
+                        sourcemap: None,
+                    })
+                })?;
+            // let comp = run_compile(&args.options, FileOrSource::File(args.file))?;
+            println!("{}", comp.syntax);
         }
         Command::Eval(args) => {
-            match run_eval(args) {
-                Ok((inst, bindings)) => println!("{inst}\n{bindings:?}"),
-                Err(err) => eprintln!("{err}"),
-            };
+            let comp = file_or_source(args.file)
+                .map(|input| run_compile(&args.options, input))
+                .unwrap_or_else(|| {
+                    Ok(CompileResult {
+                        syntax: TranslationUnit::default(),
+                        sourcemap: None,
+                    })
+                })?;
+            let mut eval = comp.eval(&args.expr)?;
+            if args.binary {
+                let buf = eval
+                    .inst
+                    .to_buffer(&mut eval.ctx)
+                    .ok_or_else(|| CliError::NotStorable(eval.inst.ty()))?;
+                std::io::stdout().write_all(buf.as_slice()).unwrap();
+            } else {
+                println!("{}", eval.inst)
+            }
+        }
+        Command::Exec(args) => {
+            let comp = file_or_source(args.file)
+                .map(|input| run_compile(&args.options, input))
+                .unwrap_or_else(|| {
+                    Ok(CompileResult {
+                        syntax: TranslationUnit::default(),
+                        sourcemap: None,
+                    })
+                })?;
+            // let comp = run_compile(&args.options, FileOrSource::File(args.file))?;
+
+            let resources = args
+                .resources
+                .iter()
+                .map(|b| parse_binding(b, &comp.syntax))
+                .collect::<Result<_, _>>()?;
+
+            let overrides = args
+                .overrides
+                .iter()
+                .map(|(name, expr)| -> Result<(String, Instance), CliError> {
+                    Ok((name.to_string(), parse_override(expr, &comp.syntax)?))
+                })
+                .collect::<Result<_, _>>()?;
+
+            let mut exec = comp.exec(&args.entrypoint, resources, overrides)?;
+
+            if args.binary {
+                let buf = exec
+                    .inst
+                    .to_buffer(&mut exec.ctx)
+                    .ok_or_else(|| CliError::NotStorable(exec.inst.ty()))?;
+                std::io::stdout().write_all(buf.as_slice()).unwrap();
+            } else {
+                println!("return: {}", exec.inst)
+            }
+
+            let resources = args
+                .resources
+                .iter()
+                .filter_map(|r| {
+                    let inst = exec.resource(r.group, r.binding)?.clone();
+                    let inst = inst.read().ok()?.to_owned();
+                    Some((r.group, r.binding, inst))
+                })
+                .collect::<Vec<_>>();
+
+            for (group, binding, inst) in resources {
+                if args.binary {
+                    let buf = inst
+                        .to_buffer(&mut exec.ctx)
+                        .ok_or_else(|| CliError::NotStorable(exec.inst.ty()))?;
+                    std::io::stdout().write_all(buf.as_slice()).unwrap();
+                } else {
+                    println!("resource: group={group} binding={binding} value={inst}")
+                }
+            }
         }
     };
+    Ok(())
 }

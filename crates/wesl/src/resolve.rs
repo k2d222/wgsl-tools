@@ -178,7 +178,9 @@ impl Resolver for FileResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let mut path = self.base.to_path_buf();
         path.extend(resource.path());
-        path.set_extension(self.extension);
+        if path.extension().is_none() {
+            path.set_extension(self.extension);
+        }
 
         let source = fs::read_to_string(&path).map_err(|_| {
             ResolveError::FileNotFound(format!("`{}` (physical file)", path.display()))

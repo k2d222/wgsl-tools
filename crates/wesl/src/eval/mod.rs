@@ -177,7 +177,7 @@ impl<'s> Context<'s> {
     pub fn add_binding(&mut self, group: u32, binding: u32, inst: RefInstance) {
         self.resources.insert((group, binding), inst);
     }
-    pub fn binding(&self, group: u32, binding: u32) -> Option<&RefInstance> {
+    pub fn resource(&self, group: u32, binding: u32) -> Option<&RefInstance> {
         self.resources.get(&(group, binding))
     }
     pub fn add_overrides(&mut self, overrides: impl IntoIterator<Item = (String, Instance)>) {
