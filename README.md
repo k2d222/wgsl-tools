@@ -13,8 +13,8 @@ This project can be used as a rust library or as a standalone CLI.
 ### Using the CLI
 
 - Install `cargo install --git https://github.com/k2d222/wgsl-tools`
-- Compile a WESL shader `wgsl-tools compile <entrypoint.wgsl>` (TODO: use the wesl extension)
-- Run eval() `wgsl-tools eval <entrypoint.wgsl> <expression to eval>`
+- Compile a WESL shader `wesl compile <entrypoint.wgsl>` (TODO: use the wesl extension)
+- Run eval() `wesl eval <entrypoint.wgsl> <expression to eval>`
 
 ### Using the Crate
 

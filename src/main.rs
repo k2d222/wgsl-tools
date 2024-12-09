@@ -89,29 +89,30 @@ struct CompOptsArgs {
     /// Disable stripping unused declarations
     #[arg(long)]
     no_strip: bool,
-    /// Exposed shader entry points
+    /// Root module declaration names to keep. Keeps all root module declarations by
+    /// default. Can be repeated to keep multiple declarations
     #[arg(long)]
-    entry_points: Option<Vec<String>>,
-    /// Conditional compilation features to enable
+    keep: Option<Vec<String>>,
+    /// Conditional compilation features to enable. Can be repeated
     #[arg(long)]
-    enable_features: Vec<String>,
-    /// Conditional compilation features to disable
+    enable: Vec<String>,
+    /// Conditional compilation features to disable. Can be repeated
     #[arg(long)]
-    disable_features: Vec<String>,
+    disable: Vec<String>,
 }
 
 impl From<&CompOptsArgs> for CompileOptions {
     fn from(opts: &CompOptsArgs) -> Self {
         let mut features = HashMap::new();
-        features.extend(opts.enable_features.iter().map(|f| (f.clone(), true)));
-        features.extend(opts.disable_features.iter().map(|f| (f.clone(), false)));
+        features.extend(opts.enable.iter().map(|f| (f.clone(), true)));
+        features.extend(opts.disable.iter().map(|f| (f.clone(), false)));
 
         Self {
             use_imports: !opts.no_imports,
             use_condcomp: !opts.no_cond_comp,
             use_generics: !opts.no_generics,
             use_stripping: !opts.no_strip,
-            entry_points: opts.entry_points.clone(),
+            entry_points: opts.keep.clone(),
             features,
         }
     }
@@ -127,10 +128,15 @@ struct CompileArgs {
 
 #[derive(Args, Clone, Debug)]
 struct CheckArgs {
-    #[arg(long)]
+    /// Input file type (wgsl or wesl)
+    #[arg(long, default_value = "wesl")]
     kind: CheckKind,
+    /// Validate output using Naga
+    #[cfg(feature = "naga")]
+    #[arg(long)]
+    naga: bool,
     /// WGSL file entry point
-    file: PathBuf,
+    file: Option<PathBuf>,
 }
 
 #[derive(ValueEnum, Clone, Debug, Default)]
@@ -325,6 +331,9 @@ enum CliError {
     WeslError(#[from] wesl::Error),
     #[error("{0}")]
     WeslDiagnostic(#[from] wesl::Diagnostic<wesl::Error>),
+    #[cfg(feature = "naga")]
+    #[error("naga error: {0}")]
+    Naga(#[from] naga::front::wgsl::ParseError),
 }
 
 enum FileOrSource {
@@ -468,16 +477,33 @@ fn file_or_source(path: Option<PathBuf>) -> Option<FileOrSource> {
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Check(args) => {
-            let source = fs::read_to_string(&args.file).map_err(|_| CliError::FileNotFound)?;
+            let source = if let Some(file) = &args.file {
+                fs::read_to_string(file).map_err(|_| CliError::FileNotFound)?
+            } else {
+                let mut source = String::new();
+                std::io::stdin()
+                    .read_to_string(&mut source)
+                    .map_err(|_| CliError::FileNotFound)?;
+                source
+            };
 
             match &args.kind {
                 CheckKind::Wgsl => {
+                    #[cfg(feature = "naga")]
+                    if args.naga {
+                        naga::front::wgsl::parse_str(&source)?;
+                    }
                     WgslParser::recognize_str(&source)
                         .map_err(|e| Diagnostic::from(e).with_source(source))?;
                 }
                 CheckKind::Wesl => {
-                    WgslParser::parse_str(&source)
+                    let syntax = WgslParser::parse_str(&source)
                         .map_err(|e| Diagnostic::from(e).with_source(source))?;
+                    let wgsl_source = syntax.to_string();
+                    #[cfg(feature = "naga")]
+                    if args.naga {
+                        naga::front::wgsl::parse_str(&wgsl_source)?;
+                    }
                 }
             }
             println!("OK");

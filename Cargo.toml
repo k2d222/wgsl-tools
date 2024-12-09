@@ -23,3 +23,11 @@ clap = { version = "4.5.11", features = ["derive"] }
 wgsl-parse = { path = "crates/wgsl-parse" }
 wesl = { path = "crates/wesl" }
 thiserror = "1.0.63"
+naga = { version = "23.0.0", optional = true, features = ["wgsl-in"] }
+
+[[bin]]
+name = "wesl"
+path = "src/main.rs"
+
+[features]
+default = ["naga"]
