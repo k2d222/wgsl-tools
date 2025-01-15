@@ -82,7 +82,7 @@ pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, C
             if ty.template_args.is_some() {
                 return Err(CondCompError::InvalidFeatureFlag(ty.to_string()));
             }
-            let feat = features.get(&ty.name);
+            let feat = features.get(&*ty.ident.name());
             let expr = match feat {
                 Some(true) => EXPR_TRUE.clone(),
                 Some(false) => EXPR_FALSE.clone(),

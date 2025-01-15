@@ -23,6 +23,8 @@
 //! It is made with the ultimate goal to implement spec-compliant language extensions.
 //! This is why this parser doesn't borrow strings.
 
+use std::sync::{Arc, Mutex, MutexGuard};
+
 use derive_more::{From, IsVariant};
 
 use crate::span::Spanned;
@@ -34,6 +36,38 @@ pub struct TranslationUnit {
     pub imports: Vec<Import>,
     pub global_directives: Vec<GlobalDirective>,
     pub global_declarations: Vec<GlobalDeclaration>,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct Ident(Arc<Mutex<String>>);
+
+impl Ident {
+    pub fn new(name: String) -> Ident {
+        Ident(Arc::new(Mutex::new(name)))
+    }
+    pub fn name(&self) -> MutexGuard<'_, String> {
+        self.0.lock().unwrap()
+    }
+
+    pub fn rename(&mut self, name: String) {
+        let mut old = self.name();
+        *old = name;
+    }
+}
+
+impl PartialEq for Ident {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Ident {}
+
+impl std::hash::Hash for Ident {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name().hash(state)
+    }
 }
 
 #[cfg_attr(
@@ -68,8 +102,8 @@ pub enum ImportContent {
 #[cfg(feature = "imports")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ImportItem {
-    pub name: String,
-    pub rename: Option<String>,
+    pub ident: Ident,
+    pub rename: Option<Ident>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -130,7 +164,7 @@ pub enum GlobalDeclaration {
 pub struct Declaration {
     pub attributes: Attributes,
     pub kind: DeclarationKind,
-    pub name: String,
+    pub ident: Ident,
     pub ty: Option<TypeExpression>,
     pub initializer: Option<ExpressionNode>,
 }
@@ -169,7 +203,7 @@ pub enum AccessMode {
 pub struct TypeAlias {
     #[cfg(feature = "attributes")]
     pub attributes: Attributes,
-    pub name: String,
+    pub ident: Ident,
     pub ty: TypeExpression,
 }
 
@@ -178,7 +212,7 @@ pub struct TypeAlias {
 pub struct Struct {
     #[cfg(feature = "attributes")]
     pub attributes: Attributes,
-    pub name: String,
+    pub ident: Ident,
     pub members: Vec<StructMember>,
 }
 
@@ -186,7 +220,7 @@ pub struct Struct {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructMember {
     pub attributes: Attributes,
-    pub name: String,
+    pub ident: Ident,
     pub ty: TypeExpression,
 }
 
@@ -194,7 +228,7 @@ pub struct StructMember {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub attributes: Attributes,
-    pub name: String,
+    pub ident: Ident,
     pub parameters: Vec<FormalParameter>,
     pub return_attributes: Attributes,
     pub return_type: Option<TypeExpression>,
@@ -205,7 +239,7 @@ pub struct Function {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FormalParameter {
     pub attributes: Attributes,
-    pub name: String,
+    pub ident: Ident,
     pub ty: TypeExpression,
 }
 
@@ -315,7 +349,7 @@ pub enum Attribute {
 #[cfg(feature = "generics")]
 #[derive(Clone, Debug, PartialEq, From)]
 pub struct TypeConstraint {
-    pub name: String,
+    pub ident: Ident,
     pub variants: Vec<TypeExpression>,
 }
 
@@ -359,7 +393,7 @@ pub struct ParenthesizedExpression {
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedComponentExpression {
     pub base: ExpressionNode,
-    pub component: String,
+    pub component: Ident,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -429,7 +463,7 @@ pub type FunctionCallExpression = FunctionCall;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeExpression {
-    pub name: String,
+    pub ident: Ident,
     pub template_args: TemplateArgs,
 }
 

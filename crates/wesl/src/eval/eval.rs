@@ -85,15 +85,12 @@ impl Eval for ParenthesizedExpression {
 
 impl Eval for NamedComponentExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        fn vec_comp(
-            v: &VecInstance,
-            comp: &String,
-            r: Option<&RefInstance>,
-        ) -> Result<Instance, E> {
-            if !check_swizzle(comp) {
+        fn vec_comp(v: &VecInstance, comp: &Ident, r: Option<&RefInstance>) -> Result<Instance, E> {
+            if !check_swizzle(&*comp.name()) {
                 return Err(E::Swizzle(comp.clone()));
             }
             let indices = comp
+                .name()
                 .chars()
                 .map(|c| match c {
                     'x' | 'r' => 0usize,
@@ -124,11 +121,11 @@ impl Eval for NamedComponentExpression {
             }
         }
 
-        fn inst_comp(base: Instance, comp: &String) -> Result<Instance, E> {
+        fn inst_comp(base: Instance, comp: &Ident) -> Result<Instance, E> {
             match &base {
                 Instance::Struct(s) => {
                     let val = s.member(comp).ok_or_else(|| {
-                        E::Component(Type::Struct(s.name().to_string()), comp.clone())
+                        E::Component(Type::Struct(s.ident().clone()), comp.clone())
                     })?;
                     Ok(val.clone())
                 }
@@ -268,7 +265,7 @@ impl Eval for FunctionCall {
             .is_none()
             .then(|| {
                 ctx.source
-                    .resolve_alias(&self.ty.name)
+                    .resolve_alias(&self.ty.ident)
                     .unwrap_or(self.ty.clone())
             })
             .unwrap_or(self.ty.clone());
@@ -280,7 +277,7 @@ impl Eval for FunctionCall {
             .collect::<Result<Vec<_>, _>>()?;
 
         // struct constructor
-        if let Some(decl) = ctx.source.decl_struct(&ty.name) {
+        if let Some(decl) = ctx.source.decl_struct(&ty.ident) {
             if args.len() == decl.members.len() {
                 let members = decl
                     .members
@@ -291,24 +288,24 @@ impl Eval for FunctionCall {
                         let inst = inst
                             .convert_to(&ty)
                             .ok_or_else(|| E::ParamType(ty, inst.ty()))?;
-                        Ok((member.name.clone(), inst))
+                        Ok((member.ident.clone(), inst))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(StructInstance::new(ty.name.to_string(), members).into())
+                Ok(StructInstance::new(ty.ident.clone(), members).into())
             } else if args.is_empty() {
-                StructInstance::zero_value(&decl.name, ctx).map(Into::into)
+                StructInstance::zero_value(decl.ident.clone(), ctx).map(Into::into)
             } else {
                 Err(E::ParamCount(
-                    decl.name.clone(),
+                    decl.ident.clone(),
                     decl.members.len(),
                     args.len(),
                 ))
             }
         }
         // function call
-        else if let Some(decl) = ctx.source.decl_function(&ty.name) {
+        else if let Some(decl) = ctx.source.decl_function(&ty.ident) {
             if !decl.attributes.contains(&Attribute::Const) && ctx.stage == EvalStage::Const {
-                return Err(E::NotConst(decl.name.clone()));
+                return Err(E::NotConst(decl.ident.clone()));
             }
 
             if decl.body.attributes.contains(&ATTR_INTRINSIC) {
@@ -317,7 +314,7 @@ impl Eval for FunctionCall {
 
             if self.arguments.len() != decl.parameters.len() {
                 return Err(E::ParamCount(
-                    decl.name.clone(),
+                    decl.ident.clone(),
                     decl.parameters.len(),
                     self.arguments.len(),
                 ));
@@ -328,7 +325,7 @@ impl Eval for FunctionCall {
                 .as_ref()
                 .map(|e| e.eval_ty(ctx))
                 .unwrap_or(Ok(Type::Void))
-                .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
+                .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone()))?;
 
             ctx.scope.push();
             let flow = {
@@ -341,16 +338,16 @@ impl Eval for FunctionCall {
                             .ok_or_else(|| E::ParamType(param_ty.clone(), arg.ty()))
                     })
                     .collect::<Result<Vec<_>, _>>()
-                    .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
+                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone()))?;
 
                 for (a, p) in zip(args, &decl.parameters) {
-                    ctx.scope.add_val(p.name.clone(), a);
+                    ctx.scope.add_val(p.ident.clone(), a);
                 }
 
                 let flow = decl
                     .body
                     .exec(ctx)
-                    .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name))?;
+                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone()))?;
                 flow
             };
             ctx.scope.pop();
@@ -367,13 +364,13 @@ impl Eval for FunctionCall {
                 Flow::Return(inst) => inst
                     .convert_to(&ret_ty)
                     .ok_or(E::ReturnType(inst.ty(), ret_ty))
-                    .inspect_err(|_| ctx.set_err_decl_ctx(&decl.name)),
+                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone())),
             };
             inst
         }
         // not struct constructor and not function
         else {
-            Err(E::UnknownFunction(ty.name.clone()))
+            Err(E::UnknownFunction(ty.ident.clone()))
         }
     }
 }
@@ -381,10 +378,10 @@ impl Eval for FunctionCall {
 impl Eval for TypeExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
         if self.template_args.is_none() {
-            if let Some(r) = ctx.scope.get(&self.name) {
+            if let Some(r) = ctx.scope.get(&self.ident) {
                 Ok(r.clone().into())
             } else {
-                let ty = self.name.as_str().eval_ty(ctx)?;
+                let ty = self.ident.eval_ty(ctx)?;
                 Ok(ty.into())
             }
         } else {

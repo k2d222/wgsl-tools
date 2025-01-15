@@ -179,7 +179,7 @@ impl UnicodeMangler {
     fn display_ty<'a>(ty: &'a TypeExpression) -> impl fmt::Display + 'a {
         format_args!(
             "{}{}",
-            ty.name,
+            ty.ident,
             ty.template_args
                 .iter()
                 .format_with(Self::TY_SEP, |tplt, f| {

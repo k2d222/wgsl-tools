@@ -123,7 +123,6 @@ pub use eval::{Eval, EvalError, Exec};
 #[cfg(feature = "generics")]
 pub use generics::GenericsError;
 
-use lazy_static::lazy_static;
 pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
 
 use resolve::NoResolver;
@@ -143,8 +142,8 @@ pub use wgsl_parse::syntax;
 pub use lower::{lower, lower_sourcemap};
 
 use itertools::Itertools;
-use std::{collections::HashMap, path::Path};
-use wgsl_parse::syntax::TranslationUnit;
+use std::{collections::HashMap, path::Path, sync::LazyLock};
+use wgsl_parse::syntax::{Ident, TranslationUnit};
 
 #[derive(Debug)]
 pub struct CompileOptions {
@@ -542,9 +541,8 @@ impl CompileResult {
     /// # WESL Reference
     /// The `@const` attribute is non-standard.
     pub fn eval(&self, source: &str) -> Result<EvalResult, Error> {
-        lazy_static! {
-            static ref EMPTY_MODULE: TranslationUnit = TranslationUnit::default();
-        }
+        static EMPTY_MODULE: LazyLock<TranslationUnit> =
+            LazyLock::new(|| TranslationUnit::default());
         let expr = source
             .parse::<syntax::Expression>()
             .map_err(|e| Error::Error(Diagnostic::from(e).with_source(source.to_string())))?;
@@ -579,9 +577,10 @@ impl CompileResult {
         overrides: HashMap<String, eval::Instance>,
     ) -> Result<ExecResult, Error> {
         // TODO: this is not the right way.
+        // BUG: this is no longer working because of Ident PartialEq impl
         let expr = syntax::Expression::FunctionCall(syntax::FunctionCall {
             ty: syntax::TypeExpression {
-                name: entrypoint.to_string(),
+                ident: Ident::new(entrypoint.to_string()),
                 template_args: None,
             },
             arguments: Vec::new(),
@@ -746,7 +745,7 @@ fn compile_impl(
     *main_names = wesl
         .global_declarations
         .iter()
-        .filter_map(|decl| decl.name())
+        .filter_map(|decl| decl.ident())
         .map(|name| name.to_string())
         .collect_vec();
 

@@ -92,7 +92,7 @@ pub(crate) fn imports_to_resources(imports: &[syntax::Import], resource: &Resour
         match &import.content {
             syntax::ImportContent::Star(item) => {
                 let mut path = import.path.clone();
-                path.push(item.name.clone());
+                path.push(item.ident.name().to_string());
                 let resource = import_to_resource(&path, Some(resource));
                 if let Some(entry) = res.get_mut(&resource) {
                     entry.push(item.clone());

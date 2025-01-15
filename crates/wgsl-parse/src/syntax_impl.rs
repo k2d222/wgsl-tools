@@ -73,10 +73,10 @@ impl AccessMode {
     }
 }
 
-impl From<String> for TypeExpression {
-    fn from(name: String) -> Self {
+impl From<Ident> for TypeExpression {
+    fn from(name: Ident) -> Self {
         Self {
-            name,
+            ident: name,
             template_args: None,
         }
     }
@@ -97,23 +97,23 @@ impl From<Expression> for ReturnStatement {
 }
 
 impl GlobalDeclaration {
-    pub fn name(&self) -> Option<&str> {
+    pub fn ident(&self) -> Option<&Ident> {
         match self {
             GlobalDeclaration::Void => None,
-            GlobalDeclaration::Declaration(decl) => Some(decl.name.as_str()),
-            GlobalDeclaration::TypeAlias(decl) => Some(decl.name.as_str()),
-            GlobalDeclaration::Struct(decl) => Some(decl.name.as_str()),
-            GlobalDeclaration::Function(decl) => Some(decl.name.as_str()),
+            GlobalDeclaration::Declaration(decl) => Some(&decl.ident),
+            GlobalDeclaration::TypeAlias(decl) => Some(&decl.ident),
+            GlobalDeclaration::Struct(decl) => Some(&decl.ident),
+            GlobalDeclaration::Function(decl) => Some(&decl.ident),
             GlobalDeclaration::ConstAssert(_) => None,
         }
     }
-    pub fn name_mut(&mut self) -> Option<&mut String> {
+    pub fn name_mut(&mut self) -> Option<&mut Ident> {
         match self {
             GlobalDeclaration::Void => None,
-            GlobalDeclaration::Declaration(decl) => Some(&mut decl.name),
-            GlobalDeclaration::TypeAlias(decl) => Some(&mut decl.name),
-            GlobalDeclaration::Struct(decl) => Some(&mut decl.name),
-            GlobalDeclaration::Function(decl) => Some(&mut decl.name),
+            GlobalDeclaration::Declaration(decl) => Some(&mut decl.ident),
+            GlobalDeclaration::TypeAlias(decl) => Some(&mut decl.ident),
+            GlobalDeclaration::Struct(decl) => Some(&mut decl.ident),
+            GlobalDeclaration::Function(decl) => Some(&mut decl.ident),
             GlobalDeclaration::ConstAssert(_) => None,
         }
     }

@@ -139,7 +139,7 @@ impl<E: std::error::Error> Diagnostic<E> {
     #[cfg(feature = "eval")]
     pub fn with_ctx(mut self, ctx: &Context) -> Self {
         let (decl, span) = ctx.err_ctx();
-        self.declaration = decl;
+        self.declaration = decl.map(|d| d.name().to_string());
         self.span = span;
         self
     }

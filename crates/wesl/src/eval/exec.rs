@@ -60,13 +60,15 @@ impl Exec for TranslationUnit {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         fn inner(ctx: &mut Context) -> Result<Flow, E> {
             for decl in &ctx.source.global_declarations {
-                let flow = decl
-                    .exec(ctx)
-                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.name().unwrap_or("")))?;
+                let flow = decl.exec(ctx).inspect_err(|_| {
+                    decl.ident()
+                        .inspect(|&ident| ctx.set_err_decl_ctx(ident.clone()));
+                })?;
                 match flow {
                     Flow::Next => (),
                     Flow::Break | Flow::Continue | Flow::Return(_) => {
-                        ctx.set_err_decl_ctx(decl.name().unwrap_or(""));
+                        decl.ident()
+                            .inspect(|&ident| ctx.set_err_decl_ctx(ident.clone()));
                         return Err(E::FlowInModule(flow));
                     }
                 }
@@ -501,8 +503,8 @@ impl Exec for ConstAssertStatement {
 // TODO: implement address space
 impl Exec for Declaration {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        if ctx.scope.has(&self.name) {
-            return Err(E::DuplicateDecl(self.name.clone()));
+        if ctx.scope.has(&self.ident) {
+            return Err(E::DuplicateDecl(self.ident.clone()));
         }
 
         match (self.kind, ctx.kind) {
@@ -510,7 +512,7 @@ impl Exec for Declaration {
                 let mut inst = self
                     .initializer
                     .as_ref()
-                    .ok_or_else(|| E::UninitConst(self.name.clone()))?
+                    .ok_or_else(|| E::UninitConst(self.ident.clone()))?
                     .eval(ctx)?;
 
                 if let Some(ty) = &self.ty {
@@ -520,7 +522,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::Conversion(inst.ty(), ty))?;
                 }
 
-                ctx.scope.add_val(self.name.clone(), inst);
+                ctx.scope.add_val(self.ident.clone(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Function) => Err(E::OverrideInFn),
@@ -528,7 +530,7 @@ impl Exec for Declaration {
                 let inst = self
                     .initializer
                     .as_ref()
-                    .ok_or_else(|| E::UninitLet(self.name.clone()))?
+                    .ok_or_else(|| E::UninitLet(self.ident.clone()))?
                     .eval(ctx)?;
 
                 let inst = if let Some(ty) = &self.ty {
@@ -540,7 +542,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
                 };
 
-                ctx.scope.add_val(self.name.clone(), inst);
+                ctx.scope.add_val(self.ident.clone(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Var(space), ScopeKind::Function) => {
@@ -568,7 +570,7 @@ impl Exec for Declaration {
                 }?;
 
                 ctx.scope.add_var(
-                    self.name.clone(),
+                    self.ident.clone(),
                     RefInstance::from_instance(inst, AddressSpace::Function, AccessMode::ReadWrite),
                 );
                 Ok(Flow::Next)
@@ -581,9 +583,9 @@ impl Exec for Declaration {
                     Ok(Flow::Next)
                 } else {
                     let inst = ctx
-                        .overridable(&self.name)
+                        .overridable(&self.ident.name())
                         .map(|inst| inst.clone())
-                        .ok_or_else(|| E::UninitOverride(self.name.clone()))
+                        .ok_or_else(|| E::UninitOverride(self.ident.clone()))
                         .or_else(|e| self.initializer.as_ref().ok_or(e)?.eval(ctx))?;
 
                     let inst = if let Some(ty) = &self.ty {
@@ -595,7 +597,7 @@ impl Exec for Declaration {
                             .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
                     };
 
-                    ctx.scope.add_val(self.name.clone(), inst);
+                    ctx.scope.add_val(self.ident.clone(), inst);
                     Ok(Flow::Next)
                 }
             }
@@ -638,7 +640,7 @@ impl Exec for Declaration {
                             }?;
 
                             ctx.scope.add_var(
-                                self.name.clone(),
+                                self.ident.clone(),
                                 RefInstance::from_instance(
                                     inst,
                                     AddressSpace::Private,
@@ -670,7 +672,7 @@ impl Exec for Declaration {
                             if inst.access != AccessMode::Read {
                                 return Err(E::AccessMode(AccessMode::Read, inst.access));
                             }
-                            ctx.scope.add_var(self.name.clone(), inst.clone())
+                            ctx.scope.add_var(self.ident.clone(), inst.clone())
                         }
                         AddressSpace::Storage(access_mode) => {
                             let Some(ty) = &self.ty else {
@@ -691,7 +693,7 @@ impl Exec for Declaration {
                             if inst.access != access_mode {
                                 return Err(E::AccessMode(access_mode, inst.access));
                             }
-                            ctx.scope.add_var(self.name.clone(), inst.clone())
+                            ctx.scope.add_var(self.ident.clone(), inst.clone())
                         }
                         AddressSpace::Handle => todo!("handle address space"),
                     }

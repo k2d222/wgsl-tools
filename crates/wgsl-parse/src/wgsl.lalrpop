@@ -202,12 +202,16 @@ BoolLiteral: LiteralExpression = {
     "false" => LiteralExpression::Bool(false),
 };
 
-Ident: String = {
-    IdentPatternToken /* _DisambiguateTemplate */ => <>,
+Ident: Ident = {
+    IdentPatternToken /* _DisambiguateTemplate */ => {
+        Ident::new(<>)
+    },
 };
 
-MemberIdent: String = {
-    IdentPatternToken => <>,
+MemberIdent: Ident = {
+    IdentPatternToken => {
+        Ident::new(<>)
+    },
 };
 
 // TODO: check context-dependent names below.
@@ -302,8 +306,8 @@ DiagnosticDirective: DiagnosticDirective = {
 
 #[cfg(not(feature = "attributes"))]
 StructDecl: Struct = {
-    "struct" <name: Ident> <members: StructBodyDecl> => Struct {
-        name, members
+    "struct" <ident: Ident> <members: StructBodyDecl> => Struct {
+        ident, members
     },
 };
 
@@ -312,15 +316,15 @@ StructBodyDecl: Vec<StructMember> = {
 };
 
 StructMember: StructMember = {
-    <attributes: Attribute*> <name: MemberIdent> ":" <ty: TypeSpecifier> => StructMember {
-        attributes, name, ty
+    <attributes: Attribute*> <ident: MemberIdent> ":" <ty: TypeSpecifier> => StructMember {
+        attributes, ident, ty
     },
 };
 
 #[cfg(not(feature = "attributes"))]
 TypeAliasDecl: TypeAlias = {
-    "alias" <name: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
-        name, ty
+    "alias" <ident: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
+        ident, ty
     },
 };
 
@@ -328,8 +332,8 @@ TypeSpecifier: TypeExpression = {
     TemplateElaboratedIdent,
 };
 
-TemplateElaboratedIdent: TypeExpression = <name: Ident> <template_args: TemplateList?> => TypeExpression {
-    name, template_args
+TemplateElaboratedIdent: TypeExpression = <ident: Ident> <template_args: TemplateList?> => TypeExpression {
+    ident, template_args
 };
 
 // 7. VARIABLE AND VALUE DECLARATIONS
@@ -342,22 +346,22 @@ VariableOrValueStatement: Declaration = {
         decl.initializer = Some(initializer);
         decl
     },
-    "let" <ident: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
-        let (name, ty) = ident;
+    "let" <id_ty: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Let,
-            name,
+            ident,
             ty,
             initializer: Some(initializer),
         }
     },
-    "const" <ident: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
-        let (name, ty) = ident;
+    "const" <id_ty: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Const,
-            name,
+            ident,
             ty,
             initializer: Some(initializer),
         }
@@ -366,21 +370,21 @@ VariableOrValueStatement: Declaration = {
 
 #[cfg(not(feature = "attributes"))]
 VariableDecl: Declaration = {
-    <l: @L> "var" <template_args: TemplateList?> <r: @R> <ident: OptionallyTypedIdent> =>? {
-        let (name, ty) = ident;
+    <l: @L> "var" <template_args: TemplateList?> <r: @R> <id_ty: OptionallyTypedIdent> =>? {
+        let (ident, ty) = id_ty;
         let address_space = parse_var_template(template_args)
             .map_err(|e| lalrpop_util::ParseError::User{ error: (l, e, r) })?;
         Ok(Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Var(address_space),
-            name,
+            ident,
             ty,
             initializer: None,
         })
     },
 };
 
-OptionallyTypedIdent: (String, Option<TypeExpression>) = {
+OptionallyTypedIdent: (Ident, Option<TypeExpression>) = {
     <Ident> <(":" <TypeSpecifier>)?>,
 };
 
@@ -395,22 +399,22 @@ GlobalVariableDecl: Declaration = {
 
 #[cfg(not(feature = "attributes"))]
 GlobalValueDecl: Declaration = {
-    "const" <ident: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
-        let (name, ty) = ident;
+    "const" <id_ty: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes: Vec::new(),
             kind: DeclarationKind::Const,
-            name,
+            ident,
             ty,
             initializer: Some(initializer),
         }
     },
-    <attributes: Attribute*> "override" <ident: OptionallyTypedIdent> <initializer: ("=" <ExpressionNode>)?> => {
-        let (name, ty) = ident;
+    <attributes: Attribute*> "override" <id_ty: OptionallyTypedIdent> <initializer: ("=" <ExpressionNode>)?> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes,
             kind: DeclarationKind::Override,
-            name,
+            ident,
             ty,
             initializer: initializer.map(Into::into),
         }
@@ -890,18 +894,18 @@ VariableUpdatingStatement: Statement = {
 
 FunctionDecl: Function = {
     <attributes: Attribute*> <header: FunctionHeader> <body: CompoundStatement> => {
-        let (name, parameters, return_attributes, return_type) = header;
-        Function { attributes, name, parameters, return_attributes, return_type, body }
+        let (ident, parameters, return_attributes, return_type) = header;
+        Function { attributes, ident, parameters, return_attributes, return_type, body }
     },
 };
 
-FunctionHeader: (String, Vec<FormalParameter>, Vec<Attribute>, Option<TypeExpression>) = {
-    "fn" <name: Ident> "(" <parameters: ParamList?> ")" <ret: ("->" <Attribute*> <TemplateElaboratedIdent>)?> => {
+FunctionHeader: (Ident, Vec<FormalParameter>, Vec<Attribute>, Option<TypeExpression>) = {
+    "fn" <ident: Ident> "(" <parameters: ParamList?> ")" <ret: ("->" <Attribute*> <TemplateElaboratedIdent>)?> => {
         let (return_attributes, return_type) = ret.map(|(return_attributes, return_type)| {
             (return_attributes, Some(return_type))
         }).unwrap_or_default();
         let parameters = parameters.unwrap_or_default();
-        (name, parameters, return_attributes, return_type)
+        (ident, parameters, return_attributes, return_type)
     },
 };
 
@@ -910,8 +914,8 @@ ParamList: Vec<FormalParameter> = {
 };
 
 Param: FormalParameter = {
-    <attributes: Attribute*> <name: Ident> ":" <ty: TypeSpecifier> => FormalParameter {
-        attributes, name, ty
+    <attributes: Attribute*> <ident: Ident> ":" <ty: TypeSpecifier> => FormalParameter {
+        attributes, ident, ty
     },
 };
 
@@ -986,7 +990,7 @@ ImportRelative: std::path::PathBuf = {
 ImportPath: Import = {
     <path: (<Ident> "/")+> <content: ImportContent> => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
-        path: std::path::PathBuf::from_iter(path.iter()), content
+        path: std::path::PathBuf::from_iter(path.iter().map(|ident| ident.name().to_string())), content
     },
     ItemImport => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
@@ -1007,15 +1011,15 @@ ImportContent: ImportContent = {
 
 #[cfg(feature = "imports")]
 StarImport: ImportItem = {
-    <name: Ident> "/" "*" <rename: ("as" <Ident>)?> => ImportItem {
-        name, rename
+    <ident: Ident> "/" "*" <rename: ("as" <Ident>)?> => ImportItem {
+        ident, rename
     }
 };
 
 #[cfg(feature = "imports")]
 ItemImport: ImportItem = {
-    <name: Ident> <rename: ("as" <Ident>)?> => ImportItem {
-        name, rename
+    <ident: Ident> <rename: ("as" <Ident>)?> => ImportItem {
+        ident, rename
     }
 };
 
@@ -1084,15 +1088,15 @@ DiagnosticDirective: DiagnosticDirective = {
 
 #[cfg(feature = "attributes")]
 StructDecl: Struct = {
-    <attributes: Attribute*> "struct" <name: Ident> <members: StructBodyDecl> => Struct {
-        attributes, name, members
+    <attributes: Attribute*> "struct" <ident: Ident> <members: StructBodyDecl> => Struct {
+        attributes, ident, members
     },
 };
 
 #[cfg(feature = "attributes")]
 TypeAliasDecl: TypeAlias = {
-    <attributes: Attribute*> "alias" <name: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
-        attributes, name, ty
+    <attributes: Attribute*> "alias" <ident: Ident> "=" <ty: TypeSpecifier> => TypeAlias {
+        attributes, ident, ty
     },
 };
 
@@ -1103,22 +1107,22 @@ VariableOrValueStatement: Declaration = {
         decl.initializer = Some(initializer);
         decl
     },
-    <attributes: Attribute*> "let" <ident: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
-        let (name, ty) = ident;
+    <attributes: Attribute*> "let" <id_ty: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes,
             kind: DeclarationKind::Let,
-            name,
+            ident,
             ty,
             initializer: Some(initializer),
         }
     },
-    <attributes: Attribute*> "const" <ident: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
-        let (name, ty) = ident;
+    <attributes: Attribute*> "const" <id_ty: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes,
             kind: DeclarationKind::Const,
-            name,
+            ident,
             ty,
             initializer: Some(initializer),
         }
@@ -1127,14 +1131,14 @@ VariableOrValueStatement: Declaration = {
 
 #[cfg(feature = "attributes")]
 VariableDecl: Declaration = {
-    <attributes: Attribute*> <l: @L> "var" <template_args: TemplateList?> <r: @R> <ident: OptionallyTypedIdent> =>? {
-        let (name, ty) = ident;
+    <attributes: Attribute*> <l: @L> "var" <template_args: TemplateList?> <r: @R> <id_ty: OptionallyTypedIdent> =>? {
+        let (ident, ty) = id_ty;
         let address_space = parse_var_template(template_args)
             .map_err(|e| lalrpop_util::ParseError::User{ error: (l, e, r) })?;
         Ok(Declaration {
             attributes,
             kind: DeclarationKind::Var(address_space),
-            name,
+            ident,
             ty,
             initializer: None,
         })
@@ -1151,22 +1155,22 @@ GlobalVariableDecl: Declaration = {
 
 #[cfg(feature = "attributes")]
 GlobalValueDecl: Declaration = {
-    <attributes: Attribute*> "const" <ident: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
-        let (name, ty) = ident;
+    <attributes: Attribute*> "const" <id_ty: OptionallyTypedIdent> "=" <initializer: ExpressionNode> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes,
             kind: DeclarationKind::Const,
-            name,
+            ident,
             ty,
             initializer: Some(initializer),
         }
     },
-    <attributes: Attribute*> "override" <ident: OptionallyTypedIdent> <initializer: ("=" <ExpressionNode>)?> => {
-        let (name, ty) = ident;
+    <attributes: Attribute*> "override" <id_ty: OptionallyTypedIdent> <initializer: ("=" <ExpressionNode>)?> => {
+        let (ident, ty) = id_ty;
         Declaration {
             attributes,
             kind: DeclarationKind::Override,
-            name,
+            ident,
             ty,
             initializer: initializer.map(Into::into),
         }
@@ -1182,7 +1186,7 @@ AssignmentStatement: AssignmentStatement = {
         attributes: vec![], operator, lhs, rhs
     },
     <l: @L> "_" <r: @R> "=" <rhs: ExpressionNode> => {
-        let lhs = Expression::TypeOrIdentifier("_".to_string().into());
+        let lhs = Expression::TypeOrIdentifier(Ident::new("_".to_string()).into());
         let span = (l..r).into();
         let lhs = Spanned::new(lhs, span);
         AssignmentStatement { attributes: vec![], operator: AssignmentOperator::Equal, lhs, rhs }

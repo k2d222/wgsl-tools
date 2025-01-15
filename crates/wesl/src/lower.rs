@@ -61,7 +61,7 @@ pub fn remove_type_aliases(wesl: &mut TranslationUnit) {
 
     while let Some(alias) = take_next_alias(wesl) {
         fn rec(ty: &mut TypeExpression, alias: &TypeAlias) {
-            if ty.template_args.is_none() && ty.name == alias.name {
+            if ty.template_args.is_none() && ty.ident == alias.ident {
                 *ty = alias.ty.clone();
                 return;
             }
@@ -74,4 +74,53 @@ pub fn remove_type_aliases(wesl: &mut TranslationUnit) {
             rec(ty, &alias)
         }
     }
+}
+
+/// Eliminate all const-declarations.
+///
+/// Replace usages of the const-declaration with its expression.
+pub fn remove_global_consts(wesl: &mut TranslationUnit) {
+    let take_next_const = |wesl: &mut TranslationUnit| {
+        let index = wesl.global_declarations.iter().position(|decl| {
+            matches!(
+                decl,
+                GlobalDeclaration::Declaration(Declaration {
+                    kind: DeclarationKind::Const,
+                    ..
+                })
+            )
+        });
+        index.map(|index| {
+            let decl = wesl.global_declarations.swap_remove(index);
+            match decl {
+                GlobalDeclaration::Declaration(d) => d,
+                _ => unreachable!(),
+            }
+        })
+    };
+
+    // TODO
+    // while let Some(decl) = take_next_const(wesl) {
+    //     fn rec(expr: &mut Expression, name: &str, repl: &Expression) {
+    //         match expr {
+    //             Expression::TypeOrIdentifier(ty)
+    //                 if ty.template_args.is_none() && ty.name == name =>
+    //             {
+    //                 *expr = repl.clone();
+    //                 return;
+    //             }
+    //             _ => {
+    //                 for expr in expr.exprs_mut() {
+    //                     rec(expr, name, repl);
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     for ty in wesl.exprs_mut() {
+    //         if let Some(init) = &decl.initializer {
+    //             rec(ty, &decl.name, init)
+    //         }
+    //     }
+    // }
 }

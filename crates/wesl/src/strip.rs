@@ -12,10 +12,10 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
     loop {
         for decl in &mut wgsl.global_declarations {
             if let Some(name) = decl_name(decl) {
-                if keep.contains(name) {
+                if keep.contains(&*name.name()) {
                     let used = decl
                         .uses_mut()
-                        .map(|name| name.to_string())
+                        .map(|ty| ty.ident.name().to_string())
                         .collect::<HashSet<String>>();
                     next_keep.extend(used);
                 }
@@ -32,7 +32,7 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
 
     wgsl.global_declarations.retain(|decl| {
         if let Some(name) = decl_name(decl) {
-            keep.contains(name)
+            keep.contains(&*name.name())
         } else {
             true
         }

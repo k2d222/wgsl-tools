@@ -1,5 +1,7 @@
 use super::{
-    ArrayInstance, LiteralInstance, MatInstance, StructInstance, SyntaxUtil, Ty, Type, VecInstance,
+    name_to_builtin_ident, ArrayInstance, LiteralInstance, MatInstance, StructInstance, SyntaxUtil,
+    Ty, Type, VecInstance, IDENT_ARRAY, IDENT_ATOMIC, IDENT_BOOL, IDENT_F16, IDENT_F32, IDENT_I32,
+    IDENT_PTR, IDENT_U32,
 };
 use crate::eval::{Context, EvalError, Instance};
 use wgsl_parse::{span::Spanned, syntax::*};
@@ -46,18 +48,18 @@ impl ToExpr for StructInstance {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         let decl = ctx
             .source
-            .decl_struct(self.name())
+            .decl_struct(self.ident())
             .expect("struct declaration not found");
         Ok(Expression::FunctionCall(FunctionCall {
             ty: TypeExpression {
-                name: self.name().to_string(),
+                ident: self.ident().clone(),
                 template_args: None,
             },
             arguments: decl
                 .members
                 .iter()
                 .map(|m| {
-                    self.member(&m.name)
+                    self.member(&m.ident)
                         .expect("struct member not found")
                         .to_expr(ctx)
                         .map(Spanned::from)
@@ -71,7 +73,7 @@ impl ToExpr for ArrayInstance {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         Ok(Expression::FunctionCall(FunctionCall {
             ty: TypeExpression {
-                name: format!("array"),
+                ident: Ident::new(format!("array")),
                 template_args: None,
             },
             arguments: self
@@ -86,7 +88,7 @@ impl ToExpr for VecInstance {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         Ok(Expression::FunctionCall(FunctionCall {
             ty: TypeExpression {
-                name: format!("vec{}", self.n()),
+                ident: Ident::new(format!("vec{}", self.n())),
                 template_args: None,
             },
             arguments: self
@@ -101,7 +103,7 @@ impl ToExpr for MatInstance {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         Ok(Expression::FunctionCall(FunctionCall {
             ty: TypeExpression {
-                name: format!("mat{}x{}", self.c(), self.r()),
+                ident: Ident::new(format!("mat{}x{}", self.c(), self.r())),
                 template_args: None,
             },
             arguments: self
@@ -116,68 +118,69 @@ impl ToExpr for Type {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         match self {
             Type::Bool => Ok(TypeExpression {
-                name: format!("bool"),
+                ident: IDENT_BOOL.clone(),
                 template_args: None,
             }),
             Type::AbstractInt => Err(E::NotConstructible(Type::AbstractInt)),
             Type::AbstractFloat => Err(E::NotConstructible(Type::AbstractFloat)),
             Type::I32 => Ok(TypeExpression {
-                name: format!("i32"),
+                ident: IDENT_I32.clone(),
                 template_args: None,
             }),
             Type::U32 => Ok(TypeExpression {
-                name: format!("u32"),
+                ident: IDENT_U32.clone(),
                 template_args: None,
             }),
             Type::F32 => Ok(TypeExpression {
-                name: format!("f32"),
+                ident: IDENT_F32.clone(),
                 template_args: None,
             }),
             Type::F16 => Ok(TypeExpression {
-                name: format!("f16"),
+                ident: IDENT_F16.clone(),
                 template_args: None,
             }),
             Type::Struct(s) => Ok(TypeExpression {
-                name: format!("{s}"),
+                ident: s.clone(),
                 template_args: None,
             }),
             Type::Array(Some(n), ty) => Ok(TypeExpression {
-                name: format!("array"),
+                ident: IDENT_ARRAY.clone(),
                 template_args: Some(vec![
                     TemplateArg {
                         expression: ty.to_expr(ctx)?.into(),
                     },
                     TemplateArg {
-                        expression: Expression::TypeOrIdentifier(n.to_string().into()).into(),
+                        expression: Expression::TypeOrIdentifier(Ident::new(n.to_string()).into())
+                            .into(),
                     },
                 ]),
             }),
             Type::Array(None, ty) => Ok(TypeExpression {
-                name: format!("array"),
+                ident: IDENT_ARRAY.clone(),
                 template_args: Some(vec![TemplateArg {
                     expression: ty.to_expr(ctx)?.into(),
                 }]),
             }),
             Type::Vec(n, ty) => Ok(TypeExpression {
-                name: format!("vec{n}"),
+                ident: name_to_builtin_ident(&format!("vec{n}")).unwrap(),
                 template_args: Some(vec![TemplateArg {
                     expression: ty.to_expr(ctx)?.into(),
                 }]),
             }),
             Type::Mat(c, r, ty) => Ok(TypeExpression {
-                name: format!("mat{c}x{r}"),
+                ident: name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
                 template_args: Some(vec![TemplateArg {
                     expression: ty.to_expr(ctx)?.into(),
                 }]),
             }),
             Type::Atomic(a) => Ok(TypeExpression {
-                name: format!("atomic"),
+                ident: IDENT_ATOMIC.clone(),
                 template_args: Some(vec![TemplateArg {
                     expression: a.to_expr(ctx)?.into(),
                 }]),
             }),
             Type::Ptr(space, p) => Ok(TypeExpression {
-                name: format!("ptr"),
+                ident: IDENT_PTR.clone(),
                 template_args: Some(vec![
                     TemplateArg {
                         expression: space.to_expr(ctx)?.into(),
@@ -196,7 +199,7 @@ impl ToExpr for Type {
 impl ToExpr for AddressSpace {
     fn to_expr(&self, _ctx: &Context) -> Result<Expression, E> {
         Ok(Expression::TypeOrIdentifier(TypeExpression::from(
-            self.to_string(),
+            Ident::new(self.to_string()),
         )))
     }
 }

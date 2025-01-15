@@ -52,6 +52,12 @@ impl Display for TranslationUnit {
     }
 }
 
+impl Display for Ident {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
 #[cfg(feature = "imports")]
 impl Display for Import {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -67,14 +73,14 @@ impl Display for ImportContent {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             ImportContent::Star(item) => {
-                write!(f, "{}/*", item.name)?;
+                write!(f, "{}/*", item.ident)?;
                 if let Some(rename) = &item.rename {
                     write!(f, " as {rename}")?;
                 }
                 Ok(())
             }
             ImportContent::Item(item) => {
-                write!(f, "{}", item.name)?;
+                write!(f, "{}", item.ident)?;
                 if let Some(rename) = &item.rename {
                     write!(f, " as {rename}")?;
                 }
@@ -157,7 +163,7 @@ impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let kind = &self.kind;
-        let name = &self.name;
+        let name = &self.ident;
         let typ = self
             .ty
             .iter()
@@ -215,7 +221,7 @@ impl Display for TypeAlias {
         if cfg!(feature = "attributes") {
             write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         }
-        let name = &self.name;
+        let name = &self.ident;
         let typ = &self.ty;
         write!(f, "alias {name} = {typ};")
     }
@@ -226,7 +232,7 @@ impl Display for Struct {
         if cfg!(feature = "attributes") {
             write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         }
-        let name = &self.name;
+        let name = &self.ident;
         let members = Indent(self.members.iter().format(",\n"));
         write!(f, "struct {name} {{\n{members}\n}}")
     }
@@ -235,7 +241,7 @@ impl Display for Struct {
 impl Display for StructMember {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        let name = &self.name;
+        let name = &self.ident;
         let typ = &self.ty;
         write!(f, "{name}: {typ}")
     }
@@ -244,7 +250,7 @@ impl Display for StructMember {
 impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        let name = &self.name;
+        let name = &self.ident;
         let params = self.parameters.iter().format(", ");
         let ret_ty = self.return_type.iter().format_with("", |ty, f| {
             f(&FormatFn(|f: &mut Formatter| {
@@ -262,7 +268,7 @@ impl Display for Function {
 impl Display for FormalParameter {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        let name = &self.name;
+        let name = &self.ident;
         let typ = &self.ty;
         write!(f, "{name}: {typ}")
     }
@@ -364,7 +370,7 @@ impl Display for Attribute {
 #[cfg(feature = "generics")]
 impl Display for TypeConstraint {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let name = &self.name;
+        let name = &self.ident;
         let variants = self.variants.iter().format(" | ");
         write!(f, "{name}, {variants}")
     }
@@ -503,7 +509,7 @@ impl Display for FunctionCall {
 
 impl Display for TypeExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let name = &self.name;
+        let name = &self.ident;
         let tplt = fmt_template(&self.template_args);
         write!(f, "{name}{tplt}")
     }

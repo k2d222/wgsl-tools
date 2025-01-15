@@ -13,7 +13,7 @@ use crate::{
 type E = CustomLalrError;
 
 pub(crate) enum Component {
-    Named(String),
+    Named(Ident),
     Index(ExpressionNode),
 }
 
@@ -160,10 +160,10 @@ fn zero_args(arguments: Option<Vec<ExpressionNode>>) -> bool {
         None => true,
     }
 }
-fn ident(expr: ExpressionNode) -> Option<String> {
+fn ident(expr: ExpressionNode) -> Option<Ident> {
     match expr.into_inner() {
         Expression::TypeOrIdentifier(TypeExpression {
-            name,
+            ident: name,
             template_args: None,
         }) => Some(name),
         _ => None,
@@ -188,7 +188,7 @@ pub(crate) fn parse_attribute(
             _ => Err(E::Attribute("blend_src", "expected 1 argument")),
         },
         "builtin" => match one_arg(args) {
-            Some(expr) => match ident(expr).and_then(|name| name.parse().ok()) {
+            Some(expr) => match ident(expr).and_then(|name| name.name().parse().ok()) {
                 Some(b) => Ok(Attribute::Builtin(b)),
                 _ => Err(E::Attribute(
                     "builtin",
@@ -203,14 +203,14 @@ pub(crate) fn parse_attribute(
         },
         "diagnostic" => match two_args(args) {
             Some((e1, e2)) => {
-                let severity = ident(e1).and_then(|name| name.parse().ok());
+                let severity = ident(e1).and_then(|name| name.name().parse().ok());
                 let rule = match e2.into_inner() {
                     Expression::TypeOrIdentifier(TypeExpression {
-                        name,
+                        ident: name,
                         template_args: None,
-                    }) => Some(name),
+                    }) => Some(name.name().to_string()),
                     Expression::NamedComponent(e) => {
-                        ident(e.base).map(|name| format!("{name}.{}", e.component))
+                        ident(e.base).map(|name| format!("{}.{}", name.name(), e.component))
                     }
                     _ => None,
                 };
@@ -236,8 +236,8 @@ pub(crate) fn parse_attribute(
         },
         "interpolate" => match two_args(args) {
             Some((e1, e2)) => {
-                let ty = ident(e1).and_then(|name| name.parse().ok());
-                let sampling = ident(e2).and_then(|name| name.parse().ok());
+                let ty = ident(e1).and_then(|name| name.name().parse().ok());
+                let sampling = ident(e2).and_then(|name| name.name().parse().ok());
                 match (ty, sampling) {
                     (Some(ty), Some(sampling)) => {
                         Ok(Attribute::Interpolate(InterpolateAttribute {
@@ -333,9 +333,12 @@ fn parse_attr_type(arguments: Option<Vec<ExpressionNode>>) -> Result<TypeConstra
     match two_args(arguments) {
         Some((e1, e2)) => match e1.into_inner() {
             Expression::TypeOrIdentifier(TypeExpression {
-                name,
+                ident: name,
                 template_args: None,
-            }) => parse_rec(e2.into_inner()).map(|variants| TypeConstraint { name, variants }),
+            }) => parse_rec(e2.into_inner()).map(|variants| TypeConstraint {
+                ident: name,
+                variants,
+            }),
             _ => Err(E::Attribute("type", "invalid first argument (type name)")),
         },
         None => Err(E::Attribute("type", "expected 2 arguments")),
@@ -346,9 +349,9 @@ pub(crate) fn parse_var_template(template_args: TemplateArgs) -> Result<Option<A
     fn ident(expr: ExpressionNode) -> Option<String> {
         match expr.into_inner() {
             Expression::TypeOrIdentifier(TypeExpression {
-                name,
+                ident: name,
                 template_args: None,
-            }) => Some(name),
+            }) => Some(name.name().to_string()),
             _ => None,
         }
     }

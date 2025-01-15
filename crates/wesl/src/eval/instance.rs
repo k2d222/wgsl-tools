@@ -7,7 +7,7 @@ use std::{
 use derive_more::derive::{From, IsVariant, Unwrap};
 use half::f16;
 use itertools::Itertools;
-use wgsl_parse::syntax::{AccessMode, AddressSpace};
+use wgsl_parse::syntax::{AccessMode, AddressSpace, Ident};
 
 use crate::eval::Ty;
 
@@ -137,28 +137,28 @@ pub enum LiteralInstance {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructInstance {
-    name: String,
-    members: Vec<(String, Instance)>,
+    ident: Ident,
+    members: Vec<(Ident, Instance)>,
 }
 
 impl StructInstance {
-    pub fn new(name: String, members: Vec<(String, Instance)>) -> Self {
-        Self { name, members }
+    pub fn new(ident: Ident, members: Vec<(Ident, Instance)>) -> Self {
+        Self { ident, members }
     }
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn ident(&self) -> &Ident {
+        &self.ident
     }
-    pub fn member(&self, name: &str) -> Option<&Instance> {
+    pub fn member(&self, ident: &Ident) -> Option<&Instance> {
         self.members
             .iter()
-            .find_map(|(n, inst)| (n == name).then_some(inst))
+            .find_map(|(id, inst)| (id == ident).then_some(inst))
     }
-    pub fn member_mut(&mut self, name: &str) -> Option<&mut Instance> {
+    pub fn member_mut(&mut self, ident: &Ident) -> Option<&mut Instance> {
         self.members
             .iter_mut()
-            .find_map(|(n, inst)| (n == name).then_some(inst))
+            .find_map(|(id, inst)| (id == ident).then_some(inst))
     }
-    pub fn iter_members(&self) -> impl Iterator<Item = &(String, Instance)> {
+    pub fn iter_members(&self) -> impl Iterator<Item = &(Ident, Instance)> {
         self.members.iter()
     }
 }
@@ -418,7 +418,7 @@ impl From<PtrInstance> for RefInstance {
 
 impl RefInstance {
     /// get a reference to a struct or vec member
-    pub fn view_member(&self, comp: String) -> Result<Self, E> {
+    pub fn view_member(&self, comp: Ident) -> Result<Self, E> {
         if !self.access.is_read() {
             return Err(E::NotRead);
         }
@@ -486,12 +486,12 @@ impl RefInstance {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MemView {
     Whole,
-    Member(String, Box<MemView>),
+    Member(Ident, Box<MemView>),
     Index(usize, Box<MemView>),
 }
 
 impl MemView {
-    pub fn append_member(&mut self, comp: String) {
+    pub fn append_member(&mut self, comp: Ident) {
         match self {
             MemView::Whole => *self = MemView::Member(comp, Box::new(MemView::Whole)),
             MemView::Member(_, v) | MemView::Index(_, v) => v.append_member(comp),

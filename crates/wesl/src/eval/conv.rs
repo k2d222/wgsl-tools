@@ -198,11 +198,11 @@ pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
         (Type::Struct(s1), Type::Struct(s2)) => {
             if PRELUDE.decl_struct(&s1).is_some()
                 && PRELUDE.decl_struct(&s2).is_some()
-                && s1.ends_with("abstract")
+                && s1.name().ends_with("abstract")
             {
-                if s2.ends_with("f32") {
+                if s2.name().ends_with("f32") {
                     Some(1)
-                } else if s2.ends_with("f16") {
+                } else if s2.name().ends_with("f16") {
                     Some(2)
                 } else {
                     None

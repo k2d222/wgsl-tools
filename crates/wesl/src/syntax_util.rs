@@ -25,7 +25,7 @@ impl<T: Iterator> IteratorExt for T {
 }
 
 /// keep track of declarations in a scope.
-type Scope = HashSet<String>;
+type Scope = HashSet<Ident>;
 
 /// A trait that iterates over identifiers that refer to a declaration in the global scope.
 /// It does that by keeping track of local declarations in function scope.
@@ -35,7 +35,15 @@ pub trait IterUses {
 
 impl IterUses for TranslationUnit {
     fn uses_mut(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.global_declarations.[].(IterUses::uses_mut))
+        query_mut!(self.{
+            #[cfg(feature = "attributes")]
+            global_directives.[].{
+                GlobalDirective::Diagnostic.attributes.[].(IterUses::uses_mut),
+                GlobalDirective::Enable.attributes.[].(IterUses::uses_mut),
+                GlobalDirective::Requires.attributes.[].(IterUses::uses_mut),
+            },
+            global_declarations.[].(IterUses::uses_mut)
+        })
     }
 }
 
@@ -47,13 +55,25 @@ impl IterUses for GlobalDeclaration {
                 ty.[],
                 initializer.[].(IterUses::uses_mut),
             },
-            GlobalDeclaration::TypeAlias.ty,
-            GlobalDeclaration::Struct.members.[].{
+            GlobalDeclaration::TypeAlias.{
+                #[cfg(feature = "attributes")]
                 attributes.[].(IterUses::uses_mut),
                 ty,
             },
+            GlobalDeclaration::Struct.{
+                #[cfg(feature = "attributes")]
+                attributes.[].(IterUses::uses_mut),
+                members.[].{
+                    attributes.[].(IterUses::uses_mut),
+                    ty,
+                },
+            },
             GlobalDeclaration::Function.(IterUses::uses_mut),
-            GlobalDeclaration::ConstAssert.expression.(IterUses::uses_mut),
+            GlobalDeclaration::ConstAssert.{
+                #[cfg(feature = "attributes")]
+                attributes.[].(IterUses::uses_mut),
+                expression.(IterUses::uses_mut),
+            }
         })
     }
 }
@@ -260,10 +280,10 @@ impl IterUses for Vec<StatementNode> {
                                             attributes.[].(IterUses::uses_mut),
                                             expression.(IterUses::uses_mut),
                                         }))
-                                        .filter(move |ty| !break_scope.contains(&ty.name));
+                                        .filter(move |ty| !break_scope.contains(&ty.ident));
                                     let cont_scope = cont_scope.clone();
                                     chain!(it1, it2, it3)
-                                        .filter(move |ty| !cont_scope.contains(&ty.name))
+                                        .filter(move |ty| !cont_scope.contains(&ty.ident))
                                 })
                                 };
                             chain!(it1, it2, it3, it4).boxed()
@@ -297,7 +317,7 @@ impl IterUses for Vec<StatementNode> {
                                 it1,
                                 it2,
                                 chain!(it3, it4, it5)
-                                    .filter(move |ty| !body_scope.contains(&ty.name))
+                                    .filter(move |ty| !body_scope.contains(&ty.ident))
                             )
                             .boxed()
                         }
@@ -337,7 +357,7 @@ impl IterUses for Vec<StatementNode> {
                             query_mut!(stat.expression.(IterUses::uses_mut)).boxed()
                         }
                         Statement::Declaration(stat) => {
-                            scope.insert(stat.name.clone());
+                            scope.insert(stat.ident.clone());
                             query_mut!(stat.{
                                 attributes.[].(IterUses::uses_mut),
                                 ty.[],
@@ -348,7 +368,7 @@ impl IterUses for Vec<StatementNode> {
                         _ => empty().boxed(),
                     };
                     let scope = scope.clone(); // this clone is unfortunate
-                    it.filter(move |ty| !scope.contains(&ty.name))
+                    it.filter(move |ty| !scope.contains(&ty.ident))
                 })
                 .collect_vec();
             (names, scope)
@@ -358,55 +378,19 @@ impl IterUses for Vec<StatementNode> {
 }
 
 #[allow(unused)]
-pub fn decl_name(decl: &GlobalDeclaration) -> Option<&str> {
+pub fn decl_name(decl: &GlobalDeclaration) -> Option<&Ident> {
     match decl {
         wgsl_parse::syntax::GlobalDeclaration::Void => None,
-        wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&d.name),
-        wgsl_parse::syntax::GlobalDeclaration::TypeAlias(d) => Some(&d.name),
-        wgsl_parse::syntax::GlobalDeclaration::Struct(d) => Some(&d.name),
-        wgsl_parse::syntax::GlobalDeclaration::Function(d) => Some(&d.name),
+        wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&d.ident),
+        wgsl_parse::syntax::GlobalDeclaration::TypeAlias(d) => Some(&d.ident),
+        wgsl_parse::syntax::GlobalDeclaration::Struct(d) => Some(&d.ident),
+        wgsl_parse::syntax::GlobalDeclaration::Function(d) => Some(&d.ident),
         wgsl_parse::syntax::GlobalDeclaration::ConstAssert(_) => None,
     }
 }
 
 #[allow(unused)]
-pub fn decl_name_mut(decl: &mut GlobalDeclaration) -> Option<&mut String> {
-    match decl {
-        wgsl_parse::syntax::GlobalDeclaration::Void => None,
-        wgsl_parse::syntax::GlobalDeclaration::Declaration(d) => Some(&mut d.name),
-        wgsl_parse::syntax::GlobalDeclaration::TypeAlias(d) => Some(&mut d.name),
-        wgsl_parse::syntax::GlobalDeclaration::Struct(d) => Some(&mut d.name),
-        wgsl_parse::syntax::GlobalDeclaration::Function(d) => Some(&mut d.name),
-        wgsl_parse::syntax::GlobalDeclaration::ConstAssert(_) => None,
-    }
-}
-
-#[allow(unused)]
-pub fn rename_decl(wesl: &mut TranslationUnit, old_name: &str, new_name: &str) {
-    fn rec(ty: &mut TypeExpression, old_name: &str, new_name: &str) {
-        if &ty.name == old_name {
-            ty.name = new_name.to_string();
-        }
-        for ty in ty.uses_mut() {
-            rec(ty, old_name, new_name);
-        }
-    }
-
-    for ty in wesl.uses_mut() {
-        rec(ty, old_name, new_name);
-    }
-
-    for decl in &mut wesl.global_declarations {
-        if let Some(name) = decl_name_mut(decl) {
-            if name == old_name {
-                *name = new_name.to_string();
-            }
-        }
-    }
-}
-
-#[allow(unused)]
-pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &str> {
+pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &Ident> {
     wesl.global_declarations
         .iter()
         .filter_map(|decl| match decl {
@@ -420,7 +404,7 @@ pub fn entry_points(wesl: &TranslationUnit) -> impl Iterator<Item = &str> {
                     )
                 })
                 .is_some()
-                .then_some(decl.name.as_str()),
+                .then_some(&decl.ident),
             _ => None,
         })
 }

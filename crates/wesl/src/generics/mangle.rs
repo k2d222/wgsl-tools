@@ -33,8 +33,8 @@ fn mangle_ty(ty: &TypeExpression) -> String {
         .as_ref()
         .map(|args| args.as_slice())
         .unwrap_or_default();
-    let n1 = ty.name.len();
-    let name = &ty.name;
+    let n1 = ty.ident.name().len();
+    let name = &ty.ident;
     let n2 = args.len();
     let args = args.iter().map(|arg| mangle_arg(arg)).format("");
     format!("{n1}_{name}{n2}_{args}")

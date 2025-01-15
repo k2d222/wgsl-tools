@@ -9,8 +9,8 @@ use crate::{attributes::statement_query_attributes, syntax_util::IterUses};
 #[derive(Clone, Debug, Error)]
 pub enum GenericsError {}
 
-pub fn replace_ty(ty: &mut TypeExpression, old_name: &str, new_ty: &TypeExpression) {
-    if &ty.name == old_name {
+pub fn replace_ty(ty: &mut TypeExpression, old_name: &Ident, new_ty: &TypeExpression) {
+    if &ty.ident == old_name {
         *ty = new_ty.clone();
     }
     for ty in ty.uses_mut() {
@@ -28,7 +28,7 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
             });
 
             let variants = ty_constrs
-                .map(|t| t.variants.iter().map(|v| (&t.name, v)))
+                .map(|t| t.variants.iter().map(|v| (&t.ident, v)))
                 .multi_cartesian_product();
 
             for variant in variants {
@@ -48,7 +48,7 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                         replace_ty(&mut ty, name2, ty2);
                     }
                     TypeConstraint {
-                        name: name.clone(),
+                        ident: name.clone(),
                         variants: vec![ty],
                     }
                 });
@@ -81,7 +81,8 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                     })
                     .collect_vec();
 
-                decl.name = mangle::mangle(&decl.name, &signature);
+                let new_name = mangle::mangle(decl.ident.name().as_str(), &signature);
+                decl.ident.rename(new_name);
                 new_decls.push(decl.into());
             }
         }
@@ -110,7 +111,8 @@ pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
                         })
                         .collect_vec();
 
-                    f.ty.name = mangle::mangle(&f.ty.name, &signature);
+                    let new_name = mangle::mangle(f.ty.ident.name().as_str(), &signature);
+                    f.ty.ident.rename(new_name);
                     f.ty.template_args = None;
                 }
             }
@@ -131,9 +133,10 @@ fn eval_ty_attr(
             .attributes_mut()
             .iter_mut()
             .find_map(|attr| match attr {
-                Attribute::Type(TypeConstraint { name, variants }) if name == &ty.name => {
-                    Some(variants)
-                }
+                Attribute::Type(TypeConstraint {
+                    ident: name,
+                    variants,
+                }) if name == &ty.ident => Some(variants),
                 _ => None,
             });
 
@@ -155,9 +158,10 @@ fn eval_ty_attrs(
         .iter()
         .map(|node| {
             let vars = node.attributes().iter().find_map(|attr| match attr {
-                Attribute::Type(TypeConstraint { name, variants }) if name == &ty.name => {
-                    Some(variants)
-                }
+                Attribute::Type(TypeConstraint {
+                    ident: name,
+                    variants,
+                }) if name == &ty.ident => Some(variants),
                 _ => None,
             });
 
@@ -177,9 +181,10 @@ fn eval_ty_attrs(
                 .attributes_mut()
                 .iter_mut()
                 .find_map(|attr| match attr {
-                    Attribute::Type(TypeConstraint { name, variants }) if name == &ty.name => {
-                        Some(variants)
-                    }
+                    Attribute::Type(TypeConstraint {
+                        ident: name,
+                        variants,
+                    }) if name == &ty.ident => Some(variants),
                     _ => None,
                 });
             if let Some(ty_attr) = ty_attr {

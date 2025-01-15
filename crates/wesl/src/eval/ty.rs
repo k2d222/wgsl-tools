@@ -16,7 +16,7 @@ pub enum Type {
     U32,
     F32,
     F16,
-    Struct(String),
+    Struct(Ident),
     // TODO: swap these two members
     Array(Option<usize>, Box<Type>),
     Vec(u8, Box<Type>),
@@ -186,7 +186,7 @@ impl Ty for LiteralInstance {
 }
 impl Ty for StructInstance {
     fn ty(&self) -> Type {
-        Type::Struct(self.name().to_string())
+        Type::Struct(self.ident().clone())
     }
 }
 
@@ -251,9 +251,9 @@ impl<T: Ty> EvalTy for T {
     }
 }
 
-impl EvalTy for &str {
+impl EvalTy for Ident {
     fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError> {
-        match *self {
+        match self.name().as_str() {
             "bool" => Ok(Type::Bool),
             "i32" => Ok(Type::I32),
             "u32" => Ok(Type::U32),
@@ -264,7 +264,7 @@ impl EvalTy for &str {
                     ty.eval_ty(ctx)
                 } else {
                     if ctx.source.decl_struct(self).is_some() {
-                        let ty = Type::Struct(self.to_string());
+                        let ty = Type::Struct(self.clone());
                         Ok(ty)
                     } else {
                         Err(EvalError::UnknownType(self.to_string()))
@@ -278,21 +278,42 @@ impl EvalTy for &str {
 impl EvalTy for TypeExpression {
     fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError> {
         if let Some(tplt) = &self.template_args {
-            match self.name.as_str() {
+            match self.ident.name().as_str() {
                 "array" => {
                     let tplt = ArrayTemplate::parse(&tplt, ctx)?;
                     Ok(tplt.ty())
                 }
                 "vec2" | "vec3" | "vec4" => {
                     let tplt = VecTemplate::parse(&tplt, ctx)?;
-                    let n = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
+                    let n = self
+                        .ident
+                        .name()
+                        .chars()
+                        .nth(3)
+                        .unwrap()
+                        .to_digit(10)
+                        .unwrap() as u8;
                     Ok(tplt.ty(n))
                 }
                 "mat2x2" | "mat2x3" | "mat2x4" | "mat3x2" | "mat3x3" | "mat3x4" | "mat4x2"
                 | "mat4x3" | "mat4x4" => {
                     let tplt = MatTemplate::parse(&tplt, ctx)?;
-                    let c = self.name.chars().nth(3).unwrap().to_digit(10).unwrap() as u8;
-                    let r = self.name.chars().nth(5).unwrap().to_digit(10).unwrap() as u8;
+                    let c = self
+                        .ident
+                        .name()
+                        .chars()
+                        .nth(3)
+                        .unwrap()
+                        .to_digit(10)
+                        .unwrap() as u8;
+                    let r = self
+                        .ident
+                        .name()
+                        .chars()
+                        .nth(5)
+                        .unwrap()
+                        .to_digit(10)
+                        .unwrap() as u8;
                     Ok(tplt.ty(c, r))
                 }
                 "ptr" => {
@@ -304,15 +325,15 @@ impl EvalTy for TypeExpression {
                     Ok(tplt.ty())
                 }
                 _ => {
-                    if let Some(ty) = ctx.source.resolve_alias(&self.name) {
+                    if let Some(ty) = ctx.source.resolve_alias(&self.ident) {
                         ty.eval_ty(ctx)
                     } else {
-                        Err(EvalError::UnexpectedTemplate(self.name.clone()))
+                        Err(EvalError::UnexpectedTemplate(self.ident.clone()))
                     }
                 }
             }
         } else {
-            self.name.as_str().eval_ty(ctx)
+            self.ident.eval_ty(ctx)
         }
     }
 }

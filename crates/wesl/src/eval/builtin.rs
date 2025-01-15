@@ -1,10 +1,12 @@
+use std::sync::LazyLock;
+
 use half::prelude::*;
 use num_traits::{real::Real, FromPrimitive, One, ToBytes, ToPrimitive, Zero};
 
 use itertools::{chain, izip, Itertools};
 use lazy_static::lazy_static;
 use wgsl_parse::syntax::{
-    AccessMode, AddressSpace, Attribute, CustomAttribute, Expression, GlobalDeclaration,
+    AccessMode, AddressSpace, Attribute, CustomAttribute, Expression, GlobalDeclaration, Ident,
     LiteralExpression, TemplateArg, TranslationUnit, TypeExpression,
 };
 
@@ -24,6 +26,52 @@ type E = EvalError;
 
 pub const EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::Bool(true));
 pub const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false));
+
+pub const IDENT_BOOL: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("bool")));
+pub const IDENT_I32: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("i32")));
+pub const IDENT_U32: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("u32")));
+pub const IDENT_F32: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("f32")));
+pub const IDENT_F16: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("f32")));
+pub const IDENT_ARRAY: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("array")));
+pub const IDENT_ATOMIC: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("atomic")));
+pub const IDENT_PTR: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("ptr")));
+pub const IDENT_VEC2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("vec2")));
+pub const IDENT_VEC3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("vec3")));
+pub const IDENT_VEC4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("vec4")));
+pub const IDENT_MAT2X2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat2x2")));
+pub const IDENT_MAT3X2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat3x2")));
+pub const IDENT_MAT4X2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat4x2")));
+pub const IDENT_MAT2X3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat2x3")));
+pub const IDENT_MAT3X3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat3x3")));
+pub const IDENT_MAT4X3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat4x3")));
+pub const IDENT_MAT2X4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat2x4")));
+pub const IDENT_MAT3X4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat3x4")));
+pub const IDENT_MAT4X4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat4x4")));
+
+pub fn name_to_builtin_ident(name: &str) -> Option<Ident> {
+    match name {
+        "bool" => Some(IDENT_BOOL.clone()),
+        "i32" => Some(IDENT_BOOL.clone()),
+        "u32" => Some(IDENT_BOOL.clone()),
+        "f32" => Some(IDENT_BOOL.clone()),
+        "array" => Some(IDENT_BOOL.clone()),
+        "atomic" => Some(IDENT_BOOL.clone()),
+        "ptr" => Some(IDENT_BOOL.clone()),
+        "vec2" => Some(IDENT_BOOL.clone()),
+        "vec3" => Some(IDENT_BOOL.clone()),
+        "vec4" => Some(IDENT_BOOL.clone()),
+        "mat2x2" => Some(IDENT_MAT2X2.clone()),
+        "mat3x2" => Some(IDENT_MAT3X2.clone()),
+        "mat4x2" => Some(IDENT_MAT4X2.clone()),
+        "mat2x3" => Some(IDENT_MAT2X3.clone()),
+        "mat3x3" => Some(IDENT_MAT3X3.clone()),
+        "mat4x3" => Some(IDENT_MAT4X3.clone()),
+        "mat2x4" => Some(IDENT_MAT2X4.clone()),
+        "mat3x4" => Some(IDENT_MAT3X4.clone()),
+        "mat4x4" => Some(IDENT_MAT4X4.clone()),
+        _ => None,
+    }
+}
 
 lazy_static! {
     pub static ref ATTR_INTRINSIC: Attribute = Attribute::Custom(CustomAttribute {
@@ -49,7 +97,7 @@ lazy_static! {
             match decl {
                 GlobalDeclaration::Struct(s) => {
                     if s.attributes.contains(&attr_internal) {
-                        s.name = format!("__{}", s.name);
+                        s.ident = Ident::new(format!("__{}", s.ident));
                     }
                 }
                 GlobalDeclaration::Function(f) => {
@@ -76,7 +124,7 @@ pub fn call_builtin(
     ctx: &mut Context,
 ) -> Result<Instance, E> {
     match (
-        ty.name.as_str(),
+        ty.ident.name().as_str(),
         ty.template_args.as_ref().map(|tplt| tplt.as_slice()),
         args.as_slice(),
     ) {
@@ -238,7 +286,7 @@ impl Instance {
             Type::U32 => Ok(LiteralInstance::U32(0).into()),
             Type::F32 => Ok(LiteralInstance::F32(0.0).into()),
             Type::F16 => Ok(LiteralInstance::F16(f16::zero()).into()),
-            Type::Struct(name) => StructInstance::zero_value(name, ctx).map(Into::into),
+            Type::Struct(ident) => StructInstance::zero_value(ident.clone(), ctx).map(Into::into),
             Type::Array(Some(n), a_ty) => ArrayInstance::zero_value(*n, a_ty, ctx).map(Into::into),
             Type::Array(None, _) => Err(E::NotConstructible(ty.clone())),
             Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
@@ -267,10 +315,10 @@ impl LiteralInstance {
 
 impl StructInstance {
     /// zero-value initialize a struct instance.
-    pub fn zero_value(name: &str, ctx: &mut Context) -> Result<Self, E> {
+    pub fn zero_value(ident: Ident, ctx: &mut Context) -> Result<Self, E> {
         let decl = ctx
             .source
-            .decl_struct(name)
+            .decl_struct(&ident)
             .expect("struct declaration not found");
 
         let members = decl
@@ -279,11 +327,11 @@ impl StructInstance {
             .map(|m| {
                 let ty = m.ty.eval_ty(ctx)?;
                 let val = Instance::zero_value(&ty, ctx)?;
-                Ok((m.name.clone(), val))
+                Ok((m.ident.clone(), val))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(StructInstance::new(name.to_string(), members))
+        Ok(StructInstance::new(ident, members))
     }
 }
 
@@ -445,7 +493,7 @@ impl PtrTemplate {
         match (it.next(), it.next(), it.next(), it.next()) {
             (
                 Some(Expression::TypeOrIdentifier(TypeExpression {
-                    name: e1,
+                    ident: e1,
                     template_args: None,
                 })),
                 Some(Expression::TypeOrIdentifier(e2)),
@@ -453,6 +501,7 @@ impl PtrTemplate {
                 None,
             ) => {
                 let mut space = e1
+                    .name()
                     .parse()
                     .map_err(|()| EvalError::Builtin("invalid pointer storage space"))?;
                 let ty = e2.eval_ty(ctx)?;
@@ -462,10 +511,12 @@ impl PtrTemplate {
                 let access = if let Some(e3) = e3 {
                     match e3 {
                         Expression::TypeOrIdentifier(TypeExpression {
-                            name,
+                            ident,
                             template_args: None,
                         }) => Some(
-                            name.parse()
+                            ident
+                                .name()
+                                .parse()
                                 .map_err(|()| EvalError::Builtin("invalid pointer access mode"))?,
                         ),
                         _ => Err(EvalError::Builtin("invalid pointer access mode"))?,
@@ -575,7 +626,7 @@ fn call_array_t(tplt: ArrayTemplate, args: &[Instance]) -> Result<Instance, E> {
 
     if Some(args.len()) != tplt.n {
         return Err(E::ParamCount(
-            "array".to_string(),
+            IDENT_ARRAY.clone(),
             tplt.n.unwrap_or_default(),
             args.len(),
         ));
@@ -765,7 +816,11 @@ fn call_mat_t(
         // overload 2: mat from column vectors
         if ty.is_vec() {
             if args.len() != c {
-                return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
+                return Err(E::ParamCount(
+                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
+                    c,
+                    args.len(),
+                ));
             }
 
             Ok(MatInstance::from_cols(args).into())
@@ -773,7 +828,11 @@ fn call_mat_t(
         // overload 3: mat from scalar values
         else {
             if args.len() != c * r {
-                return Err(E::ParamCount(format!("mat{c}x{r}"), c * r, args.len()));
+                return Err(E::ParamCount(
+                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
+                    c * r,
+                    args.len(),
+                ));
             }
 
             let args = args
@@ -823,7 +882,11 @@ fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
         // overload 2: mat from column vectors
         if ty.is_vec() {
             if args.len() != c {
-                return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
+                return Err(E::ParamCount(
+                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
+                    c,
+                    args.len(),
+                ));
             }
 
             Ok(MatInstance::from_cols(args).into())
@@ -831,7 +894,11 @@ fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
         // overload 3: mat from scalar values
         else {
             if args.len() != c * r {
-                return Err(E::ParamCount(format!("mat{c}x{r}"), c * r, args.len()));
+                return Err(E::ParamCount(
+                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
+                    c * r,
+                    args.len(),
+                ));
             }
             let args = args
                 .chunks(r)
@@ -894,7 +961,11 @@ fn call_vec_t(
             })
             .collect_vec();
         if args.len() != n {
-            return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
+            return Err(E::ParamCount(
+                name_to_builtin_ident(&format!("vec{n}")).unwrap(),
+                n,
+                args.len(),
+            ));
         }
 
         let comps = args
@@ -940,7 +1011,11 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
             .cloned()
             .collect_vec();
         if args.len() != n {
-            return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
+            return Err(E::ParamCount(
+                name_to_builtin_ident(&format!("vec{n}")).unwrap(),
+                n,
+                args.len(),
+            ));
         }
 
         let comps =
@@ -1444,8 +1519,11 @@ fn call_frexp(e: &Instance) -> Result<Instance, E> {
     const ERR: E = E::Builtin("`frexp` expects a float or vector of float argument");
     fn make_frexp_inst(ty: &'static str, fract: Instance, exp: Instance) -> Instance {
         Instance::Struct(StructInstance::new(
-            format!("__frexp_result_{ty}"),
-            vec![("fract".to_string(), fract), ("exp".to_string(), exp)],
+            Ident::new(format!("__frexp_result_{ty}")),
+            vec![
+                (Ident::new("fract".to_string()), fract),
+                (Ident::new("exp".to_string()), exp),
+            ],
         ))
     }
     // from: https://docs.rs/libm/latest/src/libm/math/frexp.rs.html#1-20

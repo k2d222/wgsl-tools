@@ -85,10 +85,10 @@ impl Instance {
                             offset += size;
                             Instance::from_buffer(buf, &ty, ctx)?
                         };
-                        Some((m.name.clone(), inst))
+                        Some((m.ident.clone(), inst))
                     })
                     .collect::<Option<Vec<_>>>()?;
-                Some(StructInstance::new(s.to_string(), members).into())
+                Some(StructInstance::new(s.clone(), members).into())
             }
             Type::Array(Some(n), ty) => {
                 let mut offset = 0;
@@ -176,11 +176,11 @@ impl HostShareable for LiteralInstance {
 impl HostShareable for StructInstance {
     fn to_buffer(&self, ctx: &mut Context) -> Option<Vec<u8>> {
         let mut buf = Vec::new();
-        let decl = ctx.source.decl_struct(self.name())?;
+        let decl = ctx.source.decl_struct(self.ident())?;
         for (i, (name, inst)) in self.iter_members().enumerate() {
             let ty = inst.ty();
             let len = buf.len() as u32;
-            let m = decl.members.iter().find(|m| m.name == *name)?;
+            let m = decl.members.iter().find(|m| m.ident == *name)?;
             let size = m
                 .eval_size(ctx)
                 .ok()
