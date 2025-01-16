@@ -107,7 +107,7 @@ impl GlobalDeclaration {
             GlobalDeclaration::ConstAssert(_) => None,
         }
     }
-    pub fn name_mut(&mut self) -> Option<&mut Ident> {
+    pub fn ident_mut(&mut self) -> Option<&mut Ident> {
         match self {
             GlobalDeclaration::Void => None,
             GlobalDeclaration::Declaration(decl) => Some(&mut decl.ident),

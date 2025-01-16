@@ -54,6 +54,9 @@ impl Ident {
         let mut old = self.name();
         *old = name;
     }
+    pub fn use_count(&self) -> usize {
+        Arc::<_>::strong_count(&self.0)
+    }
 }
 
 impl PartialEq for Ident {

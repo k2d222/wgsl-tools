@@ -1,4 +1,4 @@
-use crate::{Diagnostic, Error};
+use crate::{syntax_util::retarget_idents, Diagnostic, Error};
 
 use wgsl_parse::syntax::TranslationUnit;
 
@@ -59,11 +59,12 @@ pub trait Resolver {
         source: &str,
         resource: &Resource,
     ) -> Result<TranslationUnit, ResolveError> {
-        let wesl = source.parse().map_err(|e| {
+        let mut wesl = source.parse().map_err(|e| {
             Diagnostic::from(e)
                 .with_file(resource.clone())
                 .with_source(source.to_string())
         })?;
+        retarget_idents(&mut wesl); // it's important to call that early on to have identifiers point at the right declaration.
         Ok(wesl)
     }
     fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, ResolveError> {
@@ -269,6 +270,7 @@ impl<'a, F: ResolveFn> Resolver for Preprocessor<'a, F> {
                 .with_file(resource.clone())
                 .with_source(source.to_string())
         })?;
+        retarget_idents(&mut wesl); // it's important to call that early on to have identifiers point at the right declaration.
         (self.preprocess)(&mut wesl).map_err(|e| {
             Diagnostic::from(e)
                 .with_file(resource.clone())

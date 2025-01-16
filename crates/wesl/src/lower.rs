@@ -1,4 +1,4 @@
-use crate::{sourcemap::NoSourceMap, syntax_util::IterUses, Error, SourceMap};
+use crate::{sourcemap::NoSourceMap, Error, SourceMap};
 
 #[cfg(feature = "attributes")]
 use crate::attributes::query_attributes;
@@ -22,6 +22,7 @@ pub fn lower_sourcemap(
     }
 
     remove_type_aliases(wesl);
+    remove_global_consts(wesl);
 
     #[cfg(feature = "eval")]
     {
@@ -42,8 +43,8 @@ pub fn lower(wesl: &mut TranslationUnit) -> Result<(), Error> {
     lower_sourcemap(wesl, &NoSourceMap)
 }
 
-// Eliminate all type aliases.
-// Naga doesn't like this: `alias T = u32; vec<T>`
+/// Eliminate all type aliases.
+/// Naga doesn't like this: `alias T = u32; vec<T>`
 pub fn remove_type_aliases(wesl: &mut TranslationUnit) {
     let take_next_alias = |wesl: &mut TranslationUnit| {
         let index = wesl
@@ -59,26 +60,19 @@ pub fn remove_type_aliases(wesl: &mut TranslationUnit) {
         })
     };
 
-    while let Some(alias) = take_next_alias(wesl) {
-        fn rec(ty: &mut TypeExpression, alias: &TypeAlias) {
-            if ty.template_args.is_none() && ty.ident == alias.ident {
-                *ty = alias.ty.clone();
-                return;
-            }
-            for ty in ty.uses_mut() {
-                rec(ty, alias);
-            }
-        }
-
-        for ty in wesl.uses_mut() {
-            rec(ty, &alias)
-        }
+    while let Some(mut alias) = take_next_alias(wesl) {
+        // we rename the alias and all references to its type expression,
+        // and drop the alias declaration.
+        alias.ident.rename(format!("{}", alias.ty));
     }
 }
 
 /// Eliminate all const-declarations.
 ///
 /// Replace usages of the const-declaration with its expression.
+///
+/// # Panics
+/// panics if the const-declaration is ill-formed, i.e. has no initializer.
 pub fn remove_global_consts(wesl: &mut TranslationUnit) {
     let take_next_const = |wesl: &mut TranslationUnit| {
         let index = wesl.global_declarations.iter().position(|decl| {
@@ -99,28 +93,10 @@ pub fn remove_global_consts(wesl: &mut TranslationUnit) {
         })
     };
 
-    // TODO
-    // while let Some(decl) = take_next_const(wesl) {
-    //     fn rec(expr: &mut Expression, name: &str, repl: &Expression) {
-    //         match expr {
-    //             Expression::TypeOrIdentifier(ty)
-    //                 if ty.template_args.is_none() && ty.name == name =>
-    //             {
-    //                 *expr = repl.clone();
-    //                 return;
-    //             }
-    //             _ => {
-    //                 for expr in expr.exprs_mut() {
-    //                     rec(expr, name, repl);
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     for ty in wesl.exprs_mut() {
-    //         if let Some(init) = &decl.initializer {
-    //             rec(ty, &decl.name, init)
-    //         }
-    //     }
-    // }
+    while let Some(mut decl) = take_next_const(wesl) {
+        // we rename the const and all references to its expression in parentheses,
+        // and drop the const declaration.
+        decl.ident
+            .rename(format!("({})", decl.initializer.unwrap()));
+    }
 }

@@ -6,7 +6,7 @@ use wgsl_parse::syntax::*;
 fn mangle_decls(wgsl: &mut TranslationUnit, resource: &Resource, mangler: &impl Mangler) {
     wgsl.global_declarations
         .iter_mut()
-        .filter_map(|decl| decl.name_mut())
+        .filter_map(|decl| decl.ident_mut())
         .for_each(|ident| {
             let new_name = mangler.mangle(&resource, ident.name().as_str());
             ident.rename(new_name.clone());

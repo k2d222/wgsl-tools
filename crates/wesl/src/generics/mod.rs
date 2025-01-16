@@ -4,7 +4,7 @@ use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{syntax::*, visit::VisitMut, Decorated};
 
-use crate::{attributes::statement_query_attributes, syntax_util::IterUses};
+use crate::{attributes::statement_query_attributes, syntax_util::IterIdents};
 
 #[derive(Clone, Debug, Error)]
 pub enum GenericsError {}
@@ -13,7 +13,7 @@ pub fn replace_ty(ty: &mut TypeExpression, old_name: &Ident, new_ty: &TypeExpres
     if &ty.ident == old_name {
         *ty = new_ty.clone();
     }
-    for ty in ty.uses_mut() {
+    for ty in ty.iter_idents() {
         replace_ty(ty, old_name, new_ty);
     }
 }
@@ -36,11 +36,12 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                 decl.attributes
                     .retain(|attr| !matches!(attr, Attribute::Type(_)));
 
-                for (old_name, new_ty) in &variant {
-                    for ty in decl.uses_mut() {
-                        replace_ty(ty, old_name, new_ty);
-                    }
-                }
+                // TODO
+                // for (old_id, new_ty) in &variant {
+                //     for ty in decl.iter_idents() {
+                //         replace_ty(ty, old_id, new_ty);
+                //     }
+                // }
 
                 let constraints = variant.iter().map(|&(name, ty)| {
                     let mut ty = ty.clone();

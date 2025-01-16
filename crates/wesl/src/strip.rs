@@ -1,22 +1,33 @@
 use std::collections::HashSet;
 
-use wgsl_parse::syntax::TranslationUnit;
+use wgsl_parse::syntax::{Ident, TranslationUnit};
 
-use crate::syntax_util::{decl_name, IterUses};
+use crate::syntax_util::{decl_ident, IterIdents};
 
 /// removes unused declarations.
 pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
-    let mut keep: HashSet<String> = HashSet::from_iter(keep.iter().cloned());
-    let mut next_keep: HashSet<String> = HashSet::new();
+    let global_idents = wgsl
+        .global_declarations
+        .iter()
+        .filter_map(|decl| decl.ident().cloned())
+        .collect::<HashSet<_>>();
+
+    let mut keep: HashSet<Ident> = HashSet::from_iter(
+        keep.iter()
+            .filter_map(|name| global_idents.iter().find(|ident| ident.name().eq(name)))
+            .cloned(),
+    );
+    let mut next_keep: HashSet<Ident> = HashSet::new();
 
     loop {
         for decl in &mut wgsl.global_declarations {
-            if let Some(name) = decl_name(decl) {
-                if keep.contains(&*name.name()) {
+            if let Some(ident) = decl_ident(decl) {
+                if keep.contains(ident) {
                     let used = decl
-                        .uses_mut()
-                        .map(|ty| ty.ident.name().to_string())
-                        .collect::<HashSet<String>>();
+                        .iter_idents()
+                        .filter(|ty| global_idents.contains(&ty.ident))
+                        .map(|ty| ty.ident.clone())
+                        .collect::<HashSet<_>>();
                     next_keep.extend(used);
                 }
             }
@@ -31,8 +42,8 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
     }
 
     wgsl.global_declarations.retain(|decl| {
-        if let Some(name) = decl_name(decl) {
-            keep.contains(&*name.name())
+        if let Some(ident) = decl_ident(decl) {
+            keep.contains(ident)
         } else {
             true
         }
