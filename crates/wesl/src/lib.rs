@@ -151,6 +151,7 @@ pub struct CompileOptions {
     pub use_condcomp: bool,
     pub use_generics: bool,
     pub use_stripping: bool,
+    pub use_lower: bool,
     pub entry_points: Option<Vec<String>>,
     pub features: HashMap<String, bool>,
 }
@@ -162,6 +163,7 @@ impl Default for CompileOptions {
             use_condcomp: true,
             use_generics: false,
             use_stripping: true,
+            use_lower: false,
             entry_points: Default::default(),
             features: Default::default(),
         }
@@ -237,6 +239,7 @@ impl Wesl {
                 use_condcomp: true,
                 use_generics: false,
                 use_stripping: true,
+                use_lower: false,
                 entry_points: None,
                 features: Default::default(),
             },
@@ -264,6 +267,7 @@ impl Wesl {
                 use_condcomp: true,
                 use_generics: true,
                 use_stripping: true,
+                use_lower: true,
                 entry_points: None,
                 features: Default::default(),
             },
@@ -288,6 +292,7 @@ impl Wesl {
                 use_condcomp: false,
                 use_generics: false,
                 use_stripping: false,
+                use_lower: false,
                 entry_points: None,
                 features: Default::default(),
             },
@@ -430,6 +435,29 @@ impl Wesl {
     /// Spec: not yet available.
     pub fn use_stripping(mut self, val: bool) -> Self {
         self.options.use_stripping = val;
+        self
+    }
+    /// Transform an output into a simplified WGSL that is better supported by implementors.
+    ///
+    /// Currently, lower performs the following transforms:
+    /// * remove aliases (inlined)
+    /// * remove consts (inlined)
+    /// * remove deprecated, non-standard attributes
+    /// * remove import declarations
+    ///
+    /// Customizing this behavior is not possible currently. The following transforms may
+    /// be available in the future:
+    /// * make variable types explicit
+    /// * make implicit conversions (conversion rank) explicit
+    /// * concretize abstract literals
+    /// * remove unused variables / code with no side-effects
+    /// * evaluate const-expressions
+    ///
+    /// # WESL Reference
+    /// Lowering is an *experimental* WESL extension.
+    /// Spec: not yet available.
+    pub fn use_lower(mut self, val: bool) -> Self {
+        self.options.use_lower = val;
         self
     }
     /// If stripping is enabled, specifies which entrypoints to keep in the final WGSL.
@@ -810,10 +838,14 @@ pub fn compile_sourcemap(
     for entry in &main_names {
         sourcemap.add_decl(entry.clone(), entrypoint.clone(), entry.clone());
     }
-    let comp = comp.and_then(|mut wesl| {
-        lower_sourcemap(&mut wesl, &sourcemap)?;
-        Ok(wesl)
-    });
+    let comp = if options.use_lower {
+        comp.and_then(|mut wesl| {
+            lower_sourcemap(&mut wesl, &sourcemap)?;
+            Ok(wesl)
+        })
+    } else {
+        comp
+    };
     (comp, sourcemap)
 }
 

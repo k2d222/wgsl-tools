@@ -9,12 +9,12 @@ use crate::{attributes::statement_query_attributes, syntax_util::IterIdents};
 #[derive(Clone, Debug, Error)]
 pub enum GenericsError {}
 
-pub fn replace_ty(ty: &mut TypeExpression, old_name: &Ident, new_ty: &TypeExpression) {
-    if &ty.ident == old_name {
+fn replace_ty(ty: &mut TypeExpression, old_ident: &Ident, new_ty: &TypeExpression) {
+    if &ty.ident == old_ident {
         *ty = new_ty.clone();
     }
     for ty in ty.iter_idents() {
-        replace_ty(ty, old_name, new_ty);
+        replace_ty(ty, old_ident, new_ty);
     }
 }
 

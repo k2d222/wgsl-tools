@@ -89,6 +89,9 @@ struct CompOptsArgs {
     /// Disable stripping unused declarations
     #[arg(long)]
     no_strip: bool,
+    /// Disable lowering output to compatibility-mode WGSL
+    #[arg(long)]
+    no_lower: bool,
     /// Root module declaration names to keep. Keeps all root module declarations by
     /// default. Can be repeated to keep multiple declarations
     #[arg(long)]
@@ -112,6 +115,7 @@ impl From<&CompOptsArgs> for CompileOptions {
             use_condcomp: !opts.no_cond_comp,
             use_generics: !opts.no_generics,
             use_stripping: !opts.no_strip,
+            use_lower: !opts.no_lower,
             entry_points: opts.keep.clone(),
             features,
         }
