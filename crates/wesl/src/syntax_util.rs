@@ -27,6 +27,18 @@ pub trait IterIdents {
     fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression>;
 }
 
+impl IterIdents for GlobalDeclaration {
+    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
+        query_mut!(self.{
+            GlobalDeclaration::Declaration.(x => x.iter_idents()),
+            GlobalDeclaration::TypeAlias.(x => x.iter_idents()),
+            GlobalDeclaration::Struct.(x => x.iter_idents()),
+            GlobalDeclaration::Function.(x => x.iter_idents()),
+            GlobalDeclaration::ConstAssert.(x => x.iter_idents())
+        })
+    }
+}
+
 impl IterIdents for Declaration {
     fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
         query_mut!(self.{
@@ -56,6 +68,24 @@ impl IterIdents for Struct {
                 attributes.[].(x => x.iter_idents()),
                 ty,
             },
+        })
+    }
+}
+
+impl IterIdents for Function {
+    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
+        query_mut!(self.{
+            attributes.[].(x => x.iter_idents()),
+            parameters.[].{
+                attributes.[].(x => x.iter_idents()),
+                ty,
+            },
+            return_attributes.[].(x => x.iter_idents()),
+            return_type.[],
+            body.{
+                attributes.[].(x => x.iter_idents()),
+                statements.[].(x => x.iter_idents()),
+            }
         })
     }
 }
@@ -138,49 +168,6 @@ impl IterIdents for ExpressionNode {
 impl IterIdents for TypeExpression {
     fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
         query_mut!(self.template_args.[].[].(x => x.iter_idents()))
-    }
-}
-
-impl IterIdents for GlobalDeclaration {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            GlobalDeclaration::Declaration.{
-                attributes.[].(x => x.iter_idents()),
-                ty.[],
-                initializer.[].(x => x.iter_idents()),
-            },
-            GlobalDeclaration::TypeAlias.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                ty,
-            },
-            GlobalDeclaration::Struct.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                members.[].{
-                    attributes.[].(x => x.iter_idents()),
-                    ty,
-                },
-            },
-            GlobalDeclaration::Function.{
-                attributes.[].(x => x.iter_idents()),
-                parameters.[].{
-                    attributes.[].(x => x.iter_idents()),
-                    ty,
-                },
-                return_attributes.[].(x => x.iter_idents()),
-                return_type.[],
-                body.{
-                    attributes.[].(x => x.iter_idents()),
-                    statements.[].(x => x.iter_idents()),
-                }
-            },
-            GlobalDeclaration::ConstAssert.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                expression.(x => x.iter_idents()),
-            }
-        })
     }
 }
 
@@ -585,7 +572,7 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
                     initializer.[].(x => x.iter_idents()),
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
-                scope.to_mut().insert(s.ident.clone());
+                scope.to_mut().replace(s.ident.clone());
             }
         });
         scope
@@ -602,6 +589,18 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
             }
             GlobalDeclaration::Struct(d) => d.iter_idents().for_each(|ty| retarget_ty(ty, &scope)),
             GlobalDeclaration::Function(d) => {
+                #[cfg(feature = "generics")]
+                let scope = {
+                    let mut scope = scope.clone();
+                    scope
+                        .to_mut()
+                        .extend(d.attributes.iter().filter_map(|attr| match attr {
+                            Attribute::Type(attr) => Some(attr.ident.clone()),
+                            _ => None,
+                        }));
+                    scope
+                };
+
                 let d2 = &mut *d; // COMBAK: not sure why this is needed?
                 query_mut!(d2.{
                     attributes.[].(x => x.iter_idents()),

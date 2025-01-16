@@ -37,7 +37,7 @@ fn mangle_ty(ty: &TypeExpression) -> String {
     let name = &ty.ident;
     let n2 = args.len();
     let args = args.iter().map(|arg| mangle_arg(arg)).format("");
-    format!("{n1}_{name}{n2}_{args}")
+    format!("{n1}{name}{n2}_{args}")
 }
 
 // https://refspecs.linuxbase.org/cxxabi-1.86.html#mangling
@@ -45,5 +45,5 @@ pub fn mangle(name: &str, signature: &[TypeExpression]) -> String {
     let n1 = name.len();
     let n2 = signature.len();
     let sig = signature.iter().map(|ty| mangle_ty(ty)).format("");
-    format!("_WESL{n1}_{name}{n2}_{sig}")
+    format!("_WESL{n1}{name}{n2}_{sig}")
 }

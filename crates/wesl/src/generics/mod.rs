@@ -32,16 +32,23 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                 .multi_cartesian_product();
 
             for variant in variants {
+                if variant.is_empty() {
+                    break;
+                }
                 let mut decl = decl.clone();
                 decl.attributes
                     .retain(|attr| !matches!(attr, Attribute::Type(_)));
 
-                // TODO
-                // for (old_id, new_ty) in &variant {
-                //     for ty in decl.iter_idents() {
-                //         replace_ty(ty, old_id, new_ty);
-                //     }
-                // }
+                // rename uses of the generic args with the concrete variant
+                for (old_id, new_ty) in &variant {
+                    let new_id = Ident::new(format!("{new_ty}"));
+                    for ty in decl.iter_idents() {
+                        if &ty.ident == *old_id {
+                            ty.ident = new_id.clone();
+                            ty.template_args = None;
+                        }
+                    }
+                }
 
                 let constraints = variant.iter().map(|&(name, ty)| {
                     let mut ty = ty.clone();
@@ -83,7 +90,7 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                     .collect_vec();
 
                 let new_name = mangle::mangle(decl.ident.name().as_str(), &signature);
-                decl.ident.rename(new_name);
+                decl.ident = Ident::new(new_name);
                 new_decls.push(decl.into());
             }
         }
@@ -99,6 +106,12 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
 }
 
 pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
+    let idents = wesl
+        .global_declarations
+        .iter()
+        .filter_map(|decl| decl.ident())
+        .cloned()
+        .collect_vec();
     for expr in VisitMut::<ExpressionNode>::visit_mut(wesl) {
         match expr.node_mut() {
             Expression::FunctionCall(f) => {
@@ -113,7 +126,11 @@ pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
                         .collect_vec();
 
                     let new_name = mangle::mangle(f.ty.ident.name().as_str(), &signature);
-                    f.ty.ident.rename(new_name);
+                    f.ty.ident = idents
+                        .iter()
+                        .find(|ident| &*ident.name() == &new_name)
+                        .unwrap()
+                        .clone();
                     f.ty.template_args = None;
                 }
             }
