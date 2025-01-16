@@ -82,33 +82,29 @@ fn parse_hex_abstract_int(lex: &mut logos::Lexer<Token>) -> Option<i64> {
 fn parse_dec_i32(lex: &mut logos::Lexer<Token>) -> Option<i32> {
     let options = &lexical::parse_integer_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial_with_options::<i32, _, DEC_FORMAT>(str, options)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<i32, _, DEC_FORMAT>(str, options).ok()
 }
 
 fn parse_hex_i32(lex: &mut logos::Lexer<Token>) -> Option<i32> {
     let options = &lexical::parse_integer_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial_with_options::<i32, _, HEX_FORMAT>(str, options)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<i32, _, HEX_FORMAT>(str, options).ok()
 }
 
 fn parse_dec_u32(lex: &mut logos::Lexer<Token>) -> Option<u32> {
     let options = &lexical::parse_integer_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial_with_options::<u32, _, DEC_FORMAT>(str, options)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<u32, _, DEC_FORMAT>(str, options).ok()
 }
 
 fn parse_hex_u32(lex: &mut logos::Lexer<Token>) -> Option<u32> {
     let options = &lexical::parse_integer_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial_with_options::<u32, _, HEX_FORMAT>(str, options)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<u32, _, HEX_FORMAT>(str, options).ok()
 }
 
 fn parse_dec_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
@@ -127,33 +123,29 @@ fn parse_hex_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
 fn parse_dec_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
     let options = &lexical::parse_float_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial_with_options::<f32, _, DEC_FORMAT>(str, options)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<f32, _, DEC_FORMAT>(str, options).ok()
 }
 
 fn parse_hex_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
     let str = lex.slice();
     // TODO
     let options = &lexical::parse_float_options::STANDARD;
-    lexical::parse_partial_with_options::<f32, _, HEX_FORMAT>(str, options)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<f32, _, HEX_FORMAT>(str, options).ok()
 }
 
 fn parse_dec_f16(lex: &mut logos::Lexer<Token>) -> Option<f32> {
     let options = &lexical::parse_float_options::STANDARD;
     let str = lex.slice();
-    lexical::parse_partial_with_options::<f32, _, DEC_FORMAT>(str, options)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<f32, _, DEC_FORMAT>(str, options).ok()
 }
 
 fn parse_hex_f16(lex: &mut logos::Lexer<Token>) -> Option<f32> {
     let str = lex.slice();
-    lexical::parse_partial_with_options::<f32, _, HEX_FORMAT>(str, &FLOAT_HEX_OPTIONS)
-        .ok()
-        .map(|(x, _)| x)
+    let str = &str[..str.len() - 1];
+    lexical::parse_with_options::<f32, _, HEX_FORMAT>(str, &FLOAT_HEX_OPTIONS).ok()
 }
 
 fn parse_block_comment(lex: &mut logos::Lexer<Token>) -> logos::Skip {
