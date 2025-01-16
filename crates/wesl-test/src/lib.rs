@@ -12,7 +12,7 @@ use serde::Deserialize;
 use wesl::{
     eval::Instance,
     syntax::{Expression, Statement, TranslationUnit},
-    CompileOptions, Resource, VirtualResolver, MANGLER_HASH,
+    CompileOptions, HashMangler, Resource, VirtualResolver,
 };
 
 #[test]
@@ -332,18 +332,13 @@ fn wesl_testsuite_test(path: &Path) {
         let mut resolver = VirtualResolver::new();
 
         for (path, file) in test.src {
-            let path = PathBuf::from(path);
-            resolver
-                .add_module(path.into(), file)
-                .inspect_err(|err| eprintln!("{err}"))
-                .expect("failed to add virtual file");
+            resolver.add_module(path, file);
         }
 
         let entrypoint: Resource = PathBuf::from("./main.wgsl").into();
-        let mangler = &MANGLER_HASH;
         let compile_options = CompileOptions::default();
 
-        wesl::compile(&entrypoint, &resolver, mangler, &compile_options)
+        wesl::compile(&entrypoint, &resolver, &HashMangler, &compile_options)
             .inspect_err(|err| eprintln!("{err}"))
             .expect("parse error");
     }
