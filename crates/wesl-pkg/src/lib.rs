@@ -31,41 +31,47 @@ impl Resolver for PkgResolver {
         &'a self,
         resource: &wesl::Resource,
     ) -> Result<std::borrow::Cow<'a, str>, wesl::ResolveError> {
-        for pkg in &self.packages {
-            // TODO: the resolution algorithm is currently not spec-compliant.
-            // https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
-            if resource.path().starts_with(pkg.name()) {
-                let suffix = resource.path().strip_prefix(pkg.name()).unwrap();
-                let mut cur_mod = *pkg;
-                for segment in suffix.iter() {
-                    let name = segment.to_str().ok_or_else(|| {
-                        ResolveError::InvalidResource(
-                            resource.clone(),
-                            "invalid unicode".to_string(),
-                        )
-                    })?;
-                    if let Some(submod) = pkg.submodule(name) {
-                        cur_mod = submod;
-                    } else {
-                        return Err(ResolveError::FileNotFound(
-                            suffix.to_path_buf(),
-                            format!("in package {}", pkg.name(),),
-                        ));
+        if resource.path().has_root() {
+            let path = resource.path().strip_prefix("/").unwrap();
+            for pkg in &self.packages {
+                // TODO: the resolution algorithm is currently not spec-compliant.
+                // https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
+                if path.starts_with(pkg.name()) {
+                    let mut cur_mod = *pkg;
+                    for segment in path.iter().skip(1) {
+                        let name = segment.to_str().ok_or_else(|| {
+                            ResolveError::InvalidResource(
+                                resource.clone(),
+                                "invalid unicode".to_string(),
+                            )
+                        })?;
+                        if let Some(submod) = pkg.submodule(name) {
+                            cur_mod = submod;
+                        } else {
+                            return Err(ResolveError::FileNotFound(
+                                path.to_path_buf(),
+                                format!("in package {}", pkg.name()),
+                            ));
+                        }
                     }
+                    return Ok(cur_mod.source().into());
                 }
-                return Ok(cur_mod.source().into());
             }
+            Err(ResolveError::FileNotFound(
+                resource.path().to_path_buf(),
+                "no package found".to_string(),
+            ))
+        } else {
+            self.fallback
+                .as_ref()
+                .map(|fallback| fallback.resolve_source(resource))
+                .unwrap_or_else(|| {
+                    Err(ResolveError::FileNotFound(
+                        resource.path().to_path_buf(),
+                        "no package found".to_string(),
+                    ))
+                })
         }
-
-        self.fallback
-            .as_ref()
-            .map(|fallback| fallback.resolve_source(resource))
-            .unwrap_or_else(|| {
-                Err(ResolveError::FileNotFound(
-                    resource.path().to_path_buf(),
-                    "no package found".to_string(),
-                ))
-            })
     }
 }
 

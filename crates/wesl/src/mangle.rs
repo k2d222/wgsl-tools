@@ -81,8 +81,9 @@ impl Mangler for EscapeMangler {
         let path = resource.path().with_extension("");
         let path = path
             .iter()
-            .map(|p| p.to_string_lossy().replace('_', "__"))
-            .format("_");
+            .map(|p| p.to_string_lossy().replace('_', "__").replace('/', "crate"))
+            .format("_")
+            .to_string();
         format!("{path}_{item}")
     }
     fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
@@ -90,12 +91,16 @@ impl Mangler for EscapeMangler {
         let mut path_parts = Vec::new();
 
         while let Some(part) = parts.next() {
-            let mut part = part.to_string();
-            while parts.peek() == Some(&"") {
-                part.push('_');
-                parts.next();
+            if part == "crate" {
+                path_parts.push("/".to_string());
+            } else {
+                let mut part = part.to_string();
+                while parts.peek() == Some(&"") {
+                    part.push('_');
+                    parts.next();
+                }
+                path_parts.push(part);
             }
-            path_parts.push(part.to_string());
         }
 
         if path_parts.len() < 2 {

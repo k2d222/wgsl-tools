@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::path::PathBuf;
 use crate::{error::CustomLalrError, lexer::Token};
 use crate::span::{Spanned, Span};
 use crate::syntax::*;
@@ -102,10 +103,16 @@ extern {
         TokTemplateArgsEnd => Token::TemplateArgsEnd,
 
         // extension: wesl-imports
-        // https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md
-        // date: 2024-08-29, hash: 8e3b878958980c9092ed6e45a151c6b915f5041b
+        // https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
+        // date: 2025-01-18, hash: 2db8e7f681087db6bdcd4a254963deb5c0159775
         #[cfg(feature = "imports")]
-        ".." => Token::SymPeriodPeriod,
+        "::" => Token::SymColonColon,
+        #[cfg(feature = "imports")]
+        "self" => Token::KwSelf,
+        #[cfg(feature = "imports")]
+        "super" => Token::KwSuper,
+        #[cfg(feature = "imports")]
+        "crate" => Token::KwCrate,
         #[cfg(feature = "imports")]
         "as" => Token::KwAs,
         #[cfg(feature = "imports")]
@@ -938,8 +945,8 @@ DiagnosticControl: (DiagnosticSeverity, String) = {
 };
 
 // EXTENSION: WESL-IMPORTS
-// https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md
-// date: 2024-08-29, hash: 8e3b878958980c9092ed6e45a151c6b915f5041b
+// https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
+// date: 2025-01-18, hash: 2db8e7f681087db6bdcd4a254963deb5c0159775
 
 #[cfg(feature = "imports")]
 pub TranslationUnit: TranslationUnit = {
@@ -963,13 +970,16 @@ pub Import: Import = {
 #[cfg(all(feature = "imports", feature = "attributes"))]
 pub Import: Import = {
     <attributes: Attribute*> "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => {
-        let mut import = match relative {
+        match relative {
             Some(mut relative) => {
                 relative.extend(&import.path);
                 import.path = relative;
-                import
             },
-            None => import,
+            None => {
+                let mut absolute = PathBuf::from("/");
+                absolute.push(import.path);
+                import.path = absolute;
+            },
         };
         import.attributes = attributes;
         import
@@ -978,17 +988,20 @@ pub Import: Import = {
 
 #[cfg(feature = "imports")]
 ImportRelative: std::path::PathBuf = {
-    "." "/" <parents: (".." "/")*> => {
-        std::iter::once(".").chain(parents.iter().map(|_| "..")).map(str::to_string).collect()
+    "self" "::" <parents: ("super" "::")*> => {
+        PathBuf::from_iter(std::iter::once(".").chain(parents.iter().map(|_| "..")))
     },
-    ".." "/" <parents: (".." "/")*> => {
-        std::iter::once("..").chain(parents.iter().map(|_| "..")).map(str::to_string).collect()
+    "super" "::" <parents: ("super" "::")*> => {
+        PathBuf::from_iter(std::iter::once("..").chain(parents.iter().map(|_| "..")))
+    },
+    "crate" "::" => {
+        PathBuf::from("")
     },
 };
 
 #[cfg(feature = "imports")]
 ImportPath: Import = {
-    <path: (<Ident> "/")+> <content: ImportContent> => Import {
+    <path: (<Ident> "::")+> <content: ImportContent> => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: std::path::PathBuf::from_iter(path.iter().map(|ident| ident.name().to_string())), content
     },
@@ -996,24 +1009,12 @@ ImportPath: Import = {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: Default::default(), content: ImportContent::Item(<>)
     },
-    StarImport => Import {
-        #[cfg(feature = "attributes")] attributes: Vec::new(),
-        path: Default::default(), content: ImportContent::Star(<>)
-    },
 };
 
 #[cfg(feature = "imports")]
 ImportContent: ImportContent = {
-    ImportCollection => ImportContent::Collection(<>),
+    CollectionImport => ImportContent::Collection(<>),
     ItemImport => ImportContent::Item(<>),
-    StarImport => ImportContent::Item(<>),
-};
-
-#[cfg(feature = "imports")]
-StarImport: ImportItem = {
-    <ident: Ident> "/" "*" <rename: ("as" <Ident>)?> => ImportItem {
-        ident, rename
-    }
 };
 
 #[cfg(feature = "imports")]
@@ -1024,7 +1025,7 @@ ItemImport: ImportItem = {
 };
 
 #[cfg(feature = "imports")]
-ImportCollection: Vec<Import> = {
+CollectionImport: Vec<Import> = {
     "{" <Comma1<ImportPath>> "}"
 };
 

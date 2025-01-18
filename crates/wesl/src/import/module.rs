@@ -70,7 +70,7 @@ pub(crate) fn import_to_resource(
     import_path: &Path,
     parent_resource: Option<&Resource>,
 ) -> Resource {
-    let resource = if !import_path.starts_with(Path::new(".")) {
+    let resource = if !import_path.starts_with(".") {
         import_path.to_path_buf()
     } else if let Some(parent) = parent_resource {
         // SAFETY: parent_path must be a file, therefore must have a contaning directory
@@ -90,16 +90,6 @@ pub(crate) fn imports_to_resources(imports: &[syntax::Import], resource: &Resour
 
     for import in imports {
         match &import.content {
-            syntax::ImportContent::Star(item) => {
-                let mut path = import.path.clone();
-                path.push(item.ident.name().to_string());
-                let resource = import_to_resource(&path, Some(resource));
-                if let Some(entry) = res.get_mut(&resource) {
-                    entry.push(item.clone());
-                } else {
-                    res.insert(resource, vec![item.clone()]);
-                }
-            }
             syntax::ImportContent::Item(item) => {
                 let resource = import_to_resource(&import.path, Some(resource));
                 if let Some(entry) = res.get_mut(&resource) {

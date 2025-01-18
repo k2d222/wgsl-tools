@@ -62,9 +62,19 @@ impl Display for Ident {
 impl Display for Import {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        let path = self.path.display();
+        let path = self
+            .path
+            .iter()
+            .map(|segment| match segment.to_str() {
+                Some(".") => "self",
+                Some("..") => "super",
+                Some(str) => str,
+                _ => "?",
+            })
+            .format("::");
+        let relative = self.path.has_root().then_some("").unwrap_or("crate::");
         let content = &self.content;
-        write!(f, "{path}{content};")
+        write!(f, "{relative}{path}::{content};")
     }
 }
 
@@ -72,13 +82,6 @@ impl Display for Import {
 impl Display for ImportContent {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            ImportContent::Star(item) => {
-                write!(f, "{}/*", item.ident)?;
-                if let Some(rename) = &item.rename {
-                    write!(f, " as {rename}")?;
-                }
-                Ok(())
-            }
             ImportContent::Item(item) => {
                 write!(f, "{}", item.ident)?;
                 if let Some(rename) = &item.rename {

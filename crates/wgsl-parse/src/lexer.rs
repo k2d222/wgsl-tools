@@ -373,11 +373,20 @@ pub enum Token {
     TemplateArgsEnd,
 
     // extension: wesl-imports
-    // https://github.com/wgsl-tooling-wg/wgsl-import-spec/blob/main/Imports.md
-    // date: 2024-08-29, hash: 8e3b878958980c9092ed6e45a151c6b915f5041b
+    // https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
+    // date: 2025-01-18, hash: 2db8e7f681087db6bdcd4a254963deb5c0159775
     #[cfg(feature = "imports")]
-    #[token("..")]
-    SymPeriodPeriod,
+    #[token("::")]
+    SymColonColon,
+    #[cfg(feature = "imports")]
+    #[token("self")]
+    KwSelf,
+    #[cfg(feature = "imports")]
+    #[token("super")]
+    KwSuper,
+    #[cfg(feature = "imports")]
+    #[token("crate")]
+    KwCrate,
     #[cfg(feature = "imports")]
     #[token("as")]
     KwAs,
@@ -573,7 +582,13 @@ impl Display for Token {
             Token::TemplateArgsStart => f.write_str("<"),
             Token::TemplateArgsEnd => f.write_str(">"),
             #[cfg(feature = "imports")]
-            Token::SymPeriodPeriod => write!(f, ".."),
+            Token::SymColonColon => write!(f, "::"),
+            #[cfg(feature = "imports")]
+            Token::KwSelf => write!(f, "self"),
+            #[cfg(feature = "imports")]
+            Token::KwSuper => write!(f, "super"),
+            #[cfg(feature = "imports")]
+            Token::KwCrate => write!(f, "crate"),
             #[cfg(feature = "imports")]
             Token::KwAs => write!(f, "as"),
             #[cfg(feature = "imports")]

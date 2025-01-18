@@ -1,4 +1,8 @@
-use std::{borrow::Cow, collections::HashSet, iter::Iterator};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    iter::{once, Iterator},
+};
 
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
@@ -358,10 +362,20 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
     // keep track of declarations in a scope.
     type Scope<'a> = Cow<'a, HashSet<Ident>>;
 
+    fn flatten_imports<'a>(imports: &'a Vec<Import>) -> impl Iterator<Item = Ident> + 'a {
+        imports.iter().flat_map(|import| match &import.content {
+            ImportContent::Item(item) => {
+                once(item.rename.as_ref().unwrap_or(&item.ident).clone()).boxed()
+            }
+            ImportContent::Collection(coll) => flatten_imports(coll).boxed(),
+        })
+    }
+
     let scope: Scope = Cow::Owned(
         wesl.global_declarations
             .iter()
             .filter_map(|decl| decl.ident().cloned())
+            .chain(flatten_imports(&wesl.imports))
             .collect::<HashSet<_>>(),
     );
 
