@@ -1,0 +1,15 @@
+[package]
+name = "wesl-consumer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+wesl = { path = "../../crates/wesl" }
+
+[build-dependencies]
+wesl-random = { path = "../wesl-random" }
+wesl = { path = "../../crates/wesl" }
+wesl-pkg = { version = "0.0.2", path = "../../crates/wesl-pkg" }

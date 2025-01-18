@@ -951,18 +951,18 @@ checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.92"
+version = "1.0.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37d3544b3f2748c54e147655edb5025752e2303145b5aefb3c3ea2c78b973bb0"
+checksum = "60946a68e5f9d28b0dc1c21bb8a97ee7d018a8b322fa57838ba31cc878e22d99"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.37"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
+checksum = "0e4dccaaaf89514f546c693ddc140f729f958c247918a13380cccc6078391acc"
 dependencies = [
  "proc-macro2",
 ]
@@ -1397,6 +1397,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "wesl-consumer"
+version = "0.0.2"
+dependencies = [
+ "wesl",
+ "wesl-pkg",
+ "wesl-random",
+]
+
+[[package]]
+name = "wesl-pkg"
+version = "0.0.2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "wesl",
+]
+
+[[package]]
+name = "wesl-random"
+version = "0.0.2"
+dependencies = [
+ "wesl-pkg",
+]
+
+[[package]]
 name = "wgsl-parse"
 version = "0.0.2"
 dependencies = [
@@ -1442,6 +1467,7 @@ dependencies = [
  "naga",
  "thiserror",
  "wesl",
+ "wesl-pkg",
  "wgsl-parse",
 ]
 

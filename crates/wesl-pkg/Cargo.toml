@@ -1,0 +1,12 @@
+[package]
+name = "wesl-pkg"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+proc-macro2 = "1.0.93"
+quote = "1.0.38"
+wesl = { version = "0.0.2", path = "../wesl" }

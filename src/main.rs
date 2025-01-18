@@ -42,6 +42,8 @@ enum Command {
     Eval(EvalArgs),
     /// Execute a WGSL shader function on the CPU
     Exec(ExecArgs),
+    /// Generate a publishable Cargo package from WESL source code
+    Package(PkgArgs),
 }
 
 #[derive(Default, Clone, Copy, Debug, ValueEnum)]
@@ -294,30 +296,13 @@ struct ExecArgs {
     entrypoint: String,
 }
 
-// #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-// enum ManglerKind {
-//     /// escaped path mangler. `foo/bar/{item} -> foo_bar_item`
-//     #[default]
-//     Escape,
-//     /// hash mangler. `foo/bar/{item} -> item_1985638328947`
-//     Hash,
-//     /// make valid identifiers with unicode "confusables" characters.
-//     /// `foo/{bar<baz, moo>} -> foo::barᐸbazˏmooᐳ`
-//     Unicode,
-//     /// disable mangling (warning: will break if case of name conflicts!).
-//     None,
-// }
-
-// impl Display for ManglerKind {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             ManglerKind::Escape => f.write_str("escape"),
-//             ManglerKind::Hash => f.write_str("hash"),
-//             ManglerKind::Unicode => f.write_str("unicode"),
-//             ManglerKind::None => f.write_str("none"),
-//         }
-//     }
-// }
+#[derive(Args, Clone, Debug)]
+struct PkgArgs {
+    /// name of the generated crate
+    name: String,
+    /// directory containing the .wesl shader files
+    dir: PathBuf,
+}
 
 #[derive(Clone, Debug, thiserror::Error)]
 enum CliError {
@@ -601,6 +586,12 @@ fn run(cli: Cli) -> Result<(), CliError> {
                     println!("resource: group={group} binding={binding} value={inst}")
                 }
             }
+        }
+        Command::Package(args) => {
+            wesl_pkg::PackageBuilder::new(args.name)
+                .set_directory(args.dir)
+                .build()
+                .expect("failed to build package");
         }
     };
     Ok(())

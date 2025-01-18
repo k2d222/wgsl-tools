@@ -62,7 +62,9 @@ impl From<ParseError> for Diagnostic<Error> {
 impl From<ResolveError> for Diagnostic<Error> {
     fn from(error: ResolveError) -> Self {
         match error {
-            ResolveError::FileNotFound(_) => Self::new(error.into()),
+            ResolveError::InvalidResource(_, _) | ResolveError::FileNotFound(_, _) => {
+                Self::new(error.into())
+            }
             ResolveError::Error(e) => e,
         }
     }

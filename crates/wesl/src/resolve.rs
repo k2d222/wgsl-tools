@@ -13,8 +13,10 @@ use std::{
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("file not found: {0}")]
-    FileNotFound(String),
+    #[error("invalid import path: `{0}` ({1})")]
+    InvalidResource(Resource, String),
+    #[error("file not found: `{0}` ({1})")]
+    FileNotFound(PathBuf, String),
     #[error("{0}")]
     Error(#[from] Diagnostic<Error>),
 }
@@ -114,9 +116,10 @@ pub struct NoResolver;
 
 impl Resolver for NoResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
-        Err(ResolveError::FileNotFound(format!(
-            "`{resource}` (no resolver)"
-        )))
+        Err(ResolveError::InvalidResource(
+            resource.clone(),
+            "no resolver".to_string(),
+        ))
     }
 }
 
@@ -183,9 +186,8 @@ impl Resolver for FileResolver {
             path.set_extension(self.extension);
         }
 
-        let source = fs::read_to_string(&path).map_err(|_| {
-            ResolveError::FileNotFound(format!("`{}` (physical file)", path.display()))
-        })?;
+        let source = fs::read_to_string(&path)
+            .map_err(|_| ResolveError::FileNotFound(path, "physical file".to_string()))?;
 
         Ok(source.into())
     }
@@ -215,7 +217,7 @@ impl VirtualResolver {
     pub fn get_module(&self, resource: &Resource) -> Result<&str, Error> {
         let path = resource.path();
         let source = self.files.get(path).ok_or_else(|| {
-            ResolveError::FileNotFound(format!("`{}` (virtual module)", path.display()))
+            ResolveError::FileNotFound(path.to_path_buf(), "virtual module".to_string())
         })?;
         Ok(source)
     }
@@ -324,16 +326,19 @@ impl Resolver for Router {
             .filter(|(path, _)| resource.path().starts_with(path))
             .max_by_key(|(path, _)| path.iter().count())
             .or(self.fallback.as_ref())
-            .ok_or_else(|| ResolveError::FileNotFound(format!("`{resource}` (no mount point)")))?;
+            .ok_or_else(|| {
+                ResolveError::InvalidResource(resource.clone(), "no mount point".to_string())
+            })?;
 
         // SAFETY: we just checked that resource.path() starts with mount_path
         let suffix = resource.path().strip_prefix(mount_path).unwrap();
         let resource = Resource::from(suffix.to_path_buf());
-        resolver.resolve_source(&resource).map_err(|e| match e {
-            ResolveError::FileNotFound(msg) => {
-                ResolveError::FileNotFound(format!("`{}`::{msg}", mount_path.display()))
-            }
-            ResolveError::Error(_) => e,
-        })
+        resolver.resolve_source(&resource)
+        // .map_err(|e| match e {
+        //     ResolveError::FileNotFound(msg) => {
+        //         ResolveError::FileNotFound(format!("`{}`::{msg}", mount_path.display()))
+        //     }
+        //     ResolveError::Error(_) => e,
+        // })
     }
 }

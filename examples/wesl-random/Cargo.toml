@@ -1,0 +1,13 @@
+[package]
+name = "wesl-random"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+wesl-pkg = { version = "0.0.2", path = "../../crates/wesl-pkg" }
+
+[build-dependencies]
+wesl-pkg = { version = "0.0.2", path = "../../crates/wesl-pkg" }
