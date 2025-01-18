@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Component, Path, PathBuf},
+};
 
 use wgsl_parse::syntax;
 
@@ -66,22 +69,42 @@ impl Module {
     }
 }
 
+fn clean_path(path: impl AsRef<Path>) -> PathBuf {
+    let mut res = PathBuf::new();
+    for comp in path.as_ref().components() {
+        match comp {
+            Component::Prefix(_) => {}
+            Component::RootDir => {
+                res.push(comp);
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                res.pop();
+            }
+            Component::Normal(_) => res.push(comp),
+        }
+    }
+    res
+}
+
 pub(crate) fn import_to_resource(
     import_path: &Path,
     parent_resource: Option<&Resource>,
 ) -> Resource {
-    let resource = if !import_path.starts_with(".") {
-        import_path.to_path_buf()
-    } else if let Some(parent) = parent_resource {
-        // SAFETY: parent_path must be a file, therefore must have a contaning directory
-        let mut path = parent.path().parent().unwrap().to_path_buf();
-        path.extend(import_path);
-        path
+    let path = if import_path.starts_with(".") {
+        if let Some(parent) = parent_resource {
+            // SAFETY: parent_path must be a file, therefore must have a contaning directory
+            let mut path = parent.path().parent().unwrap().to_path_buf();
+            path.extend(import_path);
+            clean_path(path)
+        } else {
+            clean_path(import_path)
+        }
     } else {
-        import_path.to_path_buf()
+        clean_path(import_path)
     };
 
-    resource.into()
+    Resource::from(path)
 }
 
 /// Flatten imports to a list of resources and items to import.

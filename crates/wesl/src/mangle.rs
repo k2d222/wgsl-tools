@@ -84,7 +84,7 @@ impl Mangler for EscapeMangler {
             .map(|p| p.to_string_lossy().replace('_', "__").replace('/', "crate"))
             .format("_")
             .to_string();
-        format!("{path}_{item}")
+        format!("{path}_{}", item.replace('_', "__"))
     }
     fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
         let mut parts = mangled.split('_').peekable();

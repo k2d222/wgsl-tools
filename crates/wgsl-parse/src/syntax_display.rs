@@ -270,7 +270,7 @@ impl Display for Function {
 
 impl Display for FormalParameter {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
+        write!(f, "{}", fmt_attrs(&self.attributes, true))?;
         let name = &self.ident;
         let typ = &self.ty;
         write!(f, "{name}: {typ}")
