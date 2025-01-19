@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 
-use wgsl_parse::syntax::{Ident, TranslationUnit};
+use wgsl_parse::{
+    syntax::{Ident, TranslationUnit},
+    visit::Visit,
+};
 
-use crate::syntax_util::{decl_ident, IterIdents};
+use crate::syntax_util::decl_ident;
 
 /// removes unused declarations.
 pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
@@ -24,7 +27,7 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
             if let Some(ident) = decl_ident(decl) {
                 if keep.contains(ident) {
                     let used = decl
-                        .iter_idents()
+                        .visit()
                         .filter(|ty| global_idents.contains(&ty.ident))
                         .map(|ty| ty.ident.clone())
                         .collect::<HashSet<_>>();

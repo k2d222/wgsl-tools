@@ -1,9 +1,7 @@
 use wgsl_parse::syntax::*;
 use wgsl_parse_macros::query_mut;
 
-pub(crate) fn query_attributes(
-    wesl: &mut TranslationUnit,
-) -> impl Iterator<Item = &mut Vec<Attribute>> {
+pub(crate) fn query_attrs(wesl: &mut TranslationUnit) -> impl Iterator<Item = &mut Vec<Attribute>> {
     query_mut!(wesl.{
         imports.[].attributes,
         global_directives.[].{
@@ -21,44 +19,44 @@ pub(crate) fn query_attributes(
             GlobalDeclaration::Function.{
                 attributes,
                 parameters.[].attributes,
-                body.{ attributes, statements.[].(statement_query_attributes) }
+                body.{ attributes, statements.[].(stat_query_attrs) }
             },
             GlobalDeclaration::ConstAssert.attributes,
         }
     })
 }
 
-pub(crate) fn statement_query_attributes(
+pub(crate) fn stat_query_attrs(
     stat: &mut StatementNode,
 ) -> impl Iterator<Item = &mut Vec<Attribute>> {
     let stat = stat.node_mut();
     query_mut!(stat.{
-        Statement::Compound.{ attributes, statements.[].(statement_query_attributes) },
+        Statement::Compound.{ attributes, statements.[].(stat_query_attrs) },
         Statement::If.{
             attributes,
-            else_if_clauses.[].body.statements.[].(statement_query_attributes),
-            else_clause.[].body.statements.[].(statement_query_attributes),
+            else_if_clauses.[].body.statements.[].(stat_query_attrs),
+            else_clause.[].body.statements.[].(stat_query_attrs),
         },
         Statement::Switch.{
             attributes,
-            clauses.[].{ attributes, body.statements.[].(statement_query_attributes) },
+            clauses.[].{ attributes, body.statements.[].(stat_query_attrs) },
         },
         Statement::Loop.{
             attributes,
-            body.statements.[].(statement_query_attributes),
+            body.statements.[].(stat_query_attrs),
             continuing.[].{
                 attributes,
-                body.statements.[].(statement_query_attributes),
+                body.statements.[].(stat_query_attrs),
                 break_if.[].{ attributes }
             },
         },
         Statement::For.{
             attributes,
-            body.statements.[].(statement_query_attributes),
+            body.statements.[].(stat_query_attrs),
         },
         Statement::While.{
             attributes,
-            body.statements.[].(statement_query_attributes),
+            body.statements.[].(stat_query_attrs),
         },
         Statement::Break.attributes,
         Statement::Continue.attributes,

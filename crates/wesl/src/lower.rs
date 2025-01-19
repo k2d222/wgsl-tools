@@ -1,7 +1,7 @@
 use crate::{sourcemap::NoSourceMap, Error, SourceMap};
 
 #[cfg(feature = "attributes")]
-use crate::attributes::query_attributes;
+use crate::attributes::query_attrs;
 
 use wgsl_parse::syntax::*;
 
@@ -14,7 +14,7 @@ pub fn lower_sourcemap(
     wesl.imports.clear();
 
     #[cfg(feature = "attributes")]
-    for attrs in query_attributes(wesl) {
+    for attrs in query_attrs(wesl) {
         attrs.retain(|attr| match attr {
             Attribute::Custom(CustomAttribute { name, .. }) if name == "generic" => false,
             _ => true,

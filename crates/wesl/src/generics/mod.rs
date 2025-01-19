@@ -2,23 +2,19 @@ mod mangle;
 
 use itertools::Itertools;
 use thiserror::Error;
-use wgsl_parse::{syntax::*, visit::VisitMut, Decorated};
+use wgsl_parse::{syntax::*, visit::Visit, Decorated};
 
-use crate::{attributes::statement_query_attributes, syntax_util::IterIdents};
+use crate::attributes::stat_query_attrs;
 
 #[derive(Clone, Debug, Error)]
-pub enum GenericsError {}
-
-fn replace_ty(ty: &mut TypeExpression, old_ident: &Ident, new_ty: &TypeExpression) {
-    if &ty.ident == old_ident {
-        *ty = new_ty.clone();
-    }
-    for ty in ty.iter_idents() {
-        replace_ty(ty, old_ident, new_ty);
-    }
+pub enum GenericsError {
+    #[error("template not allowed on a generic parameter")]
+    DisallowedTemplate,
 }
 
-pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
+type E = GenericsError;
+
+pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), E> {
     let mut new_decls = Vec::new();
     for decl in &wesl.global_declarations {
         if let GlobalDeclaration::Function(decl) = decl {
@@ -42,34 +38,32 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                 // rename uses of the generic args with the concrete variant
                 for (old_id, new_ty) in &variant {
                     let new_id = Ident::new(format!("{new_ty}"));
-                    for ty in decl.iter_idents() {
+                    for ty in Visit::<TypeExpression>::visit_mut(&mut decl) {
                         if &ty.ident == *old_id {
+                            if ty.template_args.is_some() {
+                                return Err(E::DisallowedTemplate);
+                            }
                             ty.ident = new_id.clone();
-                            ty.template_args = None;
                         }
                     }
                 }
 
-                let constraints = variant.iter().map(|&(name, ty)| {
-                    let mut ty = ty.clone();
-                    for (old_id, new_ty) in &variant {
-                        replace_ty(&mut ty, old_id, new_ty);
-                    }
-                    TypeConstraint {
-                        ident: name.clone(),
-                        variants: vec![ty],
-                    }
+                let constraints = variant.iter().map(|&(name, ty)| TypeConstraint {
+                    ident: name.clone(),
+                    variants: vec![ty.clone()],
                 });
 
+                // evaluate type attributes
                 for ty in constraints {
                     // this is future-proofing. We'll want to generate fewer variants in
                     // the future by grouping them.
                     eval_ty_attrs(&mut decl.parameters, &ty)?;
-                    statement_eval_ty_attributes(&mut decl.body.statements, &ty)?;
+                    stat_eval_ty_attrs(&mut decl.body.statements, &ty)?;
                 }
 
+                // remove evaluated type attributes
                 for stat in &mut decl.body.statements {
-                    for attrs in statement_query_attributes(stat) {
+                    for attrs in stat_query_attrs(stat) {
                         attrs.retain(|attr| match attr {
                             Attribute::Type(c) => !c.variants.is_empty(),
                             _ => true,
@@ -77,17 +71,7 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                     }
                 }
 
-                let signature = decl
-                    .parameters
-                    .iter()
-                    .map(|p| {
-                        let mut ty = p.ty.clone();
-                        for (old_id, new_id) in &variant {
-                            replace_ty(&mut ty, old_id, new_id)
-                        }
-                        ty
-                    })
-                    .collect_vec();
+                let signature = decl.parameters.iter().map(|p| p.ty.clone()).collect_vec();
 
                 let new_name = mangle::mangle(decl.ident.name().as_str(), &signature);
                 decl.ident = Ident::new(new_name);
@@ -105,14 +89,14 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
     Ok(())
 }
 
-pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
+pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), E> {
     let idents = wesl
         .global_declarations
         .iter()
         .filter_map(|decl| decl.ident())
         .cloned()
         .collect_vec();
-    for expr in VisitMut::<ExpressionNode>::visit_mut(wesl) {
+    for expr in Visit::<ExpressionNode>::visit_mut(wesl) {
         match expr.node_mut() {
             Expression::FunctionCall(f) => {
                 if let Some(args) = &f.ty.template_args {
@@ -142,10 +126,7 @@ pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), GenericsError> {
     Ok(())
 }
 
-fn eval_ty_attr(
-    opt_node: &mut Option<impl Decorated>,
-    ty: &TypeConstraint,
-) -> Result<(), GenericsError> {
+fn eval_ty_attr(opt_node: &mut Option<impl Decorated>, ty: &TypeConstraint) -> Result<(), E> {
     if let Some(node) = opt_node {
         let vars = node
             .attributes_mut()
@@ -168,10 +149,7 @@ fn eval_ty_attr(
     Ok(())
 }
 
-fn eval_ty_attrs(
-    nodes: &mut Vec<impl Decorated>,
-    ty: &TypeConstraint,
-) -> Result<(), GenericsError> {
+fn eval_ty_attrs(nodes: &mut Vec<impl Decorated>, ty: &TypeConstraint) -> Result<(), E> {
     let retains = nodes
         .iter()
         .map(|node| {
@@ -219,10 +197,7 @@ fn eval_ty_attrs(
     Ok(())
 }
 
-fn statement_eval_ty_attributes(
-    statements: &mut Vec<StatementNode>,
-    ty: &TypeConstraint,
-) -> Result<(), GenericsError> {
+fn stat_eval_ty_attrs(statements: &mut Vec<StatementNode>, ty: &TypeConstraint) -> Result<(), E> {
     fn rec_one(stat: &mut StatementNode, ty: &TypeConstraint) -> Result<(), GenericsError> {
         match stat.node_mut() {
             Statement::Compound(stat) => rec(&mut stat.statements, ty)?,
@@ -264,7 +239,7 @@ fn statement_eval_ty_attributes(
         };
         Ok(())
     }
-    fn rec(stats: &mut Vec<StatementNode>, ty: &TypeConstraint) -> Result<(), GenericsError> {
+    fn rec(stats: &mut Vec<StatementNode>, ty: &TypeConstraint) -> Result<(), E> {
         eval_ty_attrs(stats, ty)?;
         for stat in stats {
             rec_one(stat, ty)?;

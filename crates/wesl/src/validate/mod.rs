@@ -1,7 +1,10 @@
 use itertools::Itertools;
-use wgsl_parse::syntax::{Ident, TranslationUnit};
+use wgsl_parse::{
+    syntax::{Ident, TranslationUnit, TypeExpression},
+    visit::Visit,
+};
 
-use crate::{syntax_util::IterIdents, Diagnostic, Error};
+use crate::{Diagnostic, Error};
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ValidateError {
@@ -169,16 +172,16 @@ const BUILTIN_NAMES: &[&'static str] = &[
     "unpack2x16float",
 ];
 
-fn check_defined_symbols(wesl: &mut TranslationUnit) -> Result<(), Diagnostic<Error>> {
+fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
     let declarations = wesl
         .global_declarations
         .iter()
         .filter_map(|decl| decl.ident().cloned())
         .collect_vec();
 
-    for decl in &mut wesl.global_declarations {
+    for decl in &wesl.global_declarations {
         let decl_name = decl.ident().map(|ident| ident.name().to_string());
-        for ty in decl.iter_idents() {
+        for ty in Visit::<TypeExpression>::visit(decl) {
             if ty.ident.use_count() == 1
                 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str())
                 && !declarations

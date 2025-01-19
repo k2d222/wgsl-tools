@@ -6,9 +6,6 @@ pub trait Visit<T> {
     fn visit<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
         T: 'a;
-}
-
-pub trait VisitMut<T> {
     fn visit_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T>
     where
         T: 'a;
@@ -23,20 +20,35 @@ macro_rules! impl_visit {
             where
                 $visited: 'a,
             {
+                #[allow(unused)]
+                fn visit<'a, T: Visit<U>, U: 'a>(expr: &'a T) -> impl Iterator<Item = &'a U> {
+                    Visit::<U>::visit(expr)
+                }
+
+                #[allow(unused)]
+                fn recurse(expr: &$type) -> impl Iterator<Item = &$visited> {
+                    Visit::<$visited>::visit(expr)
+                }
+
                 let root: &$type = self;
                 query!(root.$expr)
             }
-        }
-    };
-}
-
-macro_rules! impl_visit_mut {
-    ($type:ty => $visited:ty, $expr:tt) => {
-        impl VisitMut<$visited> for $type {
             fn visit_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut $visited>
             where
                 $visited: 'a,
             {
+                #[allow(unused)]
+                fn visit<'a, T: Visit<U>, U: 'a>(
+                    expr: &'a mut T,
+                ) -> impl Iterator<Item = &'a mut U> {
+                    Visit::<U>::visit_mut(expr)
+                }
+
+                #[allow(unused)]
+                fn recurse(expr: &mut $type) -> impl Iterator<Item = &mut $visited> {
+                    Visit::<$visited>::visit_mut(expr)
+                }
+
                 let root: &mut $type = self;
                 query_mut!(root.$expr)
             }
@@ -46,148 +58,252 @@ macro_rules! impl_visit_mut {
 
 impl_visit! { Expression => ExpressionNode,
     {
-        Expression::Parenthesized.expression.(x => Visit::<ExpressionNode>::visit(&**x)),
-        Expression::NamedComponent.base.(x => Visit::<ExpressionNode>::visit(&**x)),
+        Expression::Parenthesized.expression.(x => recurse(x)),
+        Expression::NamedComponent.base.(x => recurse(x)),
         Expression::Indexing.{
-            base.(x => Visit::<ExpressionNode>::visit(&**x)),
-            index.(x => Visit::<ExpressionNode>::visit(&**x)),
+            base.(x => recurse(x)),
+            index.(x => recurse(x)),
         },
-        Expression::Unary.operand.(x => Visit::<ExpressionNode>::visit(&**x)),
+        Expression::Unary.operand.(x => recurse(x)),
         Expression::Binary.{
-            left.(x => Visit::<ExpressionNode>::visit(&**x)),
-            right.(x => Visit::<ExpressionNode>::visit(&**x)),
+            left.(x => recurse(x)),
+            right.(x => recurse(x)),
         },
-        Expression::FunctionCall.arguments.[].(x => Visit::<ExpressionNode>::visit(&**x)),
-    }
-}
-
-impl_visit_mut! { Expression => ExpressionNode,
-    {
-        Expression::Parenthesized.expression.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-        Expression::NamedComponent.base.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-        Expression::Indexing.{
-            base.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            index.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-        },
-        Expression::Unary.operand.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-        Expression::Binary.{
-            left.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            right.(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-        },
-        Expression::FunctionCall.arguments.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
+        Expression::FunctionCall.arguments.[].(x => recurse(x)),
     }
 }
 
 impl_visit! { Expression => TypeExpression,
     {
-        Expression::Parenthesized.expression.(x => Visit::<TypeExpression>::visit(&**x)),
-        Expression::NamedComponent.base.(x => Visit::<TypeExpression>::visit(&**x)),
-        Expression::Indexing.{ base.(x => Visit::<TypeExpression>::visit(&**x)), index.(x => Visit::<TypeExpression>::visit(&**x)) },
-        Expression::Unary.operand.(x => Visit::<TypeExpression>::visit(&**x)),
-        Expression::Binary.{ left.(x => Visit::<TypeExpression>::visit(&**x)), right.(x => Visit::<TypeExpression>::visit(&**x)) },
-        Expression::FunctionCall.arguments.[].(x => Visit::<TypeExpression>::visit(&**x)),
+        Expression::Parenthesized.expression.(x => recurse(x)),
+        Expression::NamedComponent.base.(x => recurse(x)),
+        Expression::Indexing.{ base.(x => recurse(x)), index.(x => recurse(x)) },
+        Expression::Unary.operand.(x => recurse(x)),
+        Expression::Binary.{ left.(x => recurse(x)), right.(x => recurse(x)) },
+        Expression::FunctionCall.{
+            ty,
+            arguments.[].(x => recurse(x))
+        },
         Expression::TypeOrIdentifier,
     }
 }
 
-impl_visit_mut! { Expression => TypeExpression,
+impl_visit! { Statement => Attributes,
     {
-        Expression::Parenthesized.expression.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-        Expression::NamedComponent.base.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-        Expression::Indexing.{ base.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)), index.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)) },
-        Expression::Unary.operand.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-        Expression::Binary.{ left.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)), right.(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)) },
-        Expression::FunctionCall.arguments.[].(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-        Expression::TypeOrIdentifier,
+        Statement::Compound.{ attributes, statements.[].(x => recurse(x)) },
+        Statement::If.{
+            attributes,
+            else_if_clauses.[].body.statements.[].(x => recurse(x)),
+            else_clause.[].body.statements.[].(x => recurse(x)),
+        },
+        Statement::Switch.{
+            attributes,
+            clauses.[].{ attributes, body.statements.[].(x => recurse(x)) },
+        },
+        Statement::Loop.{
+            attributes,
+            body.statements.[].(x => recurse(x)),
+            continuing.[].{
+                attributes,
+                body.statements.[].(x => recurse(x)),
+                break_if.[].{ attributes }
+            },
+        },
+        Statement::For.{
+            attributes,
+            body.statements.[].(x => recurse(x)),
+        },
+        Statement::While.{
+            attributes,
+            body.statements.[].(x => recurse(x)),
+        },
+        Statement::Break.attributes,
+        Statement::Continue.attributes,
+        Statement::Return.attributes,
+        Statement::Discard.attributes,
+        Statement::FunctionCall.attributes,
+        Statement::ConstAssert.attributes,
+        Statement::Declaration.attributes,
+    }
+}
+
+impl_visit! { Statement => TypeExpression,
+    {
+        Statement::Compound.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            statements.[].(x => recurse(x)),
+        },
+        Statement::Assignment.{
+            #[cfg(feature = "attributes")]
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            lhs.(x => visit::<Expression, TypeExpression>(x)),
+            rhs.(x => visit::<Expression, TypeExpression>(x)),
+        },
+        Statement::Increment.{
+            #[cfg(feature = "attributes")]
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            expression.(x => visit::<Expression, TypeExpression>(x)),
+        },
+        Statement::Decrement.{
+            #[cfg(feature = "attributes")]
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            expression.(x => visit::<Expression, TypeExpression>(x)),
+        },
+        Statement::If.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            if_clause.{
+                expression.(x => visit::<Expression, TypeExpression>(x)),
+                body.{
+                    attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                    statements.[].(x => recurse(x)),
+                }
+            },
+            else_if_clauses.[].{
+                #[cfg(feature = "attributes")]
+                attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                expression.(x => visit::<Expression, TypeExpression>(x)),
+                body.{
+                    attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                    statements.[].(x => recurse(x)),
+                }
+            },
+            else_clause.[].{
+                #[cfg(feature = "attributes")]
+                attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                body.{
+                    attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                    statements.[].(x => recurse(x)),
+                }
+            },
+        },
+        Statement::Switch.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            expression.(x => visit::<Expression, TypeExpression>(x)),
+            body_attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            clauses.[].{
+                attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                case_selectors.[].CaseSelector::Expression.(x => visit::<Expression, TypeExpression>(x)),
+                body.{
+                    attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                    statements.[].(x => recurse(x)),
+                }
+            }
+        },
+        Statement::Loop.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            body.{
+                attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                statements.[].(x => recurse(x)),
+            },
+            continuing.[].{
+                #[cfg(feature = "attributes")]
+                attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                body.{
+                    attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                    statements.[].(x => recurse(x)),
+                },
+                break_if.[].{
+                    #[cfg(feature = "attributes")]
+                    attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                    expression.(x => visit::<Expression, TypeExpression>(x)),
+                }
+            }
+        },
+        Statement::For.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            initializer.[].(x => recurse(x)),
+            condition.[].(x => visit::<Expression, TypeExpression>(x)),
+            update.[].(x => recurse(x)),
+            body.{
+                attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                statements.[].(x => recurse(x)),
+            },
+        },
+        Statement::While.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            condition.(x => visit::<Expression, TypeExpression>(x)),
+            body.{
+                attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+                statements.[].(x => recurse(x)),
+            },
+        },
+        #[cfg(feature = "attributes")]
+        Statement::Break.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        },
+        #[cfg(feature = "attributes")]
+        Statement::Continue.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        },
+        Statement::Return.{
+            #[cfg(feature = "attributes")]
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            expression.[].(x => visit::<Expression, TypeExpression>(x)),
+        },
+        #[cfg(feature = "attributes")]
+        Statement::Discard.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        },
+        Statement::FunctionCall.{
+            #[cfg(feature = "attributes")]
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            call.{
+                ty,
+                arguments.[].(x => visit::<Expression, TypeExpression>(x)),
+            }
+        },
+        Statement::ConstAssert.{
+            #[cfg(feature = "attributes")]
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            expression.(x => visit::<Expression, TypeExpression>(x)),
+        },
+        Statement::Declaration.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            ty.[],
+            initializer.[].(x => visit::<Expression, TypeExpression>(x)),
+        },
     }
 }
 
 impl_visit! { Statement => ExpressionNode,
     {
-        Statement::Compound.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+        Statement::Compound.statements.[].(x => recurse(x)),
         Statement::Assignment.{ lhs, rhs },
         Statement::Increment.expression,
         Statement::Decrement.expression,
         Statement::If.{
             if_clause.{
                 expression,
-                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+                body.statements.[].(x => recurse(x)),
             },
             else_if_clauses.[].{
                 expression,
-                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+                body.statements.[].(x => recurse(x)),
             }
         },
         Statement::Switch.{
             expression,
             clauses.[].{
                 case_selectors.[].CaseSelector::Expression,
-                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+                body.statements.[].(x => recurse(x)),
             }
         },
         Statement::Loop.{
-            body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+            body.statements.[].(x => recurse(x)),
             continuing.[].{
-                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+                body.statements.[].(x => recurse(x)),
                 break_if.[].expression,
             }
         },
         Statement::For.{
-            initializer.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+            initializer.[].(x => recurse(x)),
             condition.[],
-            update.[].(x => Visit::<ExpressionNode>::visit(&**x)),
-            body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
+            update.[].(x => recurse(x)),
+            body.statements.[].(x => recurse(x)),
         },
         Statement::While.{
             condition,
-            body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
-        },
-        Statement::Return.expression.[],
-        Statement::FunctionCall.call.arguments.[],
-        Statement::ConstAssert.expression,
-        Statement::Declaration.initializer.[],
-    }
-}
-
-impl_visit_mut! { Statement => ExpressionNode,
-    {
-        Statement::Compound.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-        Statement::Assignment.{ lhs, rhs },
-        Statement::Increment.expression,
-        Statement::Decrement.expression,
-        Statement::If.{
-            if_clause.{
-                expression,
-                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            },
-            else_if_clauses.[].{
-                expression,
-                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            }
-        },
-        Statement::Switch.{
-            expression,
-            clauses.[].{
-                case_selectors.[].CaseSelector::Expression,
-                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            }
-        },
-        Statement::Loop.{
-            body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            continuing.[].{
-                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-                break_if.[].expression,
-            }
-        },
-        Statement::For.{
-            initializer.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            condition.[],
-            update.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-            body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
-        },
-        Statement::While.{
-            condition,
-            body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
+            body.statements.[].(x => recurse(x)),
         },
         Statement::Return.expression.[],
         Statement::FunctionCall.call.arguments.[],
@@ -217,24 +333,23 @@ impl_visit! { Statement => StatementNode,
     }
 }
 
-impl_visit_mut! { Statement => StatementNode,
+impl_visit! { Attribute => TypeExpression,
     {
-        Statement::Compound.statements.[],
-        Statement::If.{
-            if_clause.body.statements.[],
-            else_if_clauses.[].body.statements.[],
+        Attribute::Align.(x => visit::<Expression, TypeExpression>(x)),
+        Attribute::Binding.(x => visit::<Expression, TypeExpression>(x)),
+        Attribute::BlendSrc.(x => visit::<Expression, TypeExpression>(x)),
+        Attribute::Group.(x => visit::<Expression, TypeExpression>(x)),
+        Attribute::Id.(x => visit::<Expression, TypeExpression>(x)),
+        Attribute::Location.(x => visit::<Expression, TypeExpression>(x)),
+        Attribute::Size.(x => visit::<Expression, TypeExpression>(x)),
+        Attribute::WorkgroupSize.{
+            x.(x => visit::<Expression, TypeExpression>(x)),
+            y.[].(x => visit::<Expression, TypeExpression>(x)),
+            z.[].(x => visit::<Expression, TypeExpression>(x)),
         },
-        Statement::Switch.clauses.[].body.statements.[],
-        Statement::Loop.{
-            body.statements.[],
-            continuing.[].body.statements.[],
-        },
-        Statement::For.{
-            initializer.[],
-            update.[],
-            body.statements.[],
-        },
-        Statement::While.body.statements.[],
+        #[cfg(feature = "generics")]
+        Attribute::Type.variants.[],
+        Attribute::Custom.arguments.[].[].(x => visit::<Expression, TypeExpression>(x))
     }
 }
 
@@ -245,20 +360,7 @@ impl_visit! { TranslationUnit => ExpressionNode,
                 initializer.[],
             },
             GlobalDeclaration::Function.{
-                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)),
-            }
-        }
-    }
-}
-
-impl_visit_mut! { TranslationUnit => ExpressionNode,
-    {
-        global_declarations.[].{
-            GlobalDeclaration::Declaration.{
-                initializer.[],
-            },
-            GlobalDeclaration::Function.{
-                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)),
+                body.statements.[].(x => visit::<Statement, ExpressionNode>(x)),
             }
         }
     }
@@ -270,44 +372,90 @@ impl_visit! { TranslationUnit => StatementNode,
     }
 }
 
-impl_visit_mut! { TranslationUnit => StatementNode,
+impl_visit! { TranslationUnit => Attributes,
     {
-        global_declarations.[].GlobalDeclaration::Function.body.statements.[]
+        imports.[].attributes,
+        global_directives.[].{
+            GlobalDirective::Diagnostic.attributes,
+            GlobalDirective::Enable.attributes,
+            GlobalDirective::Requires.attributes,
+        },
+        global_declarations.[].{
+            GlobalDeclaration::Declaration.attributes,
+            GlobalDeclaration::TypeAlias.attributes,
+            GlobalDeclaration::Struct.{
+                attributes,
+                members.[].attributes,
+            },
+            GlobalDeclaration::Function.{
+                attributes,
+                parameters.[].attributes,
+                body.{ attributes, statements.[].(x => visit::<Statement, Attributes>(x)) }
+            },
+            GlobalDeclaration::ConstAssert.attributes,
+        }
     }
 }
 
 impl_visit! { TranslationUnit => TypeExpression,
     {
-        global_declarations.[].{
-            GlobalDeclaration::Declaration.{
-                ty.[],
-                initializer.[].(x => Visit::<TypeExpression>::visit(&**x)),
-            },
-            GlobalDeclaration::TypeAlias.ty,
-            GlobalDeclaration::Struct.members.[].ty,
-            GlobalDeclaration::Function.{
-                parameters.[].ty,
-                return_type.[],
-                body.statements.[].(x => Visit::<ExpressionNode>::visit(&**x)).(x => Visit::<TypeExpression>::visit(&**x)),
-            }
-        }
+        global_declarations.[].(x => visit::<GlobalDeclaration, TypeExpression>(x))
     }
 }
 
-impl_visit_mut! { TranslationUnit => TypeExpression,
+impl_visit! { GlobalDeclaration => TypeExpression,
     {
-        global_declarations.[].{
-            GlobalDeclaration::Declaration.{
-                ty.[],
-                initializer.[].(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-            },
-            GlobalDeclaration::TypeAlias.ty,
-            GlobalDeclaration::Struct.members.[].ty,
-            GlobalDeclaration::Function.{
-                parameters.[].ty,
-                return_type.[],
-                body.statements.[].(x => VisitMut::<ExpressionNode>::visit_mut(&mut **x)).(x => VisitMut::<TypeExpression>::visit_mut(&mut **x)),
-            }
+        GlobalDeclaration::Declaration.(x => visit::<Declaration, TypeExpression>(x)),
+        GlobalDeclaration::TypeAlias.(x => visit::<TypeAlias, TypeExpression>(x)),
+        GlobalDeclaration::Struct.(x => visit::<Struct, TypeExpression>(x)),
+        GlobalDeclaration::Function.(x => visit::<Function, TypeExpression>(x)),
+        GlobalDeclaration::ConstAssert.(x => visit::<ConstAssert, TypeExpression>(x))
+    }
+}
+
+impl_visit! { Declaration => TypeExpression,
+    {
+        attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        ty.[],
+        initializer.[].(x => visit::<Expression, TypeExpression>(x)),
+    }
+}
+impl_visit! { TypeAlias => TypeExpression,
+    {
+        #[cfg(feature = "attributes")]
+        attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        ty,
+    }
+}
+impl_visit! { Struct => TypeExpression,
+    {
+        #[cfg(feature = "attributes")]
+        attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        members.[].{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            ty,
+        },
+    }
+}
+impl_visit! { Function => TypeExpression,
+    {
+        attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        parameters.[].{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            ty,
+        },
+        return_attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        return_type.[],
+        body.{
+            attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+            statements.[].(x => visit::<Statement, ExpressionNode>(x)).(x => visit::<Expression, TypeExpression>(x)),
         }
+    }
+}
+impl_visit! { ConstAssert => TypeExpression,
+    {
+        #[cfg(feature = "attributes")]
+        attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
+        expression.(x => visit::<Expression, TypeExpression>(x)),
     }
 }

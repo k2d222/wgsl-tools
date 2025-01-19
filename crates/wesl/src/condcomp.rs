@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::attributes::query_attributes;
+use crate::attributes::query_attrs;
 use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{syntax::*, Decorated};
@@ -262,7 +262,7 @@ pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondCo
 
     // 2. remove attributes that evaluate to true
 
-    for attrs in query_attributes(wesl) {
+    for attrs in query_attrs(wesl) {
         attrs.retain(|attr| match attr {
             Attribute::If(expr) => **expr != EXPR_TRUE,
             _ => true,

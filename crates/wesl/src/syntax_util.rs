@@ -4,7 +4,7 @@ use std::{
     iter::{once, Iterator},
 };
 
-use wgsl_parse::syntax::*;
+use wgsl_parse::{syntax::*, visit::Visit};
 use wgsl_parse_macros::query_mut;
 
 /// was that not in the std at some point???
@@ -23,301 +23,6 @@ impl<T: Iterator> IteratorExt for T {
         Self: Sized + 'a,
     {
         Box::new(self)
-    }
-}
-
-/// A trait that iterates over identifiers used in a syntax node. (reference identifiers)
-pub trait IterIdents {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression>;
-}
-
-impl IterIdents for GlobalDeclaration {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            GlobalDeclaration::Declaration.(x => x.iter_idents()),
-            GlobalDeclaration::TypeAlias.(x => x.iter_idents()),
-            GlobalDeclaration::Struct.(x => x.iter_idents()),
-            GlobalDeclaration::Function.(x => x.iter_idents()),
-            GlobalDeclaration::ConstAssert.(x => x.iter_idents())
-        })
-    }
-}
-
-impl IterIdents for Declaration {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            attributes.[].(x => x.iter_idents()),
-            ty.[],
-            initializer.[].(x => x.iter_idents()),
-        })
-    }
-}
-
-impl IterIdents for TypeAlias {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            #[cfg(feature = "attributes")]
-            attributes.[].(x => x.iter_idents()),
-            ty,
-        })
-    }
-}
-
-impl IterIdents for Struct {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            #[cfg(feature = "attributes")]
-            attributes.[].(x => x.iter_idents()),
-            members.[].{
-                attributes.[].(x => x.iter_idents()),
-                ty,
-            },
-        })
-    }
-}
-
-impl IterIdents for Function {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            attributes.[].(x => x.iter_idents()),
-            parameters.[].{
-                attributes.[].(x => x.iter_idents()),
-                ty,
-            },
-            return_attributes.[].(x => x.iter_idents()),
-            return_type.[],
-            body.{
-                attributes.[].(x => x.iter_idents()),
-                statements.[].(x => x.iter_idents()),
-            }
-        })
-    }
-}
-
-impl IterIdents for ConstAssert {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            #[cfg(feature = "attributes")]
-            attributes.[].(x => x.iter_idents()),
-            expression.(x => x.iter_idents()),
-        })
-    }
-}
-
-impl IterIdents for Attribute {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        #[cfg(feature = "generics")]
-        {
-            query_mut!(self.{
-                Attribute::Align.(x => x.iter_idents()),
-                Attribute::Binding.(x => x.iter_idents()),
-                Attribute::BlendSrc.(x => x.iter_idents()),
-                Attribute::Group.(x => x.iter_idents()),
-                Attribute::Id.(x => x.iter_idents()),
-                Attribute::Location.(x => x.iter_idents()),
-                Attribute::Size.(x => x.iter_idents()),
-                Attribute::WorkgroupSize.{
-                    x.(x => x.iter_idents()),
-                    y.[].(x => x.iter_idents()),
-                    z.[].(x => x.iter_idents()),
-                },
-                Attribute::Type.variants.[],
-                Attribute::Custom.arguments.[].[].(x => x.iter_idents())
-            })
-        }
-        #[cfg(not(feature = "generics"))]
-        {
-            query_mut!(self.{
-                Attribute::Align.(x => x.iter_idents()),
-                Attribute::Binding.(x => x.iter_idents()),
-                Attribute::BlendSrc.(x => x.iter_idents()),
-                Attribute::Group.(x => x.iter_idents()),
-                Attribute::Id.(x => x.iter_idents()),
-                Attribute::Location.(x => x.iter_idents()),
-                Attribute::Size.(x => x.iter_idents()),
-                Attribute::WorkgroupSize.{
-                    x.(x => x.iter_idents()),
-                    y.[].(x => x.iter_idents()),
-                    z.[].(x => x.iter_idents()),
-                },
-                Attribute::Custom.arguments.[].[].(x => x.iter_idents())
-            })
-        }
-    }
-}
-
-impl IterIdents for Expression {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            Expression::Parenthesized.expression.(x => x.iter_idents()),
-            Expression::NamedComponent.base.(x => x.iter_idents()),
-            Expression::Indexing.{ base, index }.(x => x.iter_idents()),
-            Expression::Unary.operand.(x => x.iter_idents()),
-            Expression::Binary.{ left, right }.(x => x.iter_idents()),
-            Expression::FunctionCall.{
-                ty,
-                arguments.[].(x => x.iter_idents())
-            },
-            Expression::TypeOrIdentifier
-        })
-    }
-}
-
-impl IterIdents for ExpressionNode {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        self.node_mut().iter_idents()
-    }
-}
-
-impl IterIdents for TypeExpression {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.template_args.[].[].(x => x.iter_idents()))
-    }
-}
-
-impl IterIdents for Statement {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.{
-            Statement::Compound.{
-                attributes.[].(x => x.iter_idents()),
-                statements.[].(x => x.iter_idents()),
-            },
-            Statement::Assignment.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                lhs.(x => x.iter_idents()),
-                rhs.(x => x.iter_idents()),
-            },
-            Statement::Increment.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                expression.(x => x.iter_idents()),
-            },
-            Statement::Decrement.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                expression.(x => x.iter_idents()),
-            },
-            Statement::If.{
-                attributes.[].(x => x.iter_idents()),
-                if_clause.{
-                    expression.(x => x.iter_idents()),
-                    body.{
-                        attributes.[].(x => x.iter_idents()),
-                        statements.[].(x => x.iter_idents()),
-                    }
-                },
-                else_if_clauses.[].{
-                    #[cfg(feature = "attributes")]
-                    attributes.[].(x => x.iter_idents()),
-                    expression.(x => x.iter_idents()),
-                    body.{
-                        attributes.[].(x => x.iter_idents()),
-                        statements.[].(x => x.iter_idents()),
-                    }
-                },
-                else_clause.[].{
-                    #[cfg(feature = "attributes")]
-                    attributes.[].(x => x.iter_idents()),
-                    body.{
-                        attributes.[].(x => x.iter_idents()),
-                        statements.[].(x => x.iter_idents()),
-                    }
-                },
-            },
-            Statement::Switch.{
-                attributes.[].(x => x.iter_idents()),
-                expression.(x => x.iter_idents()),
-                body_attributes.[].(x => x.iter_idents()),
-                clauses.[].{
-                    attributes.[].(x => x.iter_idents()),
-                    case_selectors.[].CaseSelector::Expression.(x => x.iter_idents()),
-                    body.{
-                        attributes.[].(x => x.iter_idents()),
-                        statements.[].(x => x.iter_idents()),
-                    }
-                }
-            },
-            Statement::Loop.{
-                attributes.[].(x => x.iter_idents()),
-                body.{
-                    attributes.[].(x => x.iter_idents()),
-                    statements.[].(x => x.iter_idents()),
-                },
-                continuing.[].{
-                    #[cfg(feature = "attributes")]
-                    attributes.[].(x => x.iter_idents()),
-                    body.{
-                        attributes.[].(x => x.iter_idents()),
-                        statements.[].(x => x.iter_idents()),
-                    },
-                    break_if.[].{
-                        #[cfg(feature = "attributes")]
-                        attributes.[].(x => x.iter_idents()),
-                        expression.(x => x.iter_idents()),
-                    }
-                }
-            },
-            Statement::For.{
-                attributes.[].(x => x.iter_idents()),
-                initializer.[].(x => x.iter_idents()),
-                condition.[].(x => x.iter_idents()),
-                update.[].(x => x.iter_idents()),
-                body.{
-                    attributes.[].(x => x.iter_idents()),
-                    statements.[].(x => x.iter_idents()),
-                },
-            },
-            Statement::While.{
-                attributes.[].(x => x.iter_idents()),
-                condition.(x => x.iter_idents()),
-                body.{
-                    attributes.[].(x => x.iter_idents()),
-                    statements.[].(x => x.iter_idents()),
-                },
-            },
-            #[cfg(feature = "attributes")]
-            Statement::Break.{
-                attributes.[].(x => x.iter_idents()),
-            },
-            #[cfg(feature = "attributes")]
-            Statement::Continue.{
-                attributes.[].(x => x.iter_idents()),
-            },
-            Statement::Return.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                expression.[].(x => x.iter_idents()),
-            },
-            #[cfg(feature = "attributes")]
-            Statement::Discard.{
-                attributes.[].(x => x.iter_idents()),
-            },
-            Statement::FunctionCall.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                call.{
-                    ty,
-                    arguments.[].(x => x.iter_idents()),
-                }
-            },
-            Statement::ConstAssert.{
-                #[cfg(feature = "attributes")]
-                attributes.[].(x => x.iter_idents()),
-                expression.(x => x.iter_idents()),
-            },
-            Statement::Declaration.{
-                attributes.[].(x => x.iter_idents()),
-                ty.[],
-                initializer.[].(x => x.iter_idents()),
-            },
-        })
-    }
-}
-
-impl IterIdents for TemplateArg {
-    fn iter_idents(&mut self) -> impl Iterator<Item = &mut TypeExpression> {
-        query_mut!(self.expression.(x => x.iter_idents()))
     }
 }
 
@@ -386,7 +91,7 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
         {
             ty.ident = id.clone();
         }
-        query_mut!(ty.template_args.[].[].(x => x.iter_idents()))
+        query_mut!(ty.template_args.[].[].expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)))
             .for_each(|ty| retarget_ty(ty, scope));
     }
 
@@ -400,58 +105,58 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
         stats.into_iter().for_each(|stat| match stat.node_mut() {
             Statement::Void => (),
             Statement::Compound(s) => {
-                query_mut!(s.attributes.[].(x => x.iter_idents()))
+                query_mut!(s.attributes.[].(x => x.visit_mut()))
                     .for_each(|ty| retarget_ty(ty, &scope));
                 retarget_stats(&mut s.statements, scope.clone());
             }
             Statement::Assignment(s) => {
                 query_mut!(s.{
                     #[cfg(feature = "attributes")]
-                    attributes.[].(x => x.iter_idents()),
-                    lhs.(x => x.iter_idents()),
-                    rhs.(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
+                    lhs.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
+                    rhs.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::Increment(s) => {
                 query_mut!(s.{
                     #[cfg(feature = "attributes")]
-                    attributes.[].(x => x.iter_idents()),
-                    expression.(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
+                    expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::Decrement(s) => {
                 query_mut!(s.{
                     #[cfg(feature = "attributes")]
-                    attributes.[].(x => x.iter_idents()),
-                    expression.(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
+                    expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::If(s) => {
                 let s2 = &mut *s; // COMBAK: not sure why this is needed?
                 query_mut!(s2.{
-                    attributes.[].(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
                     if_clause.{
-                        expression.(x => x.iter_idents()),
+                        expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                         body.{
-                            attributes.[].(x => x.iter_idents()),
+                            attributes.[].(x => x.visit_mut()),
                         }
                     },
                     else_if_clauses.[].{
                         #[cfg(feature = "attributes")]
-                        attributes.[].(x => x.iter_idents()),
-                        expression.(x => x.iter_idents()),
+                        attributes.[].(x => x.visit_mut()),
+                        expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                         body.{
-                            attributes.[].(x => x.iter_idents()),
+                            attributes.[].(x => x.visit_mut()),
                         }
                     },
                     else_clause.[].{
                         #[cfg(feature = "attributes")]
-                        attributes.[].(x => x.iter_idents()),
+                        attributes.[].(x => x.visit_mut()),
                         body.{
-                            attributes.[].(x => x.iter_idents()),
+                            attributes.[].(x => x.visit_mut()),
                         },
                     },
                 })
@@ -467,15 +172,15 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
             Statement::Switch(s) => {
                 let s2 = &mut *s; // COMBAK: not sure why this is needed?
                 query_mut!(s2.{
-                    attributes.[].(x => x.iter_idents()),
-                    expression.(x => x.iter_idents()),
-                    body_attributes.[].(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
+                    expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
+                    body_attributes.[].(x => x.visit_mut()),
                     clauses.[].{
                         #[cfg(feature = "attributes")]
-                        attributes.[].(x => x.iter_idents()),
-                        case_selectors.[].CaseSelector::Expression.(x => x.iter_idents()),
+                        attributes.[].(x => x.visit_mut()),
+                        case_selectors.[].CaseSelector::Expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                         body.{
-                            attributes.[].(x => x.iter_idents()),
+                            attributes.[].(x => x.visit_mut()),
                         }
                     },
 
@@ -488,8 +193,8 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
             Statement::Loop(s) => {
                 let s2 = &mut *s; // COMBAK: not sure why this is needed?
                 query_mut!(s2.{
-                    attributes.[].(x => x.iter_idents()),
-                    body.attributes.[].(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
+                    body.attributes.[].(x => x.visit_mut()),
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
                 let scope = retarget_stats(&mut s.body.statements, scope.clone());
@@ -498,8 +203,8 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
                 if let Some(s) = &mut s.continuing {
                     let s2 = &mut *s; // COMBAK: not sure why this is needed?
                     query_mut!(s2.{
-                        attributes.[].(x => x.iter_idents()),
-                        body.attributes.[].(x => x.iter_idents()),
+                        attributes.[].(x => x.visit_mut()),
+                        body.attributes.[].(x => x.visit_mut()),
                     })
                     .for_each(|ty| retarget_ty(ty, &scope));
                     let scope = retarget_stats(&mut s.body.statements, scope.clone());
@@ -508,24 +213,24 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
                     if let Some(s) = &mut s.break_if {
                         let s2 = &mut *s; // COMBAK: not sure why this is needed?
                         query_mut!(s2.{
-                            attributes.[].(x => x.iter_idents()),
-                            expression.(x => x.iter_idents()),
+                            attributes.[].(x => x.visit_mut()),
+                            expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                         })
                         .for_each(|ty| retarget_ty(ty, &scope));
                     }
                 }
             }
             Statement::For(s) => {
-                query_mut!(s.attributes.[].(x => x.iter_idents()))
+                query_mut!(s.attributes.[].(x => x.visit_mut()))
                     .for_each(|ty| retarget_ty(ty, &scope));
                 let scope = if let Some(init) = &mut s.initializer {
                     retarget_stats([init], scope.clone())
                 } else {
                     scope.clone()
                 };
-                query_mut!(s.condition.[].(x => x.iter_idents()))
+                query_mut!(s.condition.[].(x => Visit::<TypeExpression>::visit_mut(&mut **x)))
                     .for_each(|ty| retarget_ty(ty, &scope));
-                query_mut!(s.body.attributes.[].(x => x.iter_idents()))
+                query_mut!(s.body.attributes.[].(x => x.visit_mut()))
                     .for_each(|ty| retarget_ty(ty, &scope));
                 if let Some(update) = &mut s.update {
                     retarget_stats([update], scope.clone());
@@ -535,55 +240,55 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
             Statement::While(s) => {
                 let s2 = &mut *s; // COMBAK: not sure why this is needed?
                 query_mut!(s2.{
-                    attributes.[].(x => x.iter_idents()),
-                    condition.(x => x.iter_idents()),
-                    body.attributes.[].(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
+                    condition.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
+                    body.attributes.[].(x => x.visit_mut()),
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
                 retarget_stats(&mut s.body.statements, scope.clone());
             }
             Statement::Break(s) => {
                 #[cfg(feature = "attributes")]
-                query_mut!(s.attributes.[].(x => x.iter_idents()))
+                query_mut!(s.attributes.[].(x => x.visit_mut()))
                     .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::Continue(s) => {
                 #[cfg(feature = "attributes")]
-                query_mut!(s.attributes.[].(x => x.iter_idents()))
+                query_mut!(s.attributes.[].(x => x.visit_mut()))
                     .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::Return(s) => {
-                query_mut!(s.expression.[].(x => x.iter_idents()))
+                query_mut!(s.expression.[].(x => Visit::<TypeExpression>::visit_mut(&mut **x)))
                     .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::Discard(s) => {
                 #[cfg(feature = "attributes")]
-                query_mut!(s.attributes.[].(x => x.iter_idents()))
+                query_mut!(s.attributes.[].(x => x.visit_mut()))
                     .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::FunctionCall(s) => {
                 query_mut!(s.{
                    #[cfg(feature = "attributes")]
-                    attributes.[].(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
                     call.{
                         ty,
-                        arguments.[].(x => x.iter_idents()),
+                        arguments.[].(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                     }
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::ConstAssert(s) => {
                 query_mut!(s.{
-                    expression.(x => x.iter_idents())
+                    expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x))
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
             }
             Statement::Declaration(s) => {
                 let s2 = &mut *s; // COMBAK: not sure why this is needed?
                 query_mut!(s2.{
-                    attributes.[].(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
                     ty.[],
-                    initializer.[].(x => x.iter_idents()),
+                    initializer.[].(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
                 scope.to_mut().replace(s.ident.clone());
@@ -596,12 +301,14 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
         match decl {
             GlobalDeclaration::Void => (),
             GlobalDeclaration::Declaration(d) => {
-                d.iter_idents().for_each(|ty| retarget_ty(ty, &scope))
+                Visit::<TypeExpression>::visit_mut(d).for_each(|ty| retarget_ty(ty, &scope))
             }
             GlobalDeclaration::TypeAlias(d) => {
-                d.iter_idents().for_each(|ty| retarget_ty(ty, &scope))
+                Visit::<TypeExpression>::visit_mut(d).for_each(|ty| retarget_ty(ty, &scope))
             }
-            GlobalDeclaration::Struct(d) => d.iter_idents().for_each(|ty| retarget_ty(ty, &scope)),
+            GlobalDeclaration::Struct(d) => {
+                Visit::<TypeExpression>::visit_mut(d).for_each(|ty| retarget_ty(ty, &scope))
+            }
             GlobalDeclaration::Function(d) => {
                 #[cfg(feature = "generics")]
                 let scope = {
@@ -616,15 +323,15 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
                 };
                 let d2 = &mut *d; // COMBAK: not sure why this is needed?
                 query_mut!(d2.{
-                    attributes.[].(x => x.iter_idents()),
+                    attributes.[].(x => x.visit_mut()),
                     parameters.[].{
-                        attributes.[].(x => x.iter_idents()),
+                        attributes.[].(x => x.visit_mut()),
                         ty,
                     },
-                    return_attributes.[].(x => x.iter_idents()),
+                    return_attributes.[].(x => x.visit_mut()),
                     return_type.[],
                     body.{
-                        attributes.[].(x => x.iter_idents()),
+                        attributes.[].(x => x.visit_mut()),
                     }
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
@@ -635,7 +342,7 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
                 retarget_stats(&mut d.body.statements, scope);
             }
             GlobalDeclaration::ConstAssert(d) => {
-                d.iter_idents().for_each(|ty| retarget_ty(ty, &scope))
+                Visit::<TypeExpression>::visit_mut(d).for_each(|ty| retarget_ty(ty, &scope))
             }
         }
     }

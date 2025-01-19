@@ -43,7 +43,6 @@ const values = array(
 
 @compute @workgroup_size(1)
 fn main() {
-  let y = x;
 
   for (var i = 0u; i < 32; i++) {
     outputs[i].value = values[i];
