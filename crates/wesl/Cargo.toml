@@ -19,6 +19,8 @@ sourcemap = "9.0.0"
 thiserror = "1.0.63"
 wgsl-parse = { path = "../wgsl-parse", features = ["imports", "condcomp"] }
 wgsl-parse-macros = { version = "0.0.2", path = "../wgsl-parse-macros" }
+proc-macro2 = { version = "1.0.93", optional = true }
+quote = { version = "1.0.38", optional = true }
 
 [features]
 default = ["imports", "condcomp", "generics", "eval"]
@@ -28,3 +30,4 @@ condcomp = ["attributes", "wgsl-parse/condcomp"]
 eval = []
 generics = ["attributes"]
 serde = ["dep:serde"]
+package = ["dep:proc-macro2", "dep:quote"]

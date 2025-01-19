@@ -342,3 +342,86 @@ impl Resolver for Router {
         // })
     }
 }
+
+pub trait PkgModule: Sync {
+    fn name(&self) -> &'static str;
+    fn source(&self) -> &'static str;
+    fn submodules(&self) -> &[&dyn PkgModule];
+    fn submodule(&self, name: &str) -> Option<&dyn PkgModule> {
+        self.submodules()
+            .iter()
+            .find(|sm| sm.name() == name)
+            .map(|sm| *sm)
+    }
+}
+
+pub struct PkgResolver {
+    packages: Vec<&'static dyn PkgModule>,
+    fallback: Option<Box<dyn Resolver>>,
+}
+
+impl PkgResolver {
+    pub fn new() -> Self {
+        Self {
+            packages: Vec::new(),
+            fallback: None,
+        }
+    }
+
+    pub fn add_package(&mut self, pkg: &'static dyn PkgModule) {
+        self.packages.push(pkg);
+    }
+
+    pub fn mount_fallback_resolver(&mut self, fallback: impl Resolver + 'static) {
+        self.fallback = Some(Box::new(fallback));
+    }
+}
+
+impl Resolver for PkgResolver {
+    fn resolve_source<'a>(
+        &'a self,
+        resource: &Resource,
+    ) -> Result<std::borrow::Cow<'a, str>, ResolveError> {
+        if resource.path().has_root() {
+            let path = resource.path().strip_prefix("/").unwrap();
+            for pkg in &self.packages {
+                // TODO: the resolution algorithm is currently not spec-compliant.
+                // https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
+                if path.starts_with(pkg.name()) {
+                    let mut cur_mod = *pkg;
+                    for segment in path.iter().skip(1) {
+                        let name = segment.to_str().ok_or_else(|| {
+                            ResolveError::InvalidResource(
+                                resource.clone(),
+                                "invalid unicode".to_string(),
+                            )
+                        })?;
+                        if let Some(submod) = pkg.submodule(name) {
+                            cur_mod = submod;
+                        } else {
+                            return Err(ResolveError::FileNotFound(
+                                path.to_path_buf(),
+                                format!("in package {}", pkg.name()),
+                            ));
+                        }
+                    }
+                    return Ok(cur_mod.source().into());
+                }
+            }
+            Err(ResolveError::FileNotFound(
+                resource.path().to_path_buf(),
+                "no package found".to_string(),
+            ))
+        } else {
+            self.fallback
+                .as_ref()
+                .map(|fallback| fallback.resolve_source(resource))
+                .unwrap_or_else(|| {
+                    Err(ResolveError::FileNotFound(
+                        resource.path().to_path_buf(),
+                        "no package found".to_string(),
+                    ))
+                })
+        }
+    }
+}

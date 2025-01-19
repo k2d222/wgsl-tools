@@ -7,7 +7,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-wesl-pkg = { version = "0.0.2", path = "../../crates/wesl-pkg" }
+wesl = { path = "../../crates/wesl" }
 
 [build-dependencies]
-wesl-pkg = { version = "0.0.2", path = "../../crates/wesl-pkg" }
+wesl = { path = "../../crates/wesl", features = ["package"] }

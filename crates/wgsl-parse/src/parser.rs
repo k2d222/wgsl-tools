@@ -2,6 +2,12 @@
 //!
 //! [syntax tree]: syntax
 
+use std::str::FromStr;
+
+use lalrpop_util::lalrpop_mod;
+
+use crate::{error::Error, lexer::Lexer, syntax};
+
 lalrpop_mod!(
     #[allow(clippy::type_complexity)]
     wgsl
@@ -10,12 +16,6 @@ lalrpop_mod!(
     #[allow(clippy::type_complexity)]
     wgsl_recognize
 );
-
-use std::str::FromStr;
-
-use lalrpop_util::lalrpop_mod;
-
-use crate::{error::Error, lexer::Lexer, syntax};
 
 pub struct Parser;
 

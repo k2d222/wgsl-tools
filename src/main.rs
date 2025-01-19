@@ -14,8 +14,8 @@ use std::{
 use wesl::{
     eval::{Eval, EvalAttrs, EvalError, HostShareable, Instance, RefInstance, Ty},
     syntax::{self, AccessMode, AddressSpace},
-    CompileOptions, CompileResult, Diagnostic, FileResolver, ManglerKind, Router, SyntaxUtil,
-    VirtualResolver, Wesl,
+    CompileOptions, CompileResult, Diagnostic, FileResolver, ManglerKind, PkgBuilder, Router,
+    SyntaxUtil, VirtualResolver, Wesl,
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 
@@ -592,7 +592,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
             }
         }
         Command::Package(args) => {
-            let code = wesl_pkg::PackageBuilder::new(&args.name)
+            let code = PkgBuilder::new(&args.name)
                 .set_root(args.dir)
                 .codegen()
                 .expect("failed to build package");

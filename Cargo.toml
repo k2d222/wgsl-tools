@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/wgsl-parse", "crates/wgsl-parse-macros", "crates/wesl", "crates/wesl-test", "crates/wesl-pkg", "examples/wesl-random", "examples/wesl-consumer"]
+members = ["crates/wgsl-parse", "crates/wgsl-parse-macros", "crates/wesl", "crates/wesl-test", "examples/wesl-random", "examples/wesl-consumer"]
 
 [workspace.package]
 version = "0.0.2"
@@ -21,8 +21,7 @@ license.workspace = true
 [dependencies]
 clap = { version = "4.5.11", features = ["derive"] }
 wgsl-parse = { path = "crates/wgsl-parse" }
-wesl = { path = "crates/wesl" }
-wesl-pkg = { path = "crates/wesl-pkg" }
+wesl = { path = "crates/wesl", features = ["package"] }
 thiserror = "1.0.63"
 naga = { version = "23.0.0", optional = true, features = ["wgsl-in"] }
 

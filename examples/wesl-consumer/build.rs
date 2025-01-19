@@ -1,5 +1,4 @@
-use wesl::{FileResolver, Wesl};
-use wesl_pkg::PkgResolver;
+use wesl::{FileResolver, PkgResolver, Wesl};
 
 fn main() {
     let mut pkg_resolver = PkgResolver::new();
@@ -9,5 +8,5 @@ fn main() {
     pkg_resolver.mount_fallback_resolver(file_resolver);
     Wesl::new_spec_compliant()
         .set_resolver(pkg_resolver)
-        .build("main.wgsl");
+        .build_artefact("main.wgsl");
 }

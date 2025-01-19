@@ -1,11 +1,11 @@
+use itertools::Itertools;
 use std::{fmt::Display, path::PathBuf};
 
 mod assemble;
 mod mangle;
 mod module;
 
-use itertools::Itertools;
-pub use module::Module;
+pub(crate) use module::Module;
 
 use crate::ResolveError;
 

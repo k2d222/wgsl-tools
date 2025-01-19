@@ -1389,6 +1389,8 @@ dependencies = [
  "itertools",
  "lazy_static",
  "num-traits",
+ "proc-macro2",
+ "quote",
  "serde",
  "sourcemap",
  "thiserror",
@@ -1401,24 +1403,14 @@ name = "wesl-consumer"
 version = "0.0.2"
 dependencies = [
  "wesl",
- "wesl-pkg",
  "wesl-random",
-]
-
-[[package]]
-name = "wesl-pkg"
-version = "0.0.2"
-dependencies = [
- "proc-macro2",
- "quote",
- "wesl",
 ]
 
 [[package]]
 name = "wesl-random"
 version = "0.0.2"
 dependencies = [
- "wesl-pkg",
+ "wesl",
 ]
 
 [[package]]
@@ -1467,7 +1459,6 @@ dependencies = [
  "naga",
  "thiserror",
  "wesl",
- "wesl-pkg",
  "wgsl-parse",
 ]
 

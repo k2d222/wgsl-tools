@@ -12,7 +12,7 @@ type Imports = HashMap<Resource, Vec<syntax::ImportItem>>;
 #[allow(type_alias_bounds)]
 type Modules = HashMap<Resource, syntax::TranslationUnit>;
 
-pub struct Module {
+pub(crate) struct Module {
     pub(crate) source: syntax::TranslationUnit,
     pub(crate) resource: Resource,
     pub(crate) resolutions: Modules,

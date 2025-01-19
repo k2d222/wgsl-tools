@@ -12,4 +12,3 @@ wesl = { path = "../../crates/wesl" }
 [build-dependencies]
 wesl-random = { path = "../wesl-random" }
 wesl = { path = "../../crates/wesl" }
-wesl-pkg = { version = "0.0.2", path = "../../crates/wesl-pkg" }

@@ -101,6 +101,8 @@ pub mod eval;
 mod generics;
 #[cfg(feature = "imports")]
 mod import;
+#[cfg(feature = "package")]
+mod package;
 
 mod error;
 mod lower;
@@ -124,12 +126,15 @@ pub use eval::{Eval, EvalError, Exec};
 #[cfg(feature = "generics")]
 pub use generics::GenericsError;
 
+#[cfg(feature = "package")]
+pub use package::PkgBuilder;
+
 pub use error::{Diagnostic, Error};
 pub use lower::{lower, lower_sourcemap};
 pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
 pub use resolve::{
-    CacheResolver, FileResolver, NoResolver, Preprocessor, ResolveError, Resolver, Resource,
-    Router, VirtualResolver,
+    CacheResolver, FileResolver, NoResolver, PkgModule, PkgResolver, Preprocessor, ResolveError,
+    Resolver, Resource, Router, VirtualResolver,
 };
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 pub use strip::strip_except;
@@ -300,7 +305,7 @@ impl Wesl {
             },
             use_sourcemap: false,
             resolver: Box::new(NoResolver),
-            mangler: Box::new(EscapeMangler),
+            mangler: Box::new(NoMangler),
         }
     }
 
@@ -667,26 +672,26 @@ impl Wesl {
     ///
     /// # WESL Reference
     /// Spec: not available yet.
-    pub fn compile_str(&self, entrypoint: impl AsRef<Path>) -> Result<CompileResult, Error> {
-        let entrypoint = Resource::from(entrypoint.as_ref().to_path_buf());
+    // pub fn compile_str(&self, entrypoint: impl AsRef<Path>) -> Result<CompileResult, Error> {
+    //     let entrypoint = Resource::from(entrypoint.as_ref().to_path_buf());
 
-        if self.use_sourcemap {
-            let (syntax, sourcemap) =
-                compile_sourcemap(&entrypoint, &self.resolver, &self.mangler, &self.options);
-            Ok(CompileResult {
-                syntax: syntax?,
-                sourcemap: Some(sourcemap),
-            })
-        } else {
-            let syntax = compile(&entrypoint, &self.resolver, &self.mangler, &self.options);
-            Ok(CompileResult {
-                syntax: syntax?,
-                sourcemap: None,
-            })
-        }
-    }
+    //     if self.use_sourcemap {
+    //         let (syntax, sourcemap) =
+    //             compile_sourcemap(&entrypoint, &self.resolver, &self.mangler, &self.options);
+    //         Ok(CompileResult {
+    //             syntax: syntax?,
+    //             sourcemap: Some(sourcemap),
+    //         })
+    //     } else {
+    //         let syntax = compile(&entrypoint, &self.resolver, &self.mangler, &self.options);
+    //         Ok(CompileResult {
+    //             syntax: syntax?,
+    //             sourcemap: None,
+    //         })
+    //     }
+    // }
 
-    /// Compile a WESL program from a root file an output the result in rust's OUT_DIR.
+    /// Compile a WESL program from a root file and output the result in rust's OUT_DIR.
     ///
     /// This function is meant to be used in a `build.rs` workflow. The compiled WGSL will
     /// be available with the [`include_wesl`] macro. See the crate documentation for a
@@ -695,7 +700,7 @@ impl Wesl {
     /// # Panics
     /// Panics when compilation fails or if the output file cannot be written.
     /// Pretty-prints the WESL error message to stderr.
-    pub fn build(&self, entrypoint: impl AsRef<Path>) {
+    pub fn build_artefact(&self, entrypoint: impl AsRef<Path>) {
         let entrypoint = entrypoint.as_ref();
         let dirname = std::env::var("OUT_DIR").unwrap();
         let filename = entrypoint.file_name().unwrap();

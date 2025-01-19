@@ -171,7 +171,7 @@ const BUILTIN_NAMES: &[&'static str] = &[
     "unpack2x16float",
 ];
 
-fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
+fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Error> {
     for decl in &wesl.global_declarations {
         let decl_name = decl.ident().map(|ident| ident.name().to_string());
         for ty in decl.visit() {
@@ -185,13 +185,13 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
             {
                 let mut err = Diagnostic::from(E::UndefinedSymbol(ty.ident.clone()));
                 err.declaration = decl_name;
-                return Err(err);
+                return Err(err.into());
             }
         }
     }
     Ok(())
 }
 
-pub fn validate(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
+pub fn validate(wesl: &TranslationUnit) -> Result<(), Error> {
     check_defined_symbols(wesl)
 }
