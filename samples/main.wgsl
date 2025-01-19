@@ -4,8 +4,6 @@ struct Output {
 };
 @group(0) @binding(0) var<storage, read_write> outputs : array<Output, 32>;
 
-
-
 const values = array(
   saturate(vec2(0.0f, 0.05263157933950424f)),
   saturate(vec2(0.10526315867900848f, 0.15789473056793213f)),
@@ -45,6 +43,7 @@ const values = array(
 
 @compute @workgroup_size(1)
 fn main() {
+  let y = x;
 
   for (var i = 0u; i < 32; i++) {
     outputs[i].value = values[i];

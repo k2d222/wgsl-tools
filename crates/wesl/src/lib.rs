@@ -109,6 +109,7 @@ mod resolve;
 mod sourcemap;
 mod strip;
 mod syntax_util;
+mod validate;
 
 #[cfg(feature = "condcomp")]
 pub use condcomp::CondCompError;
@@ -123,23 +124,19 @@ pub use eval::{Eval, EvalError, Exec};
 #[cfg(feature = "generics")]
 pub use generics::GenericsError;
 
-pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
-
-use resolve::NoResolver;
-pub use resolve::{
-    CacheResolver, FileResolver, Preprocessor, ResolveError, Resolver, Resource, Router,
-    VirtualResolver,
-};
-
 pub use error::{Diagnostic, Error};
-
+pub use lower::{lower, lower_sourcemap};
+pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
+pub use resolve::{
+    CacheResolver, FileResolver, NoResolver, Preprocessor, ResolveError, Resolver, Resource,
+    Router, VirtualResolver,
+};
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
-
 pub use strip::strip_except;
+use validate::validate;
+pub use validate::ValidateError;
 
 pub use wgsl_parse::syntax;
-
-pub use lower::{lower, lower_sourcemap};
 
 use itertools::Itertools;
 use std::{collections::HashMap, path::Path, sync::LazyLock};
@@ -152,6 +149,7 @@ pub struct CompileOptions {
     pub use_generics: bool,
     pub use_stripping: bool,
     pub use_lower: bool,
+    pub use_validate: bool,
     pub entry_points: Option<Vec<String>>,
     pub features: HashMap<String, bool>,
 }
@@ -164,6 +162,7 @@ impl Default for CompileOptions {
             use_generics: false,
             use_stripping: true,
             use_lower: false,
+            use_validate: true,
             entry_points: Default::default(),
             features: Default::default(),
         }
@@ -240,6 +239,7 @@ impl Wesl {
                 use_generics: false,
                 use_stripping: true,
                 use_lower: false,
+                use_validate: true,
                 entry_points: None,
                 features: Default::default(),
             },
@@ -268,6 +268,7 @@ impl Wesl {
                 use_generics: true,
                 use_stripping: true,
                 use_lower: true,
+                use_validate: true,
                 entry_points: None,
                 features: Default::default(),
             },
@@ -293,6 +294,7 @@ impl Wesl {
                 use_generics: false,
                 use_stripping: false,
                 use_lower: false,
+                use_validate: false,
                 entry_points: None,
                 features: Default::default(),
             },
@@ -794,6 +796,10 @@ fn compile_impl(
         generics::generate_variants(&mut wesl)?;
         generics::replace_calls(&mut wesl)?;
     };
+
+    if options.use_validate {
+        validate(&mut wesl)?;
+    }
 
     if options.use_stripping {
         let entry_names = options.entry_points.as_ref().unwrap_or(main_names);

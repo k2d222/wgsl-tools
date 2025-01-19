@@ -614,7 +614,6 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
                         }));
                     scope
                 };
-
                 let d2 = &mut *d; // COMBAK: not sure why this is needed?
                 query_mut!(d2.{
                     attributes.[].(x => x.iter_idents()),
@@ -629,7 +628,11 @@ pub fn retarget_idents(wesl: &mut TranslationUnit) {
                     }
                 })
                 .for_each(|ty| retarget_ty(ty, &scope));
-                retarget_stats(&mut d.body.statements, scope.clone());
+                let mut scope = scope.clone();
+                scope
+                    .to_mut()
+                    .extend(d.parameters.iter().map(|param| param.ident.clone()));
+                retarget_stats(&mut d.body.statements, scope);
             }
             GlobalDeclaration::ConstAssert(d) => {
                 d.iter_idents().for_each(|ty| retarget_ty(ty, &scope))

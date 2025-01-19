@@ -78,7 +78,13 @@ impl Resolver for PkgResolver {
 pub trait Module: Sync {
     fn name(&self) -> &'static str;
     fn source(&self) -> &'static str;
-    fn submodule(&self, name: &str) -> Option<&'static dyn Module>;
+    fn submodules(&self) -> &[&dyn Module];
+    fn submodule(&self, name: &str) -> Option<&dyn Module> {
+        self.submodules()
+            .iter()
+            .find(|sm| sm.name() == name)
+            .map(|sm| *sm)
+    }
 }
 
 #[macro_export]
@@ -133,7 +139,9 @@ impl PackageBuilder {
         self
     }
 
-    pub fn build(self) -> std::io::Result<()> {
+    /// generate the rust code that holds the packaged wesl files.
+    /// you probably want to use [`Self::build`] instead.
+    pub fn codegen(&self) -> std::io::Result<String> {
         struct Module {
             name: String,
             source: String,
@@ -201,6 +209,13 @@ impl PackageBuilder {
             let name = &module.name;
             let source = &module.source;
 
+            let submodules = module.submodules.iter().map(|submod| {
+                let name = &submod.name;
+                quote! {
+                    #name,
+                }
+            });
+
             let match_arms = module.submodules.iter().map(|submod| {
                 let name = &submod.name;
                 let ident = format_ident!("{}", name.replace('-', "_"));
@@ -230,6 +245,12 @@ impl PackageBuilder {
                     fn source(&self) -> &'static str {
                         #source
                     }
+                    fn submodules(&self) -> &[&dyn Module] {
+                        static SUBMODULES: &[&dyn Module] = &[
+                            #(#submodules)*
+                        ];
+                        &SUBMODULES
+                    }
                     fn submodule(&self, name: &str) -> Option<&'static dyn Module> {
                         match name {
                             #(#match_arms)*
@@ -243,10 +264,24 @@ impl PackageBuilder {
         }
 
         let tokens = codegen_module(&module);
+        Ok(tokens.to_string())
+    }
 
-        let out_dir =
-            Path::new(&std::env::var_os("OUT_DIR").unwrap()).join(format!("{}.rs", self.name));
-        std::fs::write(&out_dir, tokens.to_string())?;
+    /// generate the build artefact that can then be exposed by the [`wesl_pkg`] macro.
+    ///
+    /// this function must be called in a `build.rs` file. Refer to the crate documentation
+    /// for more details.
+    ///
+    /// # Panics
+    /// panics if the OUT_DIR environment variable is not set. This should not happen if
+    /// ran from a `build.rs` file.
+    pub fn build(&self) -> std::io::Result<()> {
+        let code = self.codegen()?;
+        let out_dir = Path::new(
+            &std::env::var_os("OUT_DIR").expect("OUT_DIR environment variable is not defined"),
+        )
+        .join(format!("{}.rs", self.name));
+        std::fs::write(&out_dir, code)?;
         Ok(())
     }
 }

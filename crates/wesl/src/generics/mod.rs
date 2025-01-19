@@ -52,8 +52,8 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
 
                 let constraints = variant.iter().map(|&(name, ty)| {
                     let mut ty = ty.clone();
-                    for (name2, ty2) in &variant {
-                        replace_ty(&mut ty, name2, ty2);
+                    for (old_id, new_ty) in &variant {
+                        replace_ty(&mut ty, old_id, new_ty);
                     }
                     TypeConstraint {
                         ident: name.clone(),
@@ -82,8 +82,8 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), GenericsError
                     .iter()
                     .map(|p| {
                         let mut ty = p.ty.clone();
-                        for (old_name, new_name) in &variant {
-                            replace_ty(&mut ty, old_name, new_name)
+                        for (old_id, new_id) in &variant {
+                            replace_ty(&mut ty, old_id, new_id)
                         }
                         ty
                     })

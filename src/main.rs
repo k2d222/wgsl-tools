@@ -94,6 +94,9 @@ struct CompOptsArgs {
     /// Disable lowering output to compatibility-mode WGSL
     #[arg(long)]
     no_lower: bool,
+    /// Disable performing validation checks
+    #[arg(long)]
+    no_validate: bool,
     /// Root module declaration names to keep. Keeps all root module declarations by
     /// default. Can be repeated to keep multiple declarations
     #[arg(long)]
@@ -118,6 +121,7 @@ impl From<&CompOptsArgs> for CompileOptions {
             use_generics: !opts.no_generics,
             use_stripping: !opts.no_strip,
             use_lower: !opts.no_lower,
+            use_validate: !opts.no_validate,
             entry_points: opts.keep.clone(),
             features,
         }
@@ -588,10 +592,11 @@ fn run(cli: Cli) -> Result<(), CliError> {
             }
         }
         Command::Package(args) => {
-            wesl_pkg::PackageBuilder::new(args.name)
-                .set_directory(args.dir)
-                .build()
+            let code = wesl_pkg::PackageBuilder::new(&args.name)
+                .set_root(args.dir)
+                .codegen()
                 .expect("failed to build package");
+            println!("{code}");
         }
     };
     Ok(())

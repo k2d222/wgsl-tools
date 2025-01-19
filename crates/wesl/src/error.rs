@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use wgsl_parse::{error::ParseError, span::Span};
 
-use crate::{ResolveError, Resource, SourceMap};
+use crate::{ResolveError, Resource, SourceMap, ValidateError};
 
 #[cfg(feature = "condcomp")]
 use crate::CondCompError;
@@ -18,6 +18,8 @@ use crate::eval::{Context, EvalError};
 pub enum Error {
     #[error("{0}")]
     ParseError(#[from] ParseError),
+    #[error("{0}")]
+    ValidateError(#[from] ValidateError),
     #[error("{0}")]
     ResolveError(#[from] ResolveError),
     #[cfg(feature = "imports")]
@@ -55,6 +57,12 @@ impl From<wgsl_parse::Error> for Diagnostic<Error> {
 
 impl From<ParseError> for Diagnostic<Error> {
     fn from(error: ParseError) -> Self {
+        Self::new(error.into())
+    }
+}
+
+impl From<ValidateError> for Diagnostic<Error> {
+    fn from(error: ValidateError) -> Self {
         Self::new(error.into())
     }
 }
@@ -105,6 +113,7 @@ impl From<Error> for Diagnostic<Error> {
     fn from(error: Error) -> Self {
         match error {
             Error::ParseError(e) => e.into(),
+            Error::ValidateError(e) => e.into(),
             Error::ResolveError(e) => e.into(),
             #[cfg(feature = "imports")]
             Error::ImportError(e) => e.into(),
