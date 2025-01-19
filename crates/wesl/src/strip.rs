@@ -5,8 +5,6 @@ use wgsl_parse::{
     visit::Visit,
 };
 
-use crate::syntax_util::decl_ident;
-
 /// removes unused declarations.
 pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
     let global_idents = wgsl
@@ -24,7 +22,7 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
 
     loop {
         for decl in &mut wgsl.global_declarations {
-            if let Some(ident) = decl_ident(decl) {
+            if let Some(ident) = decl.ident() {
                 if keep.contains(ident) {
                     let used = decl
                         .visit()
@@ -45,7 +43,7 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
     }
 
     wgsl.global_declarations.retain(|decl| {
-        if let Some(ident) = decl_ident(decl) {
+        if let Some(ident) = decl.ident() {
             keep.contains(ident)
         } else {
             true

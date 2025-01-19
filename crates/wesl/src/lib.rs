@@ -133,8 +133,8 @@ pub use resolve::{
 };
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 pub use strip::strip_except;
-use validate::validate;
-pub use validate::ValidateError;
+pub use syntax_util::SyntaxUtil;
+pub use validate::{validate, ValidateError};
 
 pub use wgsl_parse::syntax;
 
@@ -798,7 +798,7 @@ fn compile_impl(
     };
 
     if options.use_validate {
-        validate(&mut wesl)?;
+        validate(&wesl)?;
     }
 
     if options.use_stripping {

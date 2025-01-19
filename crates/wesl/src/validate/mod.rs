@@ -1,6 +1,5 @@
-use itertools::Itertools;
 use wgsl_parse::{
-    syntax::{Ident, TranslationUnit, TypeExpression},
+    syntax::{Ident, TranslationUnit},
     visit::Visit,
 };
 
@@ -173,19 +172,15 @@ const BUILTIN_NAMES: &[&'static str] = &[
 ];
 
 fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
-    let declarations = wesl
-        .global_declarations
-        .iter()
-        .filter_map(|decl| decl.ident().cloned())
-        .collect_vec();
-
     for decl in &wesl.global_declarations {
         let decl_name = decl.ident().map(|ident| ident.name().to_string());
-        for ty in Visit::<TypeExpression>::visit(decl) {
+        for ty in decl.visit() {
             if ty.ident.use_count() == 1
                 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str())
-                && !declarations
+                && !wesl
+                    .global_declarations
                     .iter()
+                    .filter_map(|decl| decl.ident())
                     .any(|ident| ident.name().as_str() == ty.ident.name().as_str())
             {
                 let mut err = Diagnostic::from(E::UndefinedSymbol(ty.ident.clone()));
@@ -197,6 +192,6 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
     Ok(())
 }
 
-pub fn validate(wesl: &mut TranslationUnit) -> Result<(), Diagnostic<Error>> {
+pub fn validate(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
     check_defined_symbols(wesl)
 }

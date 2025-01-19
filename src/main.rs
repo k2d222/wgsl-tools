@@ -14,8 +14,8 @@ use std::{
 use wesl::{
     eval::{Eval, EvalAttrs, EvalError, HostShareable, Instance, RefInstance, Ty},
     syntax::{self, AccessMode, AddressSpace},
-    CompileOptions, CompileResult, Diagnostic, FileResolver, ManglerKind, Router, VirtualResolver,
-    Wesl,
+    CompileOptions, CompileResult, Diagnostic, FileResolver, ManglerKind, Router, SyntaxUtil,
+    VirtualResolver, Wesl,
 };
 use wgsl_parse::{syntax::TranslationUnit, Parser as WgslParser};
 
@@ -490,9 +490,11 @@ fn run(cli: Cli) -> Result<(), CliError> {
                         .map_err(|e| Diagnostic::from(e).with_source(source))?;
                 }
                 CheckKind::Wesl => {
-                    let syntax = WgslParser::parse_str(&source)
+                    let mut wesl = WgslParser::parse_str(&source)
                         .map_err(|e| Diagnostic::from(e).with_source(source))?;
-                    let wgsl_source = syntax.to_string();
+                    wesl.retarget_idents();
+                    wesl::validate(&wesl)?;
+                    let wgsl_source = wesl.to_string();
                     #[cfg(feature = "naga")]
                     if args.naga {
                         naga::front::wgsl::parse_str(&wgsl_source)?;
@@ -510,7 +512,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
                         sourcemap: None,
                     })
                 })?;
-            // let comp = run_compile(&args.options, FileOrSource::File(args.file))?;
             println!("{}", comp.syntax);
         }
         Command::Eval(args) => {
@@ -542,7 +543,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
                         sourcemap: None,
                     })
                 })?;
-            // let comp = run_compile(&args.options, FileOrSource::File(args.file))?;
 
             let resources = args
                 .resources
