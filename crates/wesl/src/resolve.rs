@@ -1,5 +1,6 @@
 use crate::{Diagnostic, Error, SyntaxUtil};
 
+use itertools::Itertools;
 use wgsl_parse::syntax::TranslationUnit;
 
 use std::{
@@ -8,7 +9,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -44,7 +45,22 @@ impl From<PathBuf> for Resource {
 
 impl Display for Resource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.path.display())
+        fn fmt_path<'a>(path: impl Iterator<Item = Component<'a>> + 'a) -> impl Display + 'a {
+            path.filter_map(|seg| match seg {
+                std::path::Component::Prefix(_) | std::path::Component::RootDir => None,
+                std::path::Component::CurDir => Some("self"),
+                std::path::Component::ParentDir => Some("super"),
+                std::path::Component::Normal(str) => str.to_str(),
+            })
+            .format("::")
+        }
+        if self.path.has_root() {
+            write!(f, "{}", fmt_path(self.path.components().skip(1)))
+        } else if self.path.starts_with(".") {
+            write!(f, "{}", fmt_path(self.path.components()))
+        } else {
+            write!(f, "crate::{}", fmt_path(self.path.components()))
+        }
     }
 }
 

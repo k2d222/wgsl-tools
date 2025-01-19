@@ -6,20 +6,6 @@ use wgsl_parse::syntax::TranslationUnit;
 
 use crate::{validate, Diagnostic, Error, Resource, SyntaxUtil};
 
-#[macro_export]
-macro_rules! wesl_pkg {
-    ($pkg_name:ident) => {
-        wesl_pkg!($pkg_name, concat!("/", stringify!($pkg_name), ".rs"));
-    };
-    ($pkg_name:ident, $source:expr) => {
-        pub mod $pkg_name {
-            use wesl::PkgModule;
-
-            include!(concat!(env!("OUT_DIR"), $source));
-        }
-    };
-}
-
 /// A builder that generates code for WESL packages.
 ///
 /// It is designed to be used in a build script (`build.rs` file). Add `wesl` to the

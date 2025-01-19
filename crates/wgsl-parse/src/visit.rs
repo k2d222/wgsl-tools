@@ -355,13 +355,17 @@ impl_visit! { Attribute => TypeExpression,
 
 impl_visit! { TranslationUnit => ExpressionNode,
     {
-        global_declarations.[].{
-            GlobalDeclaration::Declaration.{
-                initializer.[],
-            },
-            GlobalDeclaration::Function.{
-                body.statements.[].(x => visit::<Statement, ExpressionNode>(x)),
-            }
+        global_declarations.[].(x => visit::<GlobalDeclaration, ExpressionNode>(x))
+    }
+}
+
+impl_visit! { GlobalDeclaration => ExpressionNode,
+    {
+        GlobalDeclaration::Declaration.{
+            initializer.[],
+        },
+        GlobalDeclaration::Function.{
+            body.statements.[].(x => visit::<Statement, ExpressionNode>(x)),
         }
     }
 }

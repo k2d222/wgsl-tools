@@ -208,6 +208,23 @@ macro_rules! include_wesl {
     };
 }
 
+/// Include a generated package.
+///
+/// See [`PkgBuilder`] for more information about building WESL packages.
+#[macro_export]
+macro_rules! wesl_pkg {
+    ($pkg_name:ident) => {
+        wesl_pkg!($pkg_name, concat!("/", stringify!($pkg_name), ".rs"));
+    };
+    ($pkg_name:ident, $source:expr) => {
+        pub mod $pkg_name {
+            use wesl::PkgModule;
+
+            include!(concat!(env!("OUT_DIR"), $source));
+        }
+    };
+}
+
 /// The WESL compiler high-level API (builder pattern).
 ///
 /// # Basic Usage
@@ -834,9 +851,7 @@ pub fn compile_sourcemap(
     mangler: &impl Mangler,
     options: &CompileOptions,
 ) -> (Result<TranslationUnit, Error>, BasicSourceMap) {
-    let resolver = Box::new(resolver);
-    let mangler = Box::new(mangler);
-    let sourcemapper = SourceMapper::new(resolver, mangler);
+    let sourcemapper = SourceMapper::new(&resolver, &mangler);
     let mut main_names = Vec::new();
     let comp = compile_impl(
         entrypoint,
@@ -857,6 +872,13 @@ pub fn compile_sourcemap(
     } else {
         comp
     };
+    let comp = comp.map_err(|e| match e {
+        Error::Error(diagnostic) => diagnostic
+            .with_sourcemap(&sourcemap)
+            .unmangle(&mangler)
+            .into(),
+        _ => e,
+    });
     (comp, sourcemap)
 }
 

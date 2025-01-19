@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use wgsl_parse::{
-    syntax::{Ident, TranslationUnit},
+    syntax::{Ident, TranslationUnit, TypeExpression},
     visit::Visit,
 };
 
@@ -24,8 +24,7 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
         for decl in &mut wgsl.global_declarations {
             if let Some(ident) = decl.ident() {
                 if keep.contains(ident) {
-                    let used = decl
-                        .visit()
+                    let used = Visit::<TypeExpression>::visit(decl)
                         .filter(|ty| global_idents.contains(&ty.ident))
                         .map(|ty| ty.ident.clone())
                         .collect::<HashSet<_>>();

@@ -98,6 +98,9 @@ impl Mangler for EscapeMangler {
                 while parts.peek() == Some(&"") {
                     part.push('_');
                     parts.next();
+                    if let Some(next) = parts.next() {
+                        part.push_str(next);
+                    }
                 }
                 path_parts.push(part);
             }

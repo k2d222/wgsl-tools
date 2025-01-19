@@ -92,13 +92,13 @@ impl SourceMap for NoSourceMap {
 
 /// Generate a SourceMap by keeping track of name mangling and file resolutions.
 pub struct SourceMapper<'a> {
-    pub resolver: Box<dyn Resolver + 'a>,
-    pub mangler: Box<dyn Mangler + 'a>,
+    pub resolver: &'a dyn Resolver,
+    pub mangler: &'a dyn Mangler,
     pub sourcemap: RefCell<BasicSourceMap>,
 }
 
 impl<'a> SourceMapper<'a> {
-    pub fn new(resolver: Box<dyn Resolver + 'a>, mangler: Box<dyn Mangler + 'a>) -> Self {
+    pub fn new(resolver: &'a dyn Resolver, mangler: &'a dyn Mangler) -> Self {
         Self {
             resolver,
             mangler,

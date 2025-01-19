@@ -1,8 +1,12 @@
 use std::fmt::Display;
 
-use wgsl_parse::{error::ParseError, span::Span};
+use wgsl_parse::{
+    error::ParseError,
+    span::Span,
+    syntax::{Expression, Ident},
+};
 
-use crate::{ResolveError, Resource, SourceMap, ValidateError};
+use crate::{Mangler, ResolveError, Resource, SourceMap, ValidateError};
 
 #[cfg(feature = "condcomp")]
 use crate::CondCompError;
@@ -176,6 +180,74 @@ impl<E: std::error::Error> Diagnostic<E> {
                 .map(|s| s.to_string())
                 .or(self.source);
         }
+        self
+    }
+}
+
+impl Diagnostic<Error> {
+    pub fn unmangle(mut self, mangler: &impl Mangler) -> Self {
+        fn unmangle_id(id: &mut Ident, mangler: &impl Mangler) {
+            let unmangled = mangler.unmangle(id.name().as_str());
+            if let Some((resource, name)) = unmangled {
+                *id = Ident::new(format!("{resource}::{name}"));
+            }
+        }
+        fn unmangle_expr(expr: &mut Expression, mangler: &impl Mangler) {
+            match expr {
+                Expression::Literal(_) => {}
+                Expression::Parenthesized(e) => unmangle_expr(&mut e.expression, mangler),
+                Expression::NamedComponent(e) => unmangle_expr(&mut e.base, mangler),
+                Expression::Indexing(e) => unmangle_expr(&mut e.base, mangler),
+                Expression::Unary(e) => unmangle_expr(&mut e.operand, mangler),
+                Expression::Binary(e) => {
+                    unmangle_expr(&mut e.left, mangler);
+                    unmangle_expr(&mut e.right, mangler);
+                }
+                Expression::FunctionCall(e) => {
+                    unmangle_id(&mut e.ty.ident, mangler);
+                    for arg in &mut e.arguments {
+                        unmangle_expr(arg, mangler);
+                    }
+                }
+                Expression::TypeOrIdentifier(ty) => unmangle_id(&mut ty.ident, mangler),
+            }
+        }
+        match &mut *self.error {
+            Error::ParseError(_) => {}
+            Error::ValidateError(e) => match e {
+                ValidateError::UndefinedSymbol(id)
+                | ValidateError::ParamCount(id, _, _)
+                | ValidateError::UnknownFunction(id) => unmangle_id(id, mangler),
+            },
+            Error::ResolveError(_) => {}
+            #[cfg(feature = "imports")]
+            Error::ImportError(_) => todo!(),
+            #[cfg(feature = "condcomp")]
+            Error::CondCompError(e) => match e {
+                CondCompError::InvalidExpression(expr) => unmangle_expr(expr, mangler),
+                CondCompError::InvalidFeatureFlag(_) | CondCompError::MissingFeatureFlag(_) => {}
+            },
+            #[cfg(feature = "generics")]
+            Error::GenericsError(_) => {}
+            #[cfg(feature = "eval")]
+            Error::EvalError(e) => match e {
+                EvalError::UnknownFunction(id) => unmangle_id(id, mangler),
+                EvalError::NoDecl(id) => unmangle_id(id, mangler),
+                EvalError::Component(_, id) => unmangle_id(id, mangler),
+                EvalError::Signature(ty, _) => unmangle_id(&mut ty.ident, mangler),
+                EvalError::UnexpectedTemplate(id) => unmangle_id(id, mangler),
+                EvalError::ParamCount(id, _, _) => unmangle_id(id, mangler),
+                EvalError::NotConst(id) => unmangle_id(id, mangler),
+                EvalError::UninitConst(id) => unmangle_id(id, mangler),
+                EvalError::UninitLet(id) => unmangle_id(id, mangler),
+                EvalError::UninitOverride(id) => unmangle_id(id, mangler),
+                EvalError::DuplicateDecl(id) => unmangle_id(id, mangler),
+                EvalError::ConstAssertFailure(expr) => unmangle_expr(expr, mangler),
+                _ => {}
+            },
+            Error::Error(_) => {}
+        };
+
         self
     }
 }
