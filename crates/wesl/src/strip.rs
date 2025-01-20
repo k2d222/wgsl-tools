@@ -36,7 +36,7 @@ pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {
         next_keep.retain(|name| !keep.contains(name));
         keep.extend(next_keep.iter().cloned());
 
-        if next_keep.len() == 0 {
+        if next_keep.is_empty() {
             break;
         }
     }

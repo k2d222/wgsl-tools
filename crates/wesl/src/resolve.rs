@@ -96,8 +96,8 @@ impl<T: Resolver + ?Sized> Resolver for Box<T> {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         (**self).resolve_source(resource)
     }
-    fn source_to_module<'a>(
-        &'a self,
+    fn source_to_module(
+        &self,
         source: &str,
         resource: &Resource,
     ) -> Result<TranslationUnit, ResolveError> {
@@ -112,8 +112,8 @@ impl<T: Resolver> Resolver for &T {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         (**self).resolve_source(resource)
     }
-    fn source_to_module<'a>(
-        &'a self,
+    fn source_to_module(
+        &self,
         source: &str,
         resource: &Resource,
     ) -> Result<TranslationUnit, ResolveError> {
@@ -278,8 +278,8 @@ impl<'a, F: ResolveFn> Resolver for Preprocessor<'a, F> {
         let res = self.resolver.resolve_source(resource)?;
         Ok(res)
     }
-    fn source_to_module<'b>(
-        &'b self,
+    fn source_to_module(
+        &self,
         source: &str,
         resource: &Resource,
     ) -> Result<TranslationUnit, ResolveError> {
@@ -334,6 +334,12 @@ impl Router {
     }
 }
 
+impl Default for Router {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Resolver for Router {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let (mount_path, resolver) = self
@@ -367,7 +373,7 @@ pub trait PkgModule: Sync {
         self.submodules()
             .iter()
             .find(|sm| sm.name() == name)
-            .map(|sm| *sm)
+            .copied()
     }
 }
 
@@ -390,6 +396,12 @@ impl PkgResolver {
 
     pub fn mount_fallback_resolver(&mut self, fallback: impl Resolver + 'static) {
         self.fallback = Some(Box::new(fallback));
+    }
+}
+
+impl Default for PkgResolver {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

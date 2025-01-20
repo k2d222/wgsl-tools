@@ -19,7 +19,7 @@ pub enum ValidateError {
 
 type E = ValidateError;
 
-const BUILTIN_NAMES: &[&'static str] = &[
+const BUILTIN_NAMES: &[&str] = &[
     // https://www.w3.org/TR/WGSL/#predeclared-types
     // types
     "bool",
@@ -177,7 +177,7 @@ const BUILTIN_NAMES: &[&'static str] = &[
     "unpack2x16float",
 ];
 
-const BUILTIN_FUNCTIONS: &[&'static str] = &[
+const BUILTIN_FUNCTIONS: &[&str] = &[
     // constructor built-in functions
     "bool",
     "f16",
@@ -336,42 +336,37 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
 
 fn check_function_calls(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
     fn check_expr(expr: &Expression, wesl: &TranslationUnit) -> Result<(), E> {
-        match expr {
-            Expression::FunctionCall(call) => {
-                if let Some(decl) = wesl.global_declarations.iter().find_map(|decl| match decl {
-                    GlobalDeclaration::Function(f) if f.ident == call.ty.ident => Some(f),
-                    _ => None,
-                }) {
-                    if call.arguments.len() != decl.parameters.len() {
-                        return Err(E::ParamCount(
-                            call.ty.ident.clone(),
-                            decl.parameters.len(),
-                            call.arguments.len(),
-                        ));
-                    }
-                } else if let Some(decl) =
-                    wesl.global_declarations.iter().find_map(|decl| match decl {
-                        GlobalDeclaration::Struct(s) if s.ident == call.ty.ident => Some(s),
-                        _ => None,
-                    })
-                {
-                    if call.arguments.len() != decl.members.len() && !call.arguments.is_empty() {
-                        return Err(E::ParamCount(
-                            call.ty.ident.clone(),
-                            decl.members.len(),
-                            call.arguments.len(),
-                        ));
-                    }
-                } else if BUILTIN_FUNCTIONS
-                    .iter()
-                    .any(|name| name == &*call.ty.ident.name())
-                {
-                    // TODO: check num args for builtin functions
-                } else {
-                    return Err(E::UnknownFunction(call.ty.ident.clone()));
+        if let Expression::FunctionCall(call) = expr {
+            if let Some(decl) = wesl.global_declarations.iter().find_map(|decl| match decl {
+                GlobalDeclaration::Function(f) if f.ident == call.ty.ident => Some(f),
+                _ => None,
+            }) {
+                if call.arguments.len() != decl.parameters.len() {
+                    return Err(E::ParamCount(
+                        call.ty.ident.clone(),
+                        decl.parameters.len(),
+                        call.arguments.len(),
+                    ));
                 }
+            } else if let Some(decl) = wesl.global_declarations.iter().find_map(|decl| match decl {
+                GlobalDeclaration::Struct(s) if s.ident == call.ty.ident => Some(s),
+                _ => None,
+            }) {
+                if call.arguments.len() != decl.members.len() && !call.arguments.is_empty() {
+                    return Err(E::ParamCount(
+                        call.ty.ident.clone(),
+                        decl.members.len(),
+                        call.arguments.len(),
+                    ));
+                }
+            } else if BUILTIN_FUNCTIONS
+                .iter()
+                .any(|name| name == &*call.ty.ident.name())
+            {
+                // TODO: check num args for builtin functions
+            } else {
+                return Err(E::UnknownFunction(call.ty.ident.clone()));
             }
-            _ => {}
         }
         Ok(())
     }

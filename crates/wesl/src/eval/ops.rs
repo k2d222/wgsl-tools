@@ -43,15 +43,13 @@ impl Compwise for VecInstance {
     where
         F: Fn(&LiteralInstance) -> Result<LiteralInstance, E>,
     {
-        self.iter_mut()
-            .map(|c| {
-                match c {
-                    Instance::Literal(c) => *c = f(c)?,
-                    _ => unreachable!("vec must contain literal instances"),
-                };
-                Ok(())
-            })
-            .collect::<Result<_, _>>()
+        self.iter_mut().try_for_each(|c| {
+            match c {
+                Instance::Literal(c) => *c = f(c)?,
+                _ => unreachable!("vec must contain literal instances"),
+            };
+            Ok(())
+        })
     }
 
     fn compwise_binary_mut<F>(&mut self, rhs: &Self, f: F) -> Result<(), E>
@@ -61,15 +59,13 @@ impl Compwise for VecInstance {
         if self.n() != rhs.n() {
             return Err(E::CompwiseBinary(self.ty(), rhs.ty()));
         }
-        zip(self.iter_mut(), rhs.iter())
-            .map(|(a, b)| {
-                match (a, b) {
-                    (Instance::Literal(a), Instance::Literal(b)) => *a = f(a, b)?,
-                    _ => unreachable!("vec must contain literal instances"),
-                };
-                Ok(())
-            })
-            .collect::<Result<_, _>>()
+        zip(self.iter_mut(), rhs.iter()).try_for_each(|(a, b)| {
+            match (a, b) {
+                (Instance::Literal(a), Instance::Literal(b)) => *a = f(a, b)?,
+                _ => unreachable!("vec must contain literal instances"),
+            };
+            Ok(())
+        })
     }
 }
 
@@ -80,14 +76,13 @@ impl Compwise for MatInstance {
     {
         self.iter_cols_mut()
             .flat_map(|col| col.unwrap_vec_mut().iter_mut())
-            .map(|c| {
+            .try_for_each(|c| {
                 match c {
                     Instance::Literal(c) => *c = f(c)?,
                     _ => unreachable!("mat must contain literal instances"),
                 };
                 Ok(())
             })
-            .collect::<Result<_, _>>()
     }
 
     fn compwise_binary_mut<F>(&mut self, rhs: &Self, f: F) -> Result<(), E>
@@ -102,14 +97,13 @@ impl Compwise for MatInstance {
                 .flat_map(|col| col.unwrap_vec_mut().iter_mut()),
             rhs.iter_cols().flat_map(|col| col.unwrap_vec_ref().iter()),
         )
-        .map(|(a, b)| {
+        .try_for_each(|(a, b)| {
             match (a, b) {
                 (Instance::Literal(a), Instance::Literal(b)) => *a = f(a, b)?,
                 _ => unreachable!("mat must contain literal instances"),
             };
             Ok(())
         })
-        .collect::<Result<_, _>>()
     }
 }
 
@@ -324,7 +318,7 @@ impl LiteralInstance {
         };
         if stage == EvalStage::Exec {
             // runtime expressions return lhs when operation fails
-            Ok(res.unwrap_or_else(|_| self.clone()))
+            Ok(res.unwrap_or(*self))
         } else {
             res
         }
@@ -418,27 +412,27 @@ impl VecInstance {
     pub fn op_add(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_add(&r, stage))
+        lhs.compwise_binary(&rhs, |l, r| l.op_add(r, stage))
     }
     pub fn op_sub(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_sub(&r, stage))
+        lhs.compwise_binary(&rhs, |l, r| l.op_sub(r, stage))
     }
     pub fn op_mul(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_mul(&r, stage))
+        lhs.compwise_binary(&rhs, |l, r| l.op_mul(r, stage))
     }
     pub fn op_div(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Division, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_div(&r, stage))
+        lhs.compwise_binary(&rhs, |l, r| l.op_div(r, stage))
     }
     pub fn op_rem(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Remainder, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_rem(&r, stage))
+        lhs.compwise_binary(&rhs, |l, r| l.op_rem(r, stage))
     }
     pub fn op_add_sca(&self, rhs: &LiteralInstance, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert_inner(self, rhs)
@@ -476,10 +470,10 @@ impl VecInstance {
             .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
         let mat = mat.transpose();
 
-        Ok(zip(vec.iter(), mat.iter_cols())
+        zip(vec.iter(), mat.iter_cols())
             .map(|(s, v)| v.unwrap_vec_ref().op_mul_sca(s.unwrap_literal_ref(), stage))
             .reduce(|a, b| a?.op_add(&b?, stage))
-            .unwrap()?)
+            .unwrap()
     }
 }
 
@@ -487,13 +481,13 @@ impl MatInstance {
     pub fn op_add(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Addition, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_add(&r, stage))
+        lhs.compwise_binary(&rhs, |l, r| l.op_add(r, stage))
     }
 
     pub fn op_sub(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Subtraction, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_sub(&r, stage))
+        lhs.compwise_binary(&rhs, |l, r| l.op_sub(r, stage))
     }
 
     pub fn op_mul_sca(&self, rhs: &LiteralInstance, stage: EvalStage) -> Result<MatInstance, E> {
@@ -508,10 +502,10 @@ impl MatInstance {
         let (lhs, rhs) = convert_inner(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Multiplication, self.ty(), rhs.ty()))?;
 
-        Ok(zip(lhs.iter_cols(), rhs.iter())
+        zip(lhs.iter_cols(), rhs.iter())
             .map(|(l, r)| l.unwrap_vec_ref().op_mul_sca(r.unwrap_literal_ref(), stage))
             .reduce(|l, r| l?.op_add(&r?, stage))
-            .unwrap()?)
+            .unwrap()
     }
 
     pub fn op_mul(&self, rhs: &Self, stage: EvalStage) -> Result<MatInstance, E> {
@@ -559,7 +553,7 @@ impl Instance {
     }
     pub fn op_sub(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         match (self, rhs) {
-            both!(Self::Literal, lhs, rhs) => lhs.op_sub(&rhs, stage).map(Into::into),
+            both!(Self::Literal, lhs, rhs) => lhs.op_sub(rhs, stage).map(Into::into),
             (Self::Vec(lhs), Self::Literal(rhs)) => lhs.op_sub_sca(rhs, stage).map(Into::into),
             (Self::Literal(lhs), Self::Vec(rhs)) => lhs.op_sub_vec(rhs, stage).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_sub(rhs, stage).map(Into::into),
@@ -569,7 +563,7 @@ impl Instance {
     }
     pub fn op_mul(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         match (self, rhs) {
-            both!(Self::Literal, lhs, rhs) => lhs.op_mul(&rhs, stage).map(Into::into),
+            both!(Self::Literal, lhs, rhs) => lhs.op_mul(rhs, stage).map(Into::into),
             (Self::Vec(lhs), Self::Literal(rhs)) => lhs.op_mul_sca(rhs, stage).map(Into::into),
             (Self::Literal(lhs), Self::Vec(rhs)) => lhs.op_mul_vec(rhs, stage).map(Into::into),
             both!(Self::Vec, lhs, rhs) => lhs.op_mul(rhs, stage).map(Into::into),
@@ -587,9 +581,9 @@ impl Instance {
     }
     pub fn op_div(&self, rhs: &Self, stage: EvalStage) -> Result<Self, E> {
         match (self, rhs) {
-            both!(Self::Literal, lhs, rhs) => lhs.op_div(&rhs, stage).map(Into::into),
+            both!(Self::Literal, lhs, rhs) => lhs.op_div(rhs, stage).map(Into::into),
             (Self::Literal(s), Self::Vec(v)) => {
-                v.compwise_unary(|k| s.op_div(&k, stage)).map(Into::into)
+                v.compwise_unary(|k| s.op_div(k, stage)).map(Into::into)
             }
             (Self::Vec(v), Self::Literal(s)) => {
                 v.compwise_unary(|k| k.op_div(s, stage)).map(Into::into)
@@ -703,32 +697,32 @@ impl VecInstance {
     pub fn op_eq(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Equality, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_eq(&r).map(Into::into))
+        lhs.compwise_binary(&rhs, |l, r| l.op_eq(r).map(Into::into))
     }
     pub fn op_ne(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::Inequality, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_ne(&r).map(Into::into))
+        lhs.compwise_binary(&rhs, |l, r| l.op_ne(r).map(Into::into))
     }
     pub fn op_lt(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::LessThan, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_lt(&r).map(Into::into))
+        lhs.compwise_binary(&rhs, |l, r| l.op_lt(r).map(Into::into))
     }
     pub fn op_le(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::LessThanEqual, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_le(&r).map(Into::into))
+        lhs.compwise_binary(&rhs, |l, r| l.op_le(r).map(Into::into))
     }
     pub fn op_gt(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::GreaterThan, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_gt(&r).map(Into::into))
+        lhs.compwise_binary(&rhs, |l, r| l.op_gt(r).map(Into::into))
     }
     pub fn op_ge(&self, rhs: &Self) -> Result<VecInstance, E> {
         let (lhs, rhs) = convert(self, rhs)
             .ok_or_else(|| E::Binary(BinaryOperator::GreaterThanEqual, self.ty(), rhs.ty()))?;
-        lhs.compwise_binary(&rhs, |l, r| l.op_ge(&r).map(Into::into))
+        lhs.compwise_binary(&rhs, |l, r| l.op_ge(r).map(Into::into))
     }
 }
 
@@ -882,22 +876,22 @@ impl LiteralInstance {
 
 impl VecInstance {
     pub fn op_bitnot(&self) -> Result<Self, E> {
-        self.compwise_unary(|c| LiteralInstance::op_bitnot(&c))
+        self.compwise_unary(LiteralInstance::op_bitnot)
     }
     pub fn op_bitor(&self, rhs: &Self) -> Result<Self, E> {
-        self.compwise_binary(rhs, |l, r| l.op_bitor(&r))
+        self.compwise_binary(rhs, |l, r| l.op_bitor(r))
     }
     pub fn op_bitand(&self, rhs: &Self) -> Result<Self, E> {
-        self.compwise_binary(rhs, |l, r| l.op_bitand(&r))
+        self.compwise_binary(rhs, |l, r| l.op_bitand(r))
     }
     pub fn op_bitxor(&self, rhs: &Self) -> Result<Self, E> {
-        self.compwise_binary(rhs, |l, r| l.op_bitxor(&r))
+        self.compwise_binary(rhs, |l, r| l.op_bitxor(r))
     }
     pub fn op_shl(&self, rhs: &Self) -> Result<Self, E> {
-        self.compwise_binary(rhs, |l, r| l.op_shl(&r))
+        self.compwise_binary(rhs, |l, r| l.op_shl(r))
     }
     pub fn op_shr(&self, rhs: &Self) -> Result<Self, E> {
-        self.compwise_binary(rhs, |l, r| l.op_shr(&r))
+        self.compwise_binary(rhs, |l, r| l.op_shr(r))
     }
 }
 

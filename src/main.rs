@@ -244,7 +244,7 @@ impl FromStr for Binding {
                     .next()
                     .ok_or("missing resource binding type")?
                     .parse()
-                    .map_err(|()| format!("invalid resource binding type"))?,
+                    .map_err(|()| "invalid resource binding type".to_string())?,
                 data: {
                     let path = PathBuf::from(it.next().ok_or("missing data")?);
                     let mut file = File::open(&path).expect("failed to open binding file");
@@ -281,10 +281,10 @@ struct ExecArgs {
     options: CompOptsArgs,
     /// Bound resources. Only buffer bindings are supported at the moment.
     /// Syntax: colon-separated group,binding,binding_type,path
+    /// Example: 0:0:storage:./my_buffer.bin
     ///  - group and binding are @group and @binding numbers
     ///  - binding_type is the `GPUBufferBindingType` (uniform, storage, read-only-storage)
     ///  - path is a path to a binary file of the buffer contents
-    /// Example: 0:0:storage:./my_buffer.bin
     #[arg(long = "resource", value_parser = Binding::from_str, verbatim_doc_comment)]
     resources: Vec<Binding>,
     /// Pipeline-overridable constants.
@@ -458,7 +458,7 @@ fn main() {
 }
 
 fn file_or_source(path: Option<PathBuf>) -> Option<FileOrSource> {
-    path.map(|file| FileOrSource::File(file)).or_else(|| {
+    path.map(FileOrSource::File).or_else(|| {
         let mut buf = String::new();
         std::io::stdin()
             .read_to_string(&mut buf)
@@ -593,7 +593,14 @@ fn run(cli: Cli) -> Result<(), CliError> {
         }
         Command::Package(args) => {
             let code = PkgBuilder::new(&args.name)
-                .set_root(args.dir)
+                .scan_directory(args.dir)
+                .expect("failed to scan WESL files")
+                .validate()
+                .map_err(|e| {
+                    eprintln!("{e}");
+                    panic!()
+                })
+                .unwrap()
                 .codegen()
                 .expect("failed to build package");
             println!("{code}");

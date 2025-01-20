@@ -29,45 +29,34 @@ pub enum Type {
 impl Type {
     /// reference: <https://www.w3.org/TR/WGSL/#scalar>
     pub fn is_scalar(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Type::Bool
-            | Type::AbstractInt
-            | Type::AbstractFloat
-            | Type::I32
-            | Type::U32
-            | Type::F32
-            | Type::F16 => true,
-            _ => false,
-        }
+                | Type::AbstractInt
+                | Type::AbstractFloat
+                | Type::I32
+                | Type::U32
+                | Type::F32
+                | Type::F16
+        )
     }
 
     /// reference: <https://www.w3.org/TR/WGSL/#numeric-scalar>
     pub fn is_numeric(&self) -> bool {
-        match self {
-            Type::AbstractInt
-            | Type::AbstractFloat
-            | Type::I32
-            | Type::U32
-            | Type::F32
-            | Type::F16 => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Type::AbstractInt | Type::AbstractFloat | Type::I32 | Type::U32 | Type::F32 | Type::F16
+        )
     }
 
     /// reference: <https://www.w3.org/TR/WGSL/#integer-scalar>
     pub fn is_integer(&self) -> bool {
-        match self {
-            Type::AbstractInt | Type::I32 | Type::U32 => true,
-            _ => false,
-        }
+        matches!(self, Type::AbstractInt | Type::I32 | Type::U32)
     }
 
     /// reference: <https://www.w3.org/TR/WGSL/#floating-point-types>
     pub fn is_float(&self) -> bool {
-        match self {
-            Type::AbstractFloat | Type::F32 | Type::F16 => true,
-            _ => false,
-        }
+        matches!(self, Type::AbstractFloat | Type::F32 | Type::F16)
     }
 
     /// reference: <https://www.w3.org/TR/WGSL/#abstract-types>
@@ -87,19 +76,19 @@ impl Type {
     /// reference: <https://www.w3.org/TR/WGSL/#storable-types>
     pub fn is_storable(&self) -> bool {
         self.is_concrete()
-            && match self {
+            && matches!(
+                self,
                 Type::Bool
-                | Type::I32
-                | Type::U32
-                | Type::F32
-                | Type::F16
-                | Type::Struct(_)
-                | Type::Array(_, _)
-                | Type::Vec(_, _)
-                | Type::Mat(_, _, _)
-                | Type::Atomic(_) => true,
-                _ => false,
-            }
+                    | Type::I32
+                    | Type::U32
+                    | Type::F32
+                    | Type::F16
+                    | Type::Struct(_)
+                    | Type::Array(_, _)
+                    | Type::Vec(_, _)
+                    | Type::Mat(_, _, _)
+                    | Type::Atomic(_)
+            )
     }
 }
 
@@ -262,13 +251,11 @@ impl EvalTy for Ident {
             _ => {
                 if let Some(ty) = ctx.source.resolve_alias(self) {
                     ty.eval_ty(ctx)
+                } else if ctx.source.decl_struct(self).is_some() {
+                    let ty = Type::Struct(self.clone());
+                    Ok(ty)
                 } else {
-                    if ctx.source.decl_struct(self).is_some() {
-                        let ty = Type::Struct(self.clone());
-                        Ok(ty)
-                    } else {
-                        Err(EvalError::UnknownType(self.to_string()))
-                    }
+                    Err(EvalError::UnknownType(self.to_string()))
                 }
             }
         }
@@ -280,11 +267,11 @@ impl EvalTy for TypeExpression {
         if let Some(tplt) = &self.template_args {
             match self.ident.name().as_str() {
                 "array" => {
-                    let tplt = ArrayTemplate::parse(&tplt, ctx)?;
+                    let tplt = ArrayTemplate::parse(tplt, ctx)?;
                     Ok(tplt.ty())
                 }
                 "vec2" | "vec3" | "vec4" => {
-                    let tplt = VecTemplate::parse(&tplt, ctx)?;
+                    let tplt = VecTemplate::parse(tplt, ctx)?;
                     let n = self
                         .ident
                         .name()
@@ -297,7 +284,7 @@ impl EvalTy for TypeExpression {
                 }
                 "mat2x2" | "mat2x3" | "mat2x4" | "mat3x2" | "mat3x3" | "mat3x4" | "mat4x2"
                 | "mat4x3" | "mat4x4" => {
-                    let tplt = MatTemplate::parse(&tplt, ctx)?;
+                    let tplt = MatTemplate::parse(tplt, ctx)?;
                     let c = self
                         .ident
                         .name()
@@ -317,11 +304,11 @@ impl EvalTy for TypeExpression {
                     Ok(tplt.ty(c, r))
                 }
                 "ptr" => {
-                    let tplt = PtrTemplate::parse(&tplt, ctx)?;
+                    let tplt = PtrTemplate::parse(tplt, ctx)?;
                     Ok(tplt.ty())
                 }
                 "atomic" => {
-                    let tplt = AtomicTemplate::parse(&tplt, ctx)?;
+                    let tplt = AtomicTemplate::parse(tplt, ctx)?;
                     Ok(tplt.ty())
                 }
                 _ => {

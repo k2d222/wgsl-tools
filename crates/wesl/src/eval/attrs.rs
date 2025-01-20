@@ -25,7 +25,7 @@ fn eval_positive_integer(expr: &Expression, ctx: &mut Context) -> Result<u32, E>
     let expr = with_stage!(ctx, EvalStage::Const, { expr.eval_value(ctx) })?;
     let expr = match expr {
         Instance::Literal(g) => match g {
-            LiteralInstance::AbstractInt(g) => Ok(g as i64),
+            LiteralInstance::AbstractInt(g) => Ok(g),
             LiteralInstance::I32(g) => Ok(g as i64),
             LiteralInstance::U32(g) => Ok(g as i64),
             _ => Err(E::Type(Type::U32, g.ty())),

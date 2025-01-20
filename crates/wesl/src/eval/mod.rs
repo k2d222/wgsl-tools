@@ -153,7 +153,7 @@ impl<'s> Context<'s> {
     }
 
     pub fn source(&self) -> &TranslationUnit {
-        &self.source
+        self.source
     }
 
     pub fn scope_guard(&mut self) -> ScopeGuard {
@@ -193,7 +193,7 @@ impl<'s> Context<'s> {
         self.resources.get(&(group, binding))
     }
     pub fn add_overrides(&mut self, overrides: impl IntoIterator<Item = (String, Instance)>) {
-        self.overrides.extend(overrides.into_iter());
+        self.overrides.extend(overrides);
     }
     pub fn add_overridable(&mut self, name: String, inst: Instance) {
         self.overrides.insert(name, inst);

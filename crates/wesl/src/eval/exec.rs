@@ -24,7 +24,7 @@ macro_rules! with_stage {
     ($ctx:expr, $stage:expr, $body:tt) => {{
         let stage = $ctx.stage;
         $ctx.stage = $stage;
-        let body = (|| $body)();
+        let body = $body;
         $ctx.stage = stage;
         body
     }};
@@ -401,13 +401,13 @@ impl Exec for ForStatement {
                     }
                 }
                 Flow::Break => {
-                    if let Some(_) = &self.initializer {
+                    if self.initializer.is_some() {
                         ctx.scope.pop();
                     }
                     return Ok(Flow::Next);
                 }
                 Flow::Return(_) => {
-                    if let Some(_) = &self.initializer {
+                    if self.initializer.is_some() {
                         ctx.scope.pop();
                     }
                     return Ok(flow);
@@ -415,7 +415,7 @@ impl Exec for ForStatement {
             }
         }
 
-        if let Some(_) = &self.initializer {
+        if self.initializer.is_some() {
             ctx.scope.pop();
         }
 
@@ -584,7 +584,7 @@ impl Exec for Declaration {
                 } else {
                     let inst = ctx
                         .overridable(&self.ident.name())
-                        .map(|inst| inst.clone())
+                        .cloned()
                         .ok_or_else(|| E::UninitOverride(self.ident.clone()))
                         .or_else(|e| self.initializer.as_ref().ok_or(e)?.eval(ctx))?;
 

@@ -117,8 +117,8 @@ impl Instance {
     pub fn len(&self) -> usize {
         match self {
             Instance::Array(a) => a.n(),
-            Instance::Vec(v) => v.n() as usize,
-            Instance::Mat(m) => m.c() as usize,
+            Instance::Vec(v) => v.n(),
+            Instance::Mat(m) => m.c(),
             _ => 0,
         }
     }
@@ -292,7 +292,7 @@ impl MatInstance {
     }
 
     pub fn r(&self) -> usize {
-        self.components.get(0).unwrap().unwrap_vec_ref().n()
+        self.components.first().unwrap().unwrap_vec_ref().n()
     }
     pub fn c(&self) -> usize {
         self.components.len()

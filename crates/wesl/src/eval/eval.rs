@@ -86,7 +86,7 @@ impl Eval for ParenthesizedExpression {
 impl Eval for NamedComponentExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
         fn vec_comp(v: &VecInstance, comp: &Ident, r: Option<&RefInstance>) -> Result<Instance, E> {
-            if !check_swizzle(&*comp.name()) {
+            if !check_swizzle(&comp.name()) {
                 return Err(E::Swizzle(comp.clone()));
             }
             let indices = comp
@@ -106,7 +106,7 @@ impl Eval for NamedComponentExpression {
                 } else {
                     v.get(*i)
                         .cloned()
-                        .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n() as usize))
+                        .ok_or_else(|| E::OutOfBounds(*i, v.ty(), v.n()))
                 }
             } else {
                 let components = indices
@@ -114,7 +114,7 @@ impl Eval for NamedComponentExpression {
                     .map(|i| {
                         v.get(i)
                             .cloned()
-                            .ok_or_else(|| E::OutOfBounds(i, v.ty(), v.n() as usize))
+                            .ok_or_else(|| E::OutOfBounds(i, v.ty(), v.n()))
                     })
                     .collect::<Result<_, _>>()?;
                 Ok(VecInstance::new(components).into())
@@ -151,11 +151,11 @@ impl Eval for IndexingExpression {
                 Instance::Vec(v) => v
                     .get(index)
                     .cloned()
-                    .ok_or_else(|| E::OutOfBounds(index, v.ty(), v.n() as usize)),
+                    .ok_or_else(|| E::OutOfBounds(index, v.ty(), v.n())),
                 Instance::Mat(m) => m
                     .col(index)
                     .cloned()
-                    .ok_or_else(|| E::OutOfBounds(index, m.ty(), m.c() as usize)),
+                    .ok_or_else(|| E::OutOfBounds(index, m.ty(), m.c())),
                 Instance::Array(a) => a
                     .get(index)
                     .cloned()
@@ -184,7 +184,7 @@ impl Eval for UnaryExpression {
             let operand = self.operand.eval(ctx)?;
             match operand {
                 Instance::Ref(r) => Ok(PtrInstance::from(r).into()),
-                operand @ _ => Err(E::Unary(self.operator, operand.ty())),
+                operand => Err(E::Unary(self.operator, operand.ty())),
             }
         } else {
             let operand = self.operand.eval_value(ctx)?;
@@ -195,7 +195,7 @@ impl Eval for UnaryExpression {
                 UnaryOperator::AddressOf => unreachable!("handled above"),
                 UnaryOperator::Indirection => match operand {
                     Instance::Ptr(p) => Ok(RefInstance::from(p).into()),
-                    operand @ _ => Err(E::Unary(self.operator, operand.ty())),
+                    operand => Err(E::Unary(self.operator, operand.ty())),
                 },
             }
         }
@@ -379,7 +379,7 @@ impl Eval for TypeExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
         if self.template_args.is_none() {
             if let Some(r) = ctx.scope.get(&self.ident) {
-                Ok(r.clone().into())
+                Ok(r)
             } else {
                 let ty = self.ident.eval_ty(ctx)?;
                 Ok(ty.into())

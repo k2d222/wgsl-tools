@@ -155,10 +155,7 @@ fn two_args(arguments: Option<Vec<ExpressionNode>>) -> Option<(ExpressionNode, E
     }
 }
 fn zero_args(arguments: Option<Vec<ExpressionNode>>) -> bool {
-    match arguments {
-        Some(_) => false,
-        None => true,
-    }
+    arguments.is_none()
 }
 fn ident(expr: ExpressionNode) -> Option<Ident> {
     match expr.into_inner() {

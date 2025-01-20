@@ -46,9 +46,9 @@ impl Module {
         ) -> Result<(), ResolveError> {
             for child_res in imports.keys() {
                 if !module.resolutions.contains_key(child_res) {
-                    let source = resolver.resolve_source(&child_res)?;
-                    let wesl = resolver.source_to_module(&source, &child_res)?;
-                    let imports = imports_to_resources(&wesl.imports, &child_res);
+                    let source = resolver.resolve_source(child_res)?;
+                    let wesl = resolver.source_to_module(&source, child_res)?;
+                    let imports = imports_to_resources(&wesl.imports, child_res);
                     module.resolve_import(child_res, wesl);
                     rec(module, resolver, &imports).map_err(|e| {
                         ResolveError::Error(
@@ -128,7 +128,7 @@ pub(crate) fn imports_to_resources(imports: &[syntax::Import], resource: &Resour
                     .into_iter()
                     .map(|mut child| {
                         let mut path = import.path.clone();
-                        path.extend(child.path.into_iter());
+                        path.extend(child.path.iter());
                         child.path = path;
                         child
                     })

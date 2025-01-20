@@ -48,7 +48,7 @@ impl Display for TranslationUnit {
             .iter()
             .filter(|decl| !matches!(decl, GlobalDeclaration::Void))
             .format("\n\n");
-        write!(f, "{declarations}\n")
+        writeln!(f, "{declarations}")
     }
 }
 
@@ -72,7 +72,7 @@ impl Display for Import {
                 _ => "?",
             })
             .format("::");
-        let relative = self.path.has_root().then_some("").unwrap_or("crate::");
+        let relative = if self.path.has_root() { "" } else { "crate::" };
         let content = &self.content;
         write!(f, "{relative}{path}::{content};")
     }

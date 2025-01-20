@@ -60,7 +60,7 @@ impl SourceMap for BasicSourceMap {
         self.sources.get(resource).map(|source| source.as_str())
     }
     fn get_default_source(&self) -> Option<&str> {
-        self.default_source.as_ref().map(|source| source.as_str())
+        self.default_source.as_deref()
     }
 }
 

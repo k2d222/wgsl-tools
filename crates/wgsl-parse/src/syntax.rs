@@ -62,7 +62,7 @@ impl Ident {
 impl PartialEq for Ident {
     fn eq(&self, other: &Self) -> bool {
         // checking both names at simultaneously can cause deadlock
-        Arc::ptr_eq(&self.0, &other.0) || &*self.name() == &*other.name()
+        Arc::ptr_eq(&self.0, &other.0) || *self.name() == *other.name()
     }
 }
 

@@ -144,7 +144,7 @@ pub use validate::{validate, ValidateError};
 pub use wgsl_parse::syntax;
 
 use itertools::Itertools;
-use std::{collections::HashMap, path::Path, sync::LazyLock};
+use std::{collections::HashMap, fmt::Display, path::Path, sync::LazyLock};
 use wgsl_parse::syntax::{Ident, TranslationUnit};
 
 #[derive(Debug)]
@@ -508,6 +508,7 @@ impl Wesl {
     }
 }
 
+/// This type implements `Display`, call `to_string()` to get the compiled WGSL.
 #[derive(Clone)]
 pub struct CompileResult {
     pub syntax: TranslationUnit,
@@ -520,13 +521,13 @@ impl CompileResult {
     }
 }
 
-impl ToString for CompileResult {
-    /// Get the WGSL string resulting from the compilation of a WESL source.
-    fn to_string(&self) -> String {
-        self.syntax.to_string()
+impl Display for CompileResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.syntax.fmt(f)
     }
 }
 
+/// This type implements `Display`, call `to_string()` to get the function return value.
 #[cfg(feature = "eval")]
 pub struct ExecResult<'a> {
     /// The executed function return value
@@ -552,13 +553,13 @@ impl<'a> ExecResult<'a> {
     }
 }
 
-impl<'a> ToString for ExecResult<'a> {
-    /// Get the WGSL string representing the function return value expression.
-    fn to_string(&self) -> String {
-        self.inst.to_string()
+impl<'a> Display for ExecResult<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inst.fmt(f)
     }
 }
 
+/// This type implements `Display`, call `to_string()` to get the evaluation result.
 #[cfg(feature = "eval")]
 pub struct EvalResult<'a> {
     /// The expression evaluation result
@@ -575,10 +576,9 @@ impl<'a> EvalResult<'a> {
     }
 }
 
-impl<'a> ToString for EvalResult<'a> {
-    /// Get the WGSL string representing the evaluated expression.
-    fn to_string(&self) -> String {
-        self.inst.to_string()
+impl<'a> Display for EvalResult<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inst.fmt(f)
     }
 }
 
@@ -593,8 +593,7 @@ impl CompileResult {
     /// # WESL Reference
     /// The `@const` attribute is non-standard.
     pub fn eval(&self, source: &str) -> Result<EvalResult, Error> {
-        static EMPTY_MODULE: LazyLock<TranslationUnit> =
-            LazyLock::new(|| TranslationUnit::default());
+        static EMPTY_MODULE: LazyLock<TranslationUnit> = LazyLock::new(TranslationUnit::default);
         let expr = source
             .parse::<syntax::Expression>()
             .map_err(|e| Error::Error(Diagnostic::from(e).with_source(source.to_string())))?;
@@ -608,7 +607,7 @@ impl CompileResult {
         let inst = if let Some(sourcemap) = &self.sourcemap {
             inst.map_err(|e| Error::Error(e.with_sourcemap(sourcemap)))
         } else {
-            inst.map_err(|e| Error::Error(e))
+            inst.map_err(Error::Error)
         }?;
 
         let res = EvalResult { inst, ctx };
@@ -648,7 +647,7 @@ impl CompileResult {
         let inst = if let Some(sourcemap) = &self.sourcemap {
             inst.map_err(|e| Error::Error(e.with_sourcemap(sourcemap)))
         } else {
-            inst.map_err(|e| Error::Error(e))
+            inst.map_err(Error::Error)
         }?;
 
         Ok(ExecResult { inst, ctx })
@@ -806,8 +805,7 @@ fn compile_impl(
         let mut module = import::Module::new(wesl, entrypoint.clone());
         module.resolve(&resolver)?;
         module.mangle(mangler);
-        let wesl = module.assemble();
-        wesl
+        module.assemble()
     } else {
         wesl
     };

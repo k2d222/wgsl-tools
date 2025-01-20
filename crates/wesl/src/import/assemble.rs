@@ -7,7 +7,7 @@ impl Module {
         let mut wgsl = self.source.clone();
         wgsl.imports.clear();
 
-        for (_, module) in &self.resolutions {
+        for module in self.resolutions.values() {
             wgsl.global_declarations
                 .extend(module.global_declarations.iter().cloned());
         }

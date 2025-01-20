@@ -16,11 +16,8 @@ impl TranslationUnit {
 
 impl GlobalDeclaration {
     pub fn remove_voids(&mut self) {
-        match self {
-            GlobalDeclaration::Function(decl) => {
-                decl.body.remove_voids();
-            }
-            _ => (),
+        if let GlobalDeclaration::Function(decl) = self {
+            decl.body.remove_voids();
         }
     }
 }
@@ -45,12 +42,12 @@ impl Statement {
             }
             Statement::If(stat) => {
                 stat.if_clause.body.remove_voids();
-                stat.else_if_clauses
-                    .iter_mut()
-                    .for_each(|clause| clause.body.remove_voids());
-                stat.else_clause
-                    .as_mut()
-                    .map(|clause| clause.body.remove_voids());
+                for clause in &mut stat.else_if_clauses {
+                    clause.body.remove_voids();
+                }
+                if let Some(clause) = &mut stat.else_clause {
+                    clause.body.remove_voids();
+                }
             }
             Statement::Switch(stat) => stat
                 .clauses

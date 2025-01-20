@@ -39,13 +39,12 @@ impl SyntaxUtil for TranslationUnit {
                 GlobalDeclaration::Function(decl) => decl
                     .attributes
                     .iter()
-                    .find(|attr| {
+                    .any(|attr| {
                         matches!(
                             attr,
                             Attribute::Vertex | Attribute::Fragment | Attribute::Compute
                         )
                     })
-                    .is_some()
                     .then_some(&decl.ident),
                 _ => None,
             })
@@ -60,7 +59,7 @@ impl SyntaxUtil for TranslationUnit {
         // keep track of declarations in a scope.
         type Scope<'a> = Cow<'a, HashSet<Ident>>;
 
-        fn flatten_imports<'a>(imports: &'a Vec<Import>) -> impl Iterator<Item = Ident> + 'a {
+        fn flatten_imports(imports: &[Import]) -> impl Iterator<Item = Ident> + '_ {
             imports.iter().flat_map(|import| match &import.content {
                 ImportContent::Item(item) => {
                     once(item.rename.as_ref().unwrap_or(&item.ident).clone()).boxed()
@@ -78,10 +77,7 @@ impl SyntaxUtil for TranslationUnit {
         );
 
         fn retarget_ty(ty: &mut TypeExpression, scope: &HashSet<Ident>) {
-            if let Some(id) = scope
-                .iter()
-                .find(|ident| &*ident.name() == &*ty.ident.name())
-            {
+            if let Some(id) = scope.iter().find(|ident| *ident.name() == *ty.ident.name()) {
                 ty.ident = id.clone();
             }
             query_mut!(ty.template_args.[].[].expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)))

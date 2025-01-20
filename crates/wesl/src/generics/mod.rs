@@ -81,7 +81,7 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), E> {
     }
 
     // remove generic function declarations
-    wesl.global_declarations.retain(|decl| !matches!(decl, GlobalDeclaration::Function(f) if f.attributes.iter().find(|attr| attr.is_type()).is_some()));
+    wesl.global_declarations.retain(|decl| !matches!(decl, GlobalDeclaration::Function(f) if f.attributes.iter().any(|attr| attr.is_type())));
 
     // add generic variants
     wesl.global_declarations.extend(new_decls);
@@ -97,28 +97,25 @@ pub fn replace_calls(wesl: &mut TranslationUnit) -> Result<(), E> {
         .cloned()
         .collect_vec();
     for expr in Visit::<ExpressionNode>::visit_mut(wesl) {
-        match expr.node_mut() {
-            Expression::FunctionCall(f) => {
-                if let Some(args) = &f.ty.template_args {
-                    let signature = args
-                        .iter()
-                        .map(|arg| match arg.expression.node() {
-                            Expression::Literal(_) => todo!("literal generics"),
-                            Expression::TypeOrIdentifier(ty) => ty.clone(),
-                            _ => panic!("invalid template arg"),
-                        })
-                        .collect_vec();
+        if let Expression::FunctionCall(f) = expr.node_mut() {
+            if let Some(args) = &f.ty.template_args {
+                let signature = args
+                    .iter()
+                    .map(|arg| match arg.expression.node() {
+                        Expression::Literal(_) => todo!("literal generics"),
+                        Expression::TypeOrIdentifier(ty) => ty.clone(),
+                        _ => panic!("invalid template arg"),
+                    })
+                    .collect_vec();
 
-                    let new_name = mangle::mangle(f.ty.ident.name().as_str(), &signature);
-                    f.ty.ident = idents
-                        .iter()
-                        .find(|ident| &*ident.name() == &new_name)
-                        .unwrap()
-                        .clone();
-                    f.ty.template_args = None;
-                }
+                let new_name = mangle::mangle(f.ty.ident.name().as_str(), &signature);
+                f.ty.ident = idents
+                    .iter()
+                    .find(|ident| *ident.name() == new_name)
+                    .unwrap()
+                    .clone();
+                f.ty.template_args = None;
             }
-            _ => (),
         }
         // TODO recursive
         // expr.visit_mut()
@@ -171,7 +168,7 @@ fn eval_ty_attrs(nodes: &mut Vec<impl Decorated>, ty: &TypeConstraint) -> Result
 
     let retains = nodes
         .iter_mut()
-        .zip(retains.into_iter())
+        .zip(retains)
         .map(|(node, keep)| {
             let ty_attr = node
                 .attributes_mut()

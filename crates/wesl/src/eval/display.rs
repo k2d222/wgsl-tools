@@ -70,7 +70,7 @@ impl Display for MatInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let c = self.c();
         let r = self.r();
-        let comps = (0..c).map(|i| self.col(i as usize).unwrap()).format(", ");
+        let comps = (0..c).map(|i| self.col(i).unwrap()).format(", ");
         write!(f, "mat{c}x{r}({comps})")
     }
 }
@@ -111,7 +111,7 @@ impl Display for MemView {
             }
         }
 
-        fmt_view(f, &self)
+        fmt_view(f, self)
     }
 }
 
@@ -123,7 +123,7 @@ impl Display for AtomicInstance {
     }
 }
 
-impl<'a> Display for Type {
+impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Bool => write!(f, "bool"),

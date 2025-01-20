@@ -131,7 +131,7 @@ impl Instance {
             }
             Type::Mat(c, r, ty) => {
                 let mut offset = 0;
-                let col_ty = Type::Vec(*r, ty.clone().into());
+                let col_ty = Type::Vec(*r, ty.clone());
                 let col_size = col_ty.size_of(ctx)?;
                 let col_off = round_up(col_ty.align_of(ctx)?, col_size);
                 let cols = (0..*c)
@@ -294,9 +294,9 @@ impl Type {
                             .or_else(|| ty.align_of(ctx))?;
                         Some((size, align))
                     })
-                    .fold(Some(0), |offset, mem| {
+                    .try_fold(0, |offset, mem| {
                         let (size, align) = mem?;
-                        Some(round_up(align, offset?) + size)
+                        Some(round_up(align, offset) + size)
                     })?;
                 Some(round_up(self.align_of(ctx)?, past_last_mem))
             }
@@ -346,7 +346,7 @@ impl Type {
                             .flatten()
                             .or_else(|| ty.align_of(ctx))
                     })
-                    .fold(Some(0), |a, b| Some(a?.max(b?)))
+                    .try_fold(0, |a, b| Some(a.max(b?)))
             }
             Type::Array(_, ty) => ty.align_of(ctx),
             Type::Vec(n, ty) => {

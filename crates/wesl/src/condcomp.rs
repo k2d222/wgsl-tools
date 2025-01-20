@@ -22,10 +22,7 @@ const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false
 
 pub fn eval_attr(expr: &Expression, features: &Features) -> Result<Expression, CondCompError> {
     match expr {
-        Expression::Literal(lit) => match lit {
-            LiteralExpression::Bool(_) => Ok(expr.clone()),
-            _ => Err(CondCompError::InvalidExpression(expr.clone())),
-        },
+        Expression::Literal(LiteralExpression::Bool(_)) => Ok(expr.clone()),
         Expression::Parenthesized(paren) => eval_attr(&paren.expression, features),
         Expression::Unary(unary) => {
             let operand = eval_attr(&unary.operand, features)?;
@@ -142,7 +139,7 @@ fn eval_if_attributes(
 
     let retains = nodes
         .iter_mut()
-        .zip(retains.into_iter())
+        .zip(retains)
         .map(|(node, expr)| {
             let if_attr = node
                 .attributes_mut()

@@ -15,9 +15,9 @@ pub fn lower_sourcemap(
 
     #[cfg(feature = "attributes")]
     for attrs in query_attrs(wesl) {
-        attrs.retain(|attr| match attr {
-            Attribute::Custom(CustomAttribute { name, .. }) if name == "generic" => false,
-            _ => true,
+        attrs.retain(|attr| {
+            !matches!(attr, 
+            Attribute::Custom(CustomAttribute { name, .. }) if name == "generic")
         })
     }
 

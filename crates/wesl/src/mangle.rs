@@ -184,7 +184,7 @@ impl UnicodeMangler {
     const SEP: &'static str = "::"; // <-- these are NOT colons, they are U+02D0
     const TY_SEP: &'static str = "ˏ"; // U+02CF
 
-    fn display_ty<'a>(ty: &'a TypeExpression) -> impl fmt::Display + 'a {
+    fn display_ty(ty: &TypeExpression) -> impl fmt::Display + '_ {
         format_args!(
             "{}{}",
             ty.ident,

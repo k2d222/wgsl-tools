@@ -28,15 +28,11 @@ fn mangle_arg(ty: &TemplateArg) -> String {
 }
 
 fn mangle_ty(ty: &TypeExpression) -> String {
-    let args = ty
-        .template_args
-        .as_ref()
-        .map(|args| args.as_slice())
-        .unwrap_or_default();
+    let args = ty.template_args.as_deref().unwrap_or_default();
     let n1 = ty.ident.name().len();
     let name = &ty.ident;
     let n2 = args.len();
-    let args = args.iter().map(|arg| mangle_arg(arg)).format("");
+    let args = args.iter().map(mangle_arg).format("");
     format!("{n1}{name}{n2}_{args}")
 }
 
@@ -44,6 +40,6 @@ fn mangle_ty(ty: &TypeExpression) -> String {
 pub fn mangle(name: &str, signature: &[TypeExpression]) -> String {
     let n1 = name.len();
     let n2 = signature.len();
-    let sig = signature.iter().map(|ty| mangle_ty(ty)).format("");
+    let sig = signature.iter().map(mangle_ty).format("");
     format!("_WESL{n1}{name}{n2}_{sig}")
 }

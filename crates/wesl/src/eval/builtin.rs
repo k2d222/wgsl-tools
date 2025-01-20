@@ -24,29 +24,29 @@ type E = EvalError;
 
 // TODO: when we have the wgsl! macro, we can refactor the consts.
 
-pub const EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::Bool(true));
-pub const EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false));
+pub static EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::Bool(true));
+pub static EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false));
 
-pub const IDENT_BOOL: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("bool")));
-pub const IDENT_I32: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("i32")));
-pub const IDENT_U32: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("u32")));
-pub const IDENT_F32: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("f32")));
-pub const IDENT_F16: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("f32")));
-pub const IDENT_ARRAY: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("array")));
-pub const IDENT_ATOMIC: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("atomic")));
-pub const IDENT_PTR: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("ptr")));
-pub const IDENT_VEC2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("vec2")));
-pub const IDENT_VEC3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("vec3")));
-pub const IDENT_VEC4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("vec4")));
-pub const IDENT_MAT2X2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat2x2")));
-pub const IDENT_MAT3X2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat3x2")));
-pub const IDENT_MAT4X2: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat4x2")));
-pub const IDENT_MAT2X3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat2x3")));
-pub const IDENT_MAT3X3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat3x3")));
-pub const IDENT_MAT4X3: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat4x3")));
-pub const IDENT_MAT2X4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat2x4")));
-pub const IDENT_MAT3X4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat3x4")));
-pub const IDENT_MAT4X4: LazyLock<Ident> = LazyLock::new(|| Ident::new(format!("mat4x4")));
+pub static IDENT_BOOL: LazyLock<Ident> = LazyLock::new(|| Ident::new("bool".to_string()));
+pub static IDENT_I32: LazyLock<Ident> = LazyLock::new(|| Ident::new("i32".to_string()));
+pub static IDENT_U32: LazyLock<Ident> = LazyLock::new(|| Ident::new("u32".to_string()));
+pub static IDENT_F32: LazyLock<Ident> = LazyLock::new(|| Ident::new("f32".to_string()));
+pub static IDENT_F16: LazyLock<Ident> = LazyLock::new(|| Ident::new("f32".to_string()));
+pub static IDENT_ARRAY: LazyLock<Ident> = LazyLock::new(|| Ident::new("array".to_string()));
+pub static IDENT_ATOMIC: LazyLock<Ident> = LazyLock::new(|| Ident::new("atomic".to_string()));
+pub static IDENT_PTR: LazyLock<Ident> = LazyLock::new(|| Ident::new("ptr".to_string()));
+pub static IDENT_VEC2: LazyLock<Ident> = LazyLock::new(|| Ident::new("vec2".to_string()));
+pub static IDENT_VEC3: LazyLock<Ident> = LazyLock::new(|| Ident::new("vec3".to_string()));
+pub static IDENT_VEC4: LazyLock<Ident> = LazyLock::new(|| Ident::new("vec4".to_string()));
+pub static IDENT_MAT2X2: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat2x2".to_string()));
+pub static IDENT_MAT3X2: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat3x2".to_string()));
+pub static IDENT_MAT4X2: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat4x2".to_string()));
+pub static IDENT_MAT2X3: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat2x3".to_string()));
+pub static IDENT_MAT3X3: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat3x3".to_string()));
+pub static IDENT_MAT4X3: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat4x3".to_string()));
+pub static IDENT_MAT2X4: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat2x4".to_string()));
+pub static IDENT_MAT3X4: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat3x4".to_string()));
+pub static IDENT_MAT4X4: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat4x4".to_string()));
 
 pub fn name_to_builtin_ident(name: &str) -> Option<Ident> {
     match name {
@@ -125,7 +125,7 @@ pub fn call_builtin(
 ) -> Result<Instance, E> {
     match (
         ty.ident.name().as_str(),
-        ty.template_args.as_ref().map(|tplt| tplt.as_slice()),
+        ty.template_args.as_deref(),
         args.as_slice(),
     ) {
         // constructors
@@ -381,10 +381,7 @@ impl ArrayTemplate {
         let mut it = tplt.into_iter();
         match (it.next(), it.next(), it.next()) {
             (Some(t1), Some(t2), None) => Self::parse_2(t1, t2),
-            (Some(t1), None, None) => match t1 {
-                Instance::Type(ty) => Ok(ArrayTemplate { n: None, ty }),
-                _ => Err(E::TemplateArgs("array")),
-            },
+            (Some(Instance::Type(ty)), None, None) => Ok(ArrayTemplate { n: None, ty }),
             _ => Err(E::TemplateArgs("array")),
         }
     }
@@ -637,7 +634,7 @@ fn call_array_t(tplt: ArrayTemplate, args: &[Instance]) -> Result<Instance, E> {
 fn call_array(args: &[Instance]) -> Result<Instance, E> {
     let args = convert_all(args).ok_or_else(|| E::Builtin("array elements are not compatible"))?;
 
-    if args.len() < 1 {
+    if args.is_empty() {
         return Err(E::Builtin("array constructor expects at least 1 argument"));
     }
 
@@ -806,7 +803,7 @@ fn call_mat_t(
 
         Ok(MatInstance::from_cols(comps).into())
     } else {
-        let args = convert_all_inner_to(&args, &tplt.inner_ty())
+        let args = convert_all_inner_to(args, &tplt.inner_ty())
             .ok_or_else(|| E::Builtin("matrix components are not compatible"))?;
         let ty = args
             .first()
@@ -872,7 +869,7 @@ fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
             ));
         };
 
-        let args = convert_all_inner_to(&args, &inner_ty)
+        let args = convert_all_inner_to(args, &inner_ty)
             .ok_or_else(|| E::Builtin("matrix components are not compatible"))?;
         let ty = args
             .first()
@@ -983,7 +980,7 @@ fn call_vec_t(
 fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
     // overload 1: vec init from single scalar value
     if let [Instance::Literal(l)] = args {
-        let val = Instance::Literal(l.clone());
+        let val = Instance::Literal(*l);
         let comps = (0..n).map(|_| val.clone()).collect_vec();
         Ok(VecInstance::new(comps).into())
     }
@@ -1183,10 +1180,11 @@ fn call_select(f: &Instance, t: &Instance, cond: &Instance) -> Result<Instance, 
                 } else {
                     let v = izip!(v1, v2, v.iter())
                         .map(|(f, t, b)| {
-                            b.unwrap_literal_ref()
-                                .unwrap_bool()
-                                .then_some(t.to_owned()) // BUG: is it a bug in rust_analyzer? it displays f as Instance and t as &Instance
-                                .unwrap_or(f.to_owned())
+                            if b.unwrap_literal_ref().unwrap_bool() {
+                                t.to_owned() // BUG: is it a bug in rust_analyzer? it displays f as Instance and t as &Instance
+                            } else {
+                                f.to_owned()
+                            }
                         })
                         .collect_vec();
                     Ok(VecInstance::new(v).into())
@@ -1266,7 +1264,7 @@ fn call_abs(e: &Instance) -> Result<Instance, E> {
             LiteralInstance::AbstractInt(n) => Ok(LiteralInstance::from(n.wrapping_abs())),
             LiteralInstance::AbstractFloat(n) => Ok(LiteralInstance::from(n.abs())),
             LiteralInstance::I32(n) => Ok(LiteralInstance::from(n.wrapping_abs())),
-            LiteralInstance::U32(_) => Ok(l.clone()),
+            LiteralInstance::U32(_) => Ok(*l),
             LiteralInstance::F32(n) => Ok(LiteralInstance::from(n.abs())),
             LiteralInstance::F16(n) => Ok(LiteralInstance::from(n.abs())),
         }
@@ -1545,7 +1543,7 @@ fn call_frexp(e: &Instance) -> Result<Instance, E> {
         let e = ee - 0x3fe;
         y &= 0x800fffffffffffff;
         y |= 0x3fe0000000000000;
-        return (f64::from_bits(y), e);
+        (f64::from_bits(y), e)
     }
     match e {
         Instance::Literal(l) => match l {
@@ -1598,7 +1596,7 @@ fn call_frexp(e: &Instance) -> Result<Instance, E> {
                 })
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter()
-                .map(|n| frexp(n))
+                .map(frexp)
                 .unzip();
             let fracts = fracts
                 .into_iter()
@@ -1935,19 +1933,23 @@ fn call_sign(e: &Instance) -> Result<Instance, E> {
         match l {
             LiteralInstance::Bool(_) => Err(ERR),
             LiteralInstance::AbstractInt(n) => Ok(LiteralInstance::from(n.signum())),
-            LiteralInstance::AbstractFloat(n) => Ok(LiteralInstance::from(
-                n.is_zero().then_some(n.to_owned()).unwrap_or(n.signum()),
-            )),
+            LiteralInstance::AbstractFloat(n) => Ok(LiteralInstance::from(if n.is_zero() {
+                *n
+            } else {
+                n.signum()
+            })),
             LiteralInstance::I32(n) => Ok(LiteralInstance::from(n.signum())),
-            LiteralInstance::U32(n) => Ok(LiteralInstance::from(
-                n.is_zero().then_some(n.to_owned()).unwrap_or(1),
-            )),
-            LiteralInstance::F32(n) => Ok(LiteralInstance::from(
-                n.is_zero().then_some(n.to_owned()).unwrap_or(n.signum()),
-            )),
-            LiteralInstance::F16(n) => Ok(LiteralInstance::from(
-                n.is_zero().then_some(n.to_owned()).unwrap_or(n.signum()),
-            )),
+            LiteralInstance::U32(n) => Ok(LiteralInstance::from(if n.is_zero() { *n } else { 1 })),
+            LiteralInstance::F32(n) => Ok(LiteralInstance::from(if n.is_zero() {
+                *n
+            } else {
+                n.signum()
+            })),
+            LiteralInstance::F16(n) => Ok(LiteralInstance::from(if n.is_zero() {
+                *n
+            } else {
+                n.signum()
+            })),
         }
     }
     match e {
@@ -1987,23 +1989,27 @@ fn call_step(edge: &Instance, x: &Instance) -> Result<Instance, E> {
                     .convert_to(&Type::AbstractFloat)
                     .ok_or_else(|| E::Conversion(Type::AbstractInt, Type::AbstractFloat))?
                     .unwrap_abstract_float();
-                Ok(LiteralInstance::from(
-                    (edge <= x).then_some(1.0).unwrap_or(0.0),
-                ))
+                Ok(LiteralInstance::from(if edge <= x { 1.0 } else { 0.0 }))
             }
             LiteralInstance::AbstractFloat(edge) => Ok(LiteralInstance::from(
-                (*edge <= x.unwrap_abstract_float())
-                    .then_some(1.0)
-                    .unwrap_or(0.0),
+                if *edge <= x.unwrap_abstract_float() {
+                    1.0
+                } else {
+                    0.0
+                },
             )),
             LiteralInstance::I32(_) => Err(ERR),
             LiteralInstance::U32(_) => Err(ERR),
-            LiteralInstance::F32(edge) => Ok(LiteralInstance::from(
-                (*edge <= x.unwrap_f_32()).then_some(1.0).unwrap_or(0.0),
-            )),
-            LiteralInstance::F16(edge) => Ok(LiteralInstance::from(
-                (*edge <= x.unwrap_f_16()).then_some(1.0).unwrap_or(0.0),
-            )),
+            LiteralInstance::F32(edge) => Ok(LiteralInstance::from(if *edge <= x.unwrap_f_32() {
+                1.0
+            } else {
+                0.0
+            })),
+            LiteralInstance::F16(edge) => Ok(LiteralInstance::from(if *edge <= x.unwrap_f_16() {
+                1.0
+            } else {
+                0.0
+            })),
         }
     }
     let (edge, x) = convert(edge, x).ok_or(E::Builtin("`step` arguments are incompatible"))?;

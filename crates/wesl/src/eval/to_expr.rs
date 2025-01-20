@@ -73,7 +73,7 @@ impl ToExpr for ArrayInstance {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         Ok(Expression::FunctionCall(FunctionCall {
             ty: TypeExpression {
-                ident: Ident::new(format!("array")),
+                ident: Ident::new("array".to_string()),
                 template_args: None,
             },
             arguments: self

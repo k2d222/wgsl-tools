@@ -127,7 +127,7 @@ impl From<Error> for Diagnostic<Error> {
             Error::GenericsError(e) => e.into(),
             #[cfg(feature = "eval")]
             Error::EvalError(e) => e.into(),
-            Error::Error(e) => return e,
+            Error::Error(e) => e,
         }
     }
 }
@@ -161,7 +161,7 @@ impl<E: std::error::Error> Diagnostic<E> {
 
     pub fn with_sourcemap(mut self, sourcemap: &(impl SourceMap + std::fmt::Debug)) -> Self {
         if let Some(decl) = &self.declaration {
-            if let Some((resource, decl)) = sourcemap.get_decl(&decl) {
+            if let Some((resource, decl)) = sourcemap.get_decl(decl) {
                 self.file = Some(resource.clone());
                 self.declaration = Some(decl.to_string());
                 self.source = sourcemap
@@ -266,7 +266,7 @@ impl<E: std::error::Error> Display for Diagnostic<E> {
             .map(|file| file.path().display().to_string());
 
         if let Some(span) = &self.span {
-            let source = self.source.as_ref().map(|source| source.as_str());
+            let source = self.source.as_deref();
 
             if let Some(source) = source {
                 if span.range().end <= source.len() {

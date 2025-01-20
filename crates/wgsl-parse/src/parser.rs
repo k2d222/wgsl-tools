@@ -25,9 +25,9 @@ impl Parser {
         let parser = wgsl::TranslationUnitParser::new();
         parser.parse(lexer).map_err(Into::into)
     }
-    pub fn parse<'s>(mut lexer: &'s mut Lexer) -> Result<syntax::TranslationUnit, Error> {
+    pub fn parse(lexer: &mut Lexer) -> Result<syntax::TranslationUnit, Error> {
         let parser = wgsl::TranslationUnitParser::new();
-        parser.parse(&mut lexer).map_err(Into::into)
+        parser.parse(lexer).map_err(Into::into)
     }
 }
 
@@ -37,13 +37,13 @@ impl Parser {
         let parser = wgsl_recognize::TranslationUnitParser::new();
         parser.parse(lexer).map_err(Into::into)
     }
-    pub fn recognize<'s>(mut lexer: &'s mut Lexer) -> Result<(), Error> {
+    pub fn recognize(lexer: &mut Lexer) -> Result<(), Error> {
         let parser = wgsl_recognize::TranslationUnitParser::new();
-        parser.parse(&mut lexer).map_err(Into::into)
+        parser.parse(lexer).map_err(Into::into)
     }
-    pub fn recognize_template_list<'s>(mut lexer: &'s mut Lexer) -> Result<(), Error> {
+    pub fn recognize_template_list(lexer: &mut Lexer) -> Result<(), Error> {
         let parser = wgsl_recognize::TryTemplateListParser::new();
-        parser.parse(&mut lexer).map_err(Into::into)
+        parser.parse(lexer).map_err(Into::into)
     }
 }
 

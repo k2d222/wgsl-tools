@@ -64,7 +64,7 @@ impl LiteralInstance {
 impl Convert for LiteralInstance {
     fn convert_to(&self, ty: &Type) -> Option<Self> {
         if ty == &self.ty() {
-            return Some(self.clone());
+            return Some(*self);
         }
 
         // TODO: check that these conversions are correctly implemented.
@@ -77,7 +77,7 @@ impl Convert for LiteralInstance {
             (Self::AbstractInt(n), Type::F32) => n.to_f32().map(Self::F32),
             (Self::AbstractInt(n), Type::F16) => f16::from_i64(*n).map(Self::F16),
             (Self::AbstractFloat(n), Type::F32) => n.to_f32().map(Self::F32),
-            (Self::AbstractFloat(n), Type::F16) => Some(f16::from_f64(*n)).map(Self::F16),
+            (Self::AbstractFloat(n), Type::F16) => Some(Self::F16(f16::from_f64(*n))),
             _ => None,
         }
         .and_then(|n| n.is_finite().then_some(n))
@@ -196,8 +196,8 @@ pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
         (Type::AbstractFloat, Type::F32) => Some(1),
         (Type::AbstractFloat, Type::F16) => Some(2),
         (Type::Struct(s1), Type::Struct(s2)) => {
-            if PRELUDE.decl_struct(&s1).is_some()
-                && PRELUDE.decl_struct(&s2).is_some()
+            if PRELUDE.decl_struct(s1).is_some()
+                && PRELUDE.decl_struct(s2).is_some()
                 && s1.name().ends_with("abstract")
             {
                 if s2.name().ends_with("f32") {
@@ -226,8 +226,8 @@ pub fn conversion_rank(ty1: &Type, ty2: &Type) -> Option<u32> {
 pub fn convert<T: Convert + Ty + Clone>(i1: &T, i2: &T) -> Option<(T, T)> {
     let (ty1, ty2) = (i1.ty(), i2.ty());
     let ty = convert_ty(&ty1, &ty2)?;
-    let i1 = i1.convert_to(&ty)?;
-    let i2 = i2.convert_to(&ty)?;
+    let i1 = i1.convert_to(ty)?;
+    let i2 = i2.convert_to(ty)?;
     Some((i1, i2))
 }
 
@@ -238,8 +238,8 @@ pub fn convert_inner<T1: Convert + Ty + Clone, T2: Convert + Ty + Clone>(
 ) -> Option<(T1, T2)> {
     let (ty1, ty2) = (i1.inner_ty(), i2.inner_ty());
     let ty = convert_ty(&ty1, &ty2)?;
-    let i1 = i1.convert_inner_to(&ty)?;
-    let i2 = i2.convert_inner_to(&ty)?;
+    let i1 = i1.convert_inner_to(ty)?;
+    let i2 = i2.convert_inner_to(ty)?;
     Some((i1, i2))
 }
 
@@ -253,7 +253,7 @@ pub fn convert_all<'a, T: Convert + Ty + Clone + 'a>(insts: &[T]) -> Option<Vec<
 /// See [`convert`]
 pub fn convert_all_to<'a, T: Convert + Ty + Clone + 'a>(insts: &[T], ty: &Type) -> Option<Vec<T>> {
     insts
-        .into_iter()
+        .iter()
         .map(|inst| inst.convert_to(ty))
         .collect::<Option<Vec<_>>>()
 }
@@ -264,7 +264,7 @@ pub fn convert_all_inner_to<'a, T: Convert + Ty + Clone + 'a>(
     ty: &Type,
 ) -> Option<Vec<T>> {
     insts
-        .into_iter()
+        .iter()
         .map(|inst| inst.convert_inner_to(ty))
         .collect::<Option<Vec<_>>>()
 }
