@@ -330,7 +330,7 @@ impl Router {
 
     /// Mount a fallback resolver that is used when no other prefix match.
     pub fn mount_fallback_resolver(&mut self, resolver: impl Resolver + 'static) {
-        self.mount_resolver(PathBuf::new(), resolver);
+        self.mount_resolver("", resolver);
     }
 }
 
@@ -347,7 +347,10 @@ impl Resolver for Router {
             .iter()
             .filter(|(path, _)| resource.path().starts_with(path))
             .max_by_key(|(path, _)| path.iter().count())
-            .or(self.fallback.as_ref())
+            .or(self
+                .fallback
+                .as_ref()
+                .take_if(|(path, _)| resource.path().starts_with(path)))
             .ok_or_else(|| {
                 ResolveError::InvalidResource(resource.clone(), "no mount point".to_string())
             })?;
@@ -356,12 +359,6 @@ impl Resolver for Router {
         let suffix = resource.path().strip_prefix(mount_path).unwrap();
         let resource = Resource::from(suffix.to_path_buf());
         resolver.resolve_source(&resource)
-        // .map_err(|e| match e {
-        //     ResolveError::FileNotFound(msg) => {
-        //         ResolveError::FileNotFound(format!("`{}`::{msg}", mount_path.display()))
-        //     }
-        //     ResolveError::Error(_) => e,
-        // })
     }
 }
 
@@ -379,23 +376,17 @@ pub trait PkgModule: Sync {
 
 pub struct PkgResolver {
     packages: Vec<&'static dyn PkgModule>,
-    fallback: Option<Box<dyn Resolver>>,
 }
 
 impl PkgResolver {
     pub fn new() -> Self {
         Self {
             packages: Vec::new(),
-            fallback: None,
         }
     }
 
     pub fn add_package(&mut self, pkg: &'static dyn PkgModule) {
         self.packages.push(pkg);
-    }
-
-    pub fn mount_fallback_resolver(&mut self, fallback: impl Resolver + 'static) {
-        self.fallback = Some(Box::new(fallback));
     }
 }
 
@@ -410,46 +401,69 @@ impl Resolver for PkgResolver {
         &'a self,
         resource: &Resource,
     ) -> Result<std::borrow::Cow<'a, str>, ResolveError> {
-        if resource.path().has_root() {
-            let path = resource.path().strip_prefix("/").unwrap();
-            for pkg in &self.packages {
-                // TODO: the resolution algorithm is currently not spec-compliant.
-                // https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
-                if path.starts_with(pkg.name()) {
-                    let mut cur_mod = *pkg;
-                    for segment in path.iter().skip(1) {
-                        let name = segment.to_str().ok_or_else(|| {
-                            ResolveError::InvalidResource(
-                                resource.clone(),
-                                "invalid unicode".to_string(),
-                            )
-                        })?;
-                        if let Some(submod) = pkg.submodule(name) {
-                            cur_mod = submod;
-                        } else {
-                            return Err(ResolveError::FileNotFound(
-                                path.to_path_buf(),
-                                format!("in package {}", pkg.name()),
-                            ));
-                        }
+        let path = resource.path();
+        for pkg in &self.packages {
+            // TODO: the resolution algorithm is currently not spec-compliant.
+            // https://github.com/wgsl-tooling-wg/wesl-spec/blob/imports-update/Imports.md
+            if resource.path().starts_with(pkg.name()) {
+                let mut cur_mod = *pkg;
+                for segment in path.iter().skip(1) {
+                    let name = segment.to_str().ok_or_else(|| {
+                        ResolveError::InvalidResource(
+                            resource.clone(),
+                            "invalid unicode".to_string(),
+                        )
+                    })?;
+                    if let Some(submod) = pkg.submodule(name) {
+                        cur_mod = submod;
+                    } else {
+                        return Err(ResolveError::FileNotFound(
+                            path.to_path_buf(),
+                            format!("in package {}", pkg.name()),
+                        ));
                     }
-                    return Ok(cur_mod.source().into());
                 }
+                return Ok(cur_mod.source().into());
             }
-            Err(ResolveError::FileNotFound(
-                resource.path().to_path_buf(),
-                "no package found".to_string(),
-            ))
+        }
+        Err(ResolveError::FileNotFound(
+            resource.path().to_path_buf(),
+            "no package found".to_string(),
+        ))
+    }
+}
+
+pub struct StandardResolver {
+    pkg: PkgResolver,
+    router: Router,
+}
+
+impl StandardResolver {
+    pub fn new(base: impl AsRef<Path>) -> Self {
+        let mut router = Router::new();
+        router.mount_fallback_resolver(FileResolver::new(base));
+        Self {
+            pkg: PkgResolver::new(),
+            router,
+        }
+    }
+
+    pub fn add_package(&mut self, pkg: &'static dyn PkgModule) {
+        self.pkg.add_package(pkg)
+    }
+
+    pub fn mount_resolver(&mut self, path: impl AsRef<Path>, resolver: impl Resolver + 'static) {
+        self.router.mount_resolver(path, resolver);
+    }
+}
+
+impl Resolver for StandardResolver {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+        if resource.path().has_root() {
+            let path = resource.path().iter().skip(1).collect::<PathBuf>();
+            self.pkg.resolve_source(&Resource::from(path))
         } else {
-            self.fallback
-                .as_ref()
-                .map(|fallback| fallback.resolve_source(resource))
-                .unwrap_or_else(|| {
-                    Err(ResolveError::FileNotFound(
-                        resource.path().to_path_buf(),
-                        "no package found".to_string(),
-                    ))
-                })
+            self.router.resolve_source(resource)
         }
     }
 }

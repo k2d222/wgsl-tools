@@ -5,14 +5,13 @@
 //! Work in progress! Both the WESL specification and this API are subject to frequent
 //! changes.
 //!
-//! See also: the [standalone CLI](https://github.com/k2d222/wgsl-tools) and the
-//! [wgsl/wesl parser](https://github.com/k2d222/wgsl-tools/tree/main/crates/wgsl-parse).
+//! See also: the [standalone CLI](https://github.com/wgsl-tooling-wg/wesl-rs).
 //!
 //! ## Basic Usage
 //!
 //! See [`Wesl`] for an overview of the high-level API.
 //! ```rust
-//! let compiler = Wesl::new_spec_compliant();
+//! let compiler = Wesl::new_spec_compliant("src/shaders");
 //!
 //! // compile a WESL file to a WGSL string
 //! let wgsl_str = compiler
@@ -37,8 +36,7 @@
 //! ```rust
 //! # use wesl::{Wesl, FileResolver};
 //! fn main() {
-//!     Wesl::new_spec_compliant()
-//!         .set_resolver(FileResolver::new("src/shaders"))
+//!     Wesl::new_spec_compliant("src/shaders")
 //!         .build("main.wesl");
 //! }
 //! ```
@@ -58,24 +56,12 @@
 //! Evaluate const-expressions.
 //!```rust
 //! # use wesl::{Wesl};
-//! # let compiler = Wesl::new_spec_compliant();
+//! # let compiler = Wesl::new_spec_compliant("");
 //! // ...standalone expression
 //! let wgsl_expr = compiler.eval("abs(3 - 5)").unwrap().to_string();
 //!
 //! // ...expression using declarations in a WESL file
 //! let wgsl_expr = compiler.compile("main.wesl").unwrap().eval("my_fn(my_const) + 5").unwrap().to_string();
-//! ```
-//!
-//! Custom resolver: customize how import paths are translated to wesl modules.
-//!```rust
-//! # use wesl::{FileResolver, Router, VirtualResolver, Wesl};
-//! // in this example, `import runtime::constants::PI` is in a custom module mounted at runtime.
-//! let mut resolver = VirtualResolver::new();
-//! resolver.add_file("constants", "const PI = 3.1415; const TAU = PI * 2.0;");
-//! let mut router = Router::new();
-//! router.mount_fallback_resolver(FileResolver::new("src/shaders"));
-//! router.mount_resolver("runtime", resolver);
-//! let compiler = Wesl::new_spec_compliant().set_resolver(router);
 //! ```
 //!
 //! ## Features
@@ -133,6 +119,7 @@ pub use package::PkgBuilder;
 pub use error::{Diagnostic, Error};
 pub use lower::{lower, lower_sourcemap};
 pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
+use resolve::StandardResolver;
 pub use resolve::{
     CacheResolver, FileResolver, NoResolver, PkgModule, PkgResolver, Preprocessor, ResolveError,
     Resolver, Resource, Router, VirtualResolver,
@@ -231,17 +218,17 @@ macro_rules! wesl_pkg {
 /// # Basic Usage
 ///
 /// ```rust
-/// let compiler = Wesl::new_spec_compliant();
-/// let wgsl_string = compiler.compile("path/to/main.wesl").unwrap().to_string();
+/// let compiler = Wesl::new_spec_compliant("path/to/dir/containing/shaders");
+/// let wgsl_string = compiler.compile("main.wesl").unwrap().to_string();
 /// ```
-pub struct Wesl {
+pub struct Wesl<R: Resolver> {
     options: CompileOptions,
     use_sourcemap: bool,
-    resolver: Box<dyn Resolver>,
+    resolver: R,
     mangler: Box<dyn Mangler>,
 }
 
-impl Wesl {
+impl Wesl<StandardResolver> {
     /// Get a WESL compiler with all *mandatory* and *optional* WESL extensions enabled,
     /// but not *experimental* and *non-standard* extensions.
     ///
@@ -254,7 +241,7 @@ impl Wesl {
     /// * (mandatory) Imports: [`Imports.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md) (specification for `imports` is not stabilized yet)
     /// * (mandatory) Conditional translation: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
     /// * (optional)  Stripping: spec not yet available.
-    pub fn new_spec_compliant() -> Self {
+    pub fn new_spec_compliant(base: impl AsRef<Path>) -> Self {
         Self {
             options: CompileOptions {
                 use_imports: true,
@@ -267,7 +254,7 @@ impl Wesl {
                 features: Default::default(),
             },
             use_sourcemap: true,
-            resolver: Box::new(FileResolver::new("")),
+            resolver: StandardResolver::new(base),
             mangler: Box::new(EscapeMangler),
         }
     }
@@ -283,7 +270,7 @@ impl Wesl {
     ///
     /// Experimental extensions: `generics`
     /// Non-standard extensions: `@const`
-    pub fn new_experimental() -> Self {
+    pub fn new_experimental(base: impl AsRef<Path>) -> Self {
         Self {
             options: CompileOptions {
                 use_imports: true,
@@ -296,11 +283,49 @@ impl Wesl {
                 features: Default::default(),
             },
             use_sourcemap: true,
-            resolver: Box::new(FileResolver::new("")),
+            resolver: StandardResolver::new(base),
             mangler: Box::new(EscapeMangler),
         }
     }
 
+    /// Add a package dependency.
+    ///
+    /// Learn more about packages in [`PkgBuilder`].
+    pub fn add_package(mut self, pkg: &'static dyn PkgModule) -> Self {
+        self.resolver.add_package(pkg);
+        self
+    }
+
+    /// Add several package dependencies.
+    ///
+    /// Learn more about packages in [`PkgBuilder`].
+    pub fn add_packages(mut self, pkgs: impl IntoIterator<Item = &'static dyn PkgModule>) -> Self {
+        for pkg in pkgs {
+            self.resolver.add_package(pkg);
+        }
+        self
+    }
+
+    /// Add a custom importable in-memory file.
+    pub fn add_virtual_module(self, path: impl AsRef<Path>, source: String) -> Self {
+        let mut resolver = VirtualResolver::new();
+        resolver.add_module("", source);
+        self.mount_resolver(path, resolver)
+    }
+
+    /// Mount a custom resolver to customize how to resolve the imports that match the
+    /// `path` prefix.
+    pub fn mount_resolver(
+        mut self,
+        path: impl AsRef<Path>,
+        resolver: impl Resolver + 'static,
+    ) -> Self {
+        self.resolver.mount_resolver(path, resolver);
+        self
+    }
+}
+
+impl Wesl<NoResolver> {
     /// Get WESL compiler with all extensions disabled.
     ///
     /// You *must* set a [`Mangler`] and a [`Resolver`] manually to use this compiler, see
@@ -322,11 +347,14 @@ impl Wesl {
                 features: Default::default(),
             },
             use_sourcemap: false,
-            resolver: Box::new(NoResolver),
+            resolver: NoResolver,
             mangler: Box::new(NoMangler),
         }
     }
+}
 
+impl<R: Resolver> Wesl<R> {
+    /// Set all compilation options.
     pub fn set_options(mut self, options: CompileOptions) -> Self {
         self.options = options;
         self
@@ -356,17 +384,30 @@ impl Wesl {
         self
     }
 
-    /// Set a custom [`Resolver`].
+    /// Set a custom [`Resolver`] (customize how import paths are translated to wesl modules).
     ///
-    /// The default resolver is a [`FileResolver`] rooted in the current directory.
+    ///```rust
+    /// # use wesl::{FileResolver, Router, VirtualResolver, Wesl};
+    /// // in this example, `import runtime::constants::PI` is in a custom module mounted at runtime.
+    /// let mut resolver = VirtualResolver::new();
+    /// resolver.add_module("constants", "const PI = 3.1415; const TAU = PI * 2.0;");
+    /// let mut router = Router::new();
+    /// router.mount_fallback_resolver(FileResolver::new("src/shaders"));
+    /// router.mount_resolver("runtime", resolver);
+    /// let compiler = Wesl::new_spec_compliant("").set_custom_resolver(router);
+    /// ```
     ///
     /// # WESL Reference
     /// Both [`FileResolver`] and [`VirtualResolver`] are spec-compliant.
     /// Custom resolvers *must* conform to the constraints described in [`Resolver`].
     /// Spec: not yet available.
-    pub fn set_resolver(mut self, resolver: impl Resolver + 'static) -> Self {
-        self.resolver = Box::new(resolver);
-        self
+    pub fn set_custom_resolver(self, resolver: impl Resolver + 'static) -> Wesl<Box<dyn Resolver>> {
+        Wesl {
+            options: self.options,
+            use_sourcemap: self.use_sourcemap,
+            mangler: self.mangler,
+            resolver: Box::new(resolver),
+        }
     }
 
     /// Enable source-mapping (experimental).
@@ -655,7 +696,7 @@ impl CompileResult {
     }
 }
 
-impl Wesl {
+impl<R: Resolver> Wesl<R> {
     /// Compile a WESL program from a root file.
     ///
     /// The result of `compile` is not necessarily a valid WGSL string. See (TODO) to
@@ -759,12 +800,6 @@ impl Wesl {
                     .with_ctx(&ctx),
             )
         })
-    }
-}
-
-impl Default for Wesl {
-    fn default() -> Self {
-        Self::new_spec_compliant()
     }
 }
 

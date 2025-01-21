@@ -351,7 +351,7 @@ fn run_compile(
             let name = path.file_name().ok_or(CliError::FileNotFound)?;
             let resolver = FileResolver::new(base);
 
-            let res = compiler.set_resolver(resolver).compile(name)?;
+            let res = compiler.set_custom_resolver(resolver).compile(name)?;
             Ok(res)
         }
         FileOrSource::Source(source) => {
@@ -363,7 +363,7 @@ fn run_compile(
             router.mount_resolver(name, resolver);
             router.mount_fallback_resolver(FileResolver::new(base));
 
-            let res = compiler.set_resolver(router).compile(name)?;
+            let res = compiler.set_custom_resolver(router).compile(name)?;
             Ok(res)
         }
     }

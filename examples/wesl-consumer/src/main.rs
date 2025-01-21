@@ -10,7 +10,7 @@ fn main() {
     file_resolver.set_extension("wgsl");
     pkg_resolver.mount_fallback_resolver(file_resolver);
     let source2 = wesl::Wesl::new_spec_compliant()
-        .set_resolver(pkg_resolver)
+        .set_custom_resolver(pkg_resolver)
         .compile("main.wgsl")
         .inspect_err(|e| {
             eprintln!("{e}");
