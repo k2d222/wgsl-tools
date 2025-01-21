@@ -1,10 +1,8 @@
-use wgsl_parse::{
-    syntax::{
-        Expression, ExpressionNode, GlobalDeclaration, Ident, TranslationUnit, TypeExpression,
-    },
-    visit::Visit,
+use wgsl_parse::syntax::{
+    Expression, ExpressionNode, GlobalDeclaration, Ident, TranslationUnit, TypeExpression,
 };
 
+use crate::visit::Visit;
 use crate::{Diagnostic, Error};
 
 #[derive(Clone, Debug, thiserror::Error)]

@@ -91,7 +91,6 @@ pub mod syntax;
 mod parser_support;
 mod syntax_display;
 mod syntax_impl;
-pub mod visit;
 
 pub use error::Error;
 pub use lexer::Lexer;

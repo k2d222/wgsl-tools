@@ -112,6 +112,7 @@ mod sourcemap;
 mod strip;
 mod syntax_util;
 mod validate;
+mod visit;
 
 #[cfg(feature = "condcomp")]
 pub use condcomp::CondCompError;

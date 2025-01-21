@@ -2,9 +2,10 @@ mod mangle;
 
 use itertools::Itertools;
 use thiserror::Error;
-use wgsl_parse::{syntax::*, visit::Visit, Decorated};
+use wgsl_parse::{syntax::*, Decorated};
 
 use crate::attributes::stat_query_attrs;
+use crate::visit::Visit;
 
 #[derive(Clone, Debug, Error)]
 pub enum GenericsError {

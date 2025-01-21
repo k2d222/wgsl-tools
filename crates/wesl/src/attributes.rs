@@ -1,5 +1,5 @@
+use wesl_macros::query_mut;
 use wgsl_parse::syntax::*;
-use wgsl_parse_macros::query_mut;
 
 pub(crate) fn query_attrs(wesl: &mut TranslationUnit) -> impl Iterator<Item = &mut Vec<Attribute>> {
     query_mut!(wesl.{

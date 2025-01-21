@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
-use wgsl_parse::{
-    syntax::{Ident, TranslationUnit, TypeExpression},
-    visit::Visit,
-};
+use wgsl_parse::syntax::{Ident, TranslationUnit, TypeExpression};
+
+use crate::visit::Visit;
 
 /// removes unused declarations.
 pub fn strip_except(wgsl: &mut TranslationUnit, keep: &[String]) {

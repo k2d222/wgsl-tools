@@ -1,11 +1,11 @@
 [workspace]
-members = ["crates/wgsl-parse", "crates/wgsl-parse-macros", "crates/wesl", "crates/wesl-test", "examples/wesl-random", "examples/wesl-consumer"]
+members = ["crates/wgsl-parse", "crates/wesl-macros", "crates/wesl", "crates/wesl-test", "examples/wesl-random", "examples/wesl-consumer"]
 
 [workspace.package]
 version = "0.0.2"
 edition = "2021"
 authors = ["Mathis Brossier <mathis.brossier@gmail.com>"]
-repository = "https://github.com/k2d222/wgsl-tools"
+repository = "https://github.com/wgsl-tooling-wg/wesl-rs"
 license = "MIT"
 
 [package]

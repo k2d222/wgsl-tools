@@ -4,8 +4,9 @@ use std::{
     iter::{once, Iterator},
 };
 
-use wgsl_parse::{syntax::*, visit::Visit};
-use wgsl_parse_macros::query_mut;
+use crate::visit::Visit;
+use wesl_macros::query_mut;
+use wgsl_parse::syntax::*;
 
 /// was that not in the std at some point???
 type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;

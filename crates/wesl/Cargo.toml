@@ -18,7 +18,7 @@ serde = { version = "1.0.215", features = ["derive"], optional = true }
 sourcemap = "9.0.0"
 thiserror = "1.0.63"
 wgsl-parse = { path = "../wgsl-parse", features = ["imports", "condcomp"] }
-wgsl-parse-macros = { version = "0.0.2", path = "../wgsl-parse-macros" }
+wesl-macros = { version = "0.0.2", path = "../wesl-macros" }
 proc-macro2 = { version = "1.0.93", optional = true }
 quote = { version = "1.0.38", optional = true }
 

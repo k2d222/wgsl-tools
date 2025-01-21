@@ -18,11 +18,12 @@ lexical = { version = "6.1.1", features = ["format", "power-of-two"] }
 logos = "0.14.1"
 serde = { version = "1.0.215", optional = true, features = ["derive", "rc"] }
 thiserror = "1.0.63"
-wgsl-parse-macros = { path = "../wgsl-parse-macros" }
+wesl-macros = { path = "../wesl-macros" }
 
 [build-dependencies]
-# lalrpop = { version = "0.20.2", default-features = false }
-lalrpop = { git = "https://github.com/k2d222/lalrpop.git", branch = "more-cfg-attributes" }
+# we are waiting for https://github.com/lalrpop/lalrpop/pull/959 to be released on crates.io.
+# lalrpop = { version = "0.22.0", default-features = false }
+lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", branch = "master" }
 
 [features]
 default = ["serde", "imports", "condcomp", "generics"]
