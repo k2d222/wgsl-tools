@@ -203,6 +203,10 @@ impl Resolver for FileResolver {
         }
 
         let source = fs::read_to_string(&path)
+            .or_else(|_| {
+                path.set_extension("wgsl");
+                fs::read_to_string(&path)
+            })
             .map_err(|_| ResolveError::FileNotFound(path, "physical file".to_string()))?;
 
         Ok(source.into())
