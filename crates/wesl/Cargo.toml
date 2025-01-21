@@ -17,8 +17,8 @@ num-traits = "0.2.19"
 serde = { version = "1.0.215", features = ["derive"], optional = true }
 sourcemap = "9.0.0"
 thiserror = "1.0.63"
-wgsl-parse = { path = "../wgsl-parse", features = ["imports", "condcomp"] }
-wesl-macros = { version = "0.0.2", path = "../wesl-macros" }
+wgsl-parse = { workspace = true, features = ["imports", "condcomp"] }
+wesl-macros = { workspace = true }
 proc-macro2 = { version = "1.0.93", optional = true }
 quote = { version = "1.0.38", optional = true }
 

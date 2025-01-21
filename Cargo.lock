@@ -869,12 +869,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "paste"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
 name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1343,6 +1337,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wesl-cli"
+version = "0.0.2"
+dependencies = [
+ "clap",
+ "naga",
+ "thiserror",
+ "wesl",
+ "wgsl-parse",
+]
+
+[[package]]
 name = "wesl-consumer"
 version = "0.0.2"
 dependencies = [
@@ -1355,7 +1360,6 @@ name = "wesl-macros"
 version = "0.0.2"
 dependencies = [
  "itertools 0.13.0",
- "paste",
  "proc-macro2",
  "quote",
  "syn",
@@ -1382,7 +1386,6 @@ dependencies = [
  "logos",
  "serde",
  "thiserror",
- "wesl-macros",
 ]
 
 [[package]]
@@ -1391,17 +1394,6 @@ version = "0.0.2"
 dependencies = [
  "serde",
  "serde_json",
- "wesl",
- "wgsl-parse",
-]
-
-[[package]]
-name = "wgsl-tools"
-version = "0.0.2"
-dependencies = [
- "clap",
- "naga",
- "thiserror",
  "wesl",
  "wgsl-parse",
 ]

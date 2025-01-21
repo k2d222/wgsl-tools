@@ -18,7 +18,6 @@ lexical = { version = "6.1.1", features = ["format", "power-of-two"] }
 logos = "0.14.1"
 serde = { version = "1.0.215", optional = true, features = ["derive", "rc"] }
 thiserror = "1.0.63"
-wesl-macros = { path = "../wesl-macros" }
 
 [build-dependencies]
 # we are waiting for https://github.com/lalrpop/lalrpop/pull/959 to be released on crates.io.
