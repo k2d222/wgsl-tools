@@ -452,7 +452,7 @@ impl_visit! { Function => TypeExpression,
         return_type.[],
         body.{
             attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
-            statements.[].(x => visit::<Statement, ExpressionNode>(x)).(x => visit::<Expression, TypeExpression>(x)),
+            statements.[].(x => visit::<Statement, TypeExpression>(x)),
         }
     }
 }
