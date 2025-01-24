@@ -6,12 +6,13 @@ use std::{
     rc::Rc,
 };
 
+use itertools::Itertools;
 use wgsl_parse::syntax::{self, Ident, TranslationUnit, TypeExpression};
 
 use crate::{visit::Visit, Mangler, ResolveError, Resolver, Resource};
 
 type Imports = HashMap<Ident, Resource>;
-type Idents = HashMap<Resource, HashSet<Ident>>;
+type Decls = HashMap<Resource, HashSet<usize>>;
 type Modules = HashMap<Resource, Rc<RefCell<Module>>>;
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -31,7 +32,7 @@ type E = ImportError;
 struct Module {
     source: TranslationUnit,
     resource: Resource,
-    idents: HashSet<Ident>,
+    idents: HashMap<Ident, usize>,  // lookup (ident, decl_index)
     treated_idents: HashSet<Ident>, // used idents that have already been usage-analyzed
     imports: Imports,
 }
@@ -61,8 +62,8 @@ impl Module {
         let idents = source
             .global_declarations
             .iter()
-            .filter_map(|decl| decl.ident())
-            .cloned()
+            .enumerate()
+            .filter_map(|(i, decl)| decl.ident().map(|id| (id.clone(), i)))
             .collect();
         let imports = imported_resources(&source.imports, &resource);
         Self {
@@ -76,7 +77,6 @@ impl Module {
 }
 
 // XXX: it's quite messy.
-// TODO: current algorithm doesn't allow cyclic module dependencies (even if there is no cycles in imported items)
 pub fn resolve(
     root: TranslationUnit,
     resource: &Resource,
@@ -85,6 +85,7 @@ pub fn resolve(
 ) -> Result<Resolutions, E> {
     fn load_module(
         resource: &Resource,
+        local_decls: &mut HashSet<usize>,
         resolutions: &mut Modules,
         resolver: &impl Resolver,
     ) -> Result<Rc<RefCell<Module>>, E> {
@@ -93,40 +94,39 @@ pub fn resolve(
         } else {
             let source = resolver.resolve_module(resource)?;
             let module = Module::new(source, resource.clone());
-            // let const_asserts =
-            //     module
-            //         .source
-            //         .global_declarations
-            //         .iter()
-            //         .filter_map(|decl| match decl {
-            //             syntax::GlobalDeclaration::ConstAssert(const_assert) => Some(const_assert),
-            //             _ => None,
-            //         }).flat_map(|ca| Visit::<TypeExpression>::visit(ca))
+
+            // const_asserts of used modules must be included.
+            // https://github.com/wgsl-tooling-wg/wesl-spec/issues/66
+            let const_asserts = module
+                .source
+                .global_declarations
+                .iter()
+                .enumerate()
+                .filter_map(|(i, decl)| decl.is_const_assert().then_some(i));
+            local_decls.extend(const_asserts);
+
             let module = Rc::new(RefCell::new(module));
             resolutions.insert(resource.clone(), module.clone());
+
             Ok(module)
         }
     }
 
-    fn resolve_ident(
+    fn resolve_decl(
         module: &mut Module,
-        ident: &Ident,
-        local_idents: &mut HashSet<Ident>,
-        extern_idents: &mut Idents,
-        resolver: &impl Resolver,
+        decl: usize,
+        local_decls: &mut HashSet<usize>,
+        extern_decls: &mut Decls,
         resolutions: &mut Modules,
+        resolver: &impl Resolver,
     ) -> Result<(), E> {
-        if !module.treated_idents.insert(ident.clone()) {
-            // was already treated
-            return Ok(());
-        }
+        let decl = module.source.global_declarations.get_mut(decl).unwrap();
 
-        let decl = module
-            .source
-            .global_declarations
-            .iter_mut()
-            .find(|decl| decl.ident().is_some_and(|id| id == ident))
-            .ok_or_else(|| E::MissingDecl(module.resource.clone(), ident.name().to_string()))?;
+        if let Some(id) = decl.ident() {
+            if !module.treated_idents.insert(id.clone()) {
+                return Ok(());
+            }
+        }
 
         for ty in Visit::<TypeExpression>::visit_mut(decl) {
             if module.treated_idents.contains(&ty.ident) {
@@ -139,16 +139,16 @@ pub fn resolve(
             } else if let Some(resource) = module.imports.get(&ty.ident) {
                 resource.clone()
             } else {
-                if module.idents.contains(&ty.ident) {
-                    local_idents.insert(ty.ident.clone());
+                if let Some(decl) = module.idents.get(&ty.ident) {
+                    local_decls.insert(*decl);
                 }
                 continue;
             };
 
-            // if the import path point at the current module
+            // if the import path point at the current module, it must be a local decl
             if ext_resource == module.resource {
-                if module.idents.contains(&ty.ident) {
-                    local_idents.insert(ty.ident.clone());
+                if let Some(decl) = module.idents.get(&ty.ident) {
+                    local_decls.insert(*decl);
                     continue;
                 } else {
                     return Err(E::MissingDecl(ext_resource, ty.ident.name().to_string()));
@@ -156,7 +156,7 @@ pub fn resolve(
             }
 
             // get or load the external module
-            let ext_mod = load_module(&ext_resource, resolutions, resolver)?;
+            let ext_mod = load_module(&ext_resource, &mut HashSet::new(), resolutions, resolver)?;
             let mut ext_mod = ext_mod
                 .try_borrow_mut()
                 .map_err(|_| E::CircularDependency(module.resource.clone()))?;
@@ -165,83 +165,103 @@ pub fn resolve(
             // get the ident of the external declaration pointed to by the type
             let ext_id = ext_mod
                 .idents
-                .iter()
+                .keys()
                 .find(|id| id.name().as_str() == ty.ident.name().as_str())
                 .cloned();
 
             if let Some(ext_id) = ext_id {
                 if !ext_mod.treated_idents.contains(&ext_id) {
-                    extern_idents
+                    let decl = *ext_mod
+                        .idents
+                        .get(&ext_id)
+                        .ok_or_else(|| E::MissingDecl(ext_resource.clone(), ext_id.to_string()))?;
+                    extern_decls
                         .entry(ext_resource)
                         .or_insert(Default::default())
-                        .insert(ext_id.clone());
+                        .insert(decl);
                 }
 
                 ty.path = None;
                 ty.ident = ext_id;
             } else {
-                return Err(E::MissingDecl(ext_resource, ty.ident.name().to_string()));
+                return Err(E::MissingDecl(ext_resource, ty.ident.to_string()));
             }
         }
 
         Ok(())
     }
 
-    fn resolve_idents(
+    fn resolve_decls(
         resource: &Resource,
-        idents: &mut HashSet<Ident>,
-        extern_idents: &mut Idents,
+        local_decls: &mut HashSet<usize>,
+        extern_decls: &mut Decls,
         resolver: &impl Resolver,
         resolutions: &mut Modules,
     ) -> Result<(), E> {
-        let module = load_module(&resource, resolutions, resolver)?;
+        let module = load_module(&resource, &mut HashSet::new(), resolutions, resolver)?;
         let mut module = module
             .try_borrow_mut()
             .map_err(|_| E::CircularDependency(resource.clone()))?;
         let module = module.deref_mut();
 
-        let mut next_idents = HashSet::new();
+        let mut next_decls = HashSet::new();
 
-        while !idents.is_empty() {
-            for ident in idents.iter() {
-                resolve_ident(
+        while !local_decls.is_empty() {
+            for decl in local_decls.iter() {
+                resolve_decl(
                     module,
-                    ident,
-                    &mut next_idents,
-                    extern_idents,
-                    resolver,
+                    *decl,
+                    &mut next_decls,
+                    extern_decls,
                     resolutions,
+                    resolver,
                 )?;
             }
-            std::mem::swap(idents, &mut next_idents);
-            next_idents.clear();
+
+            std::mem::swap(local_decls, &mut next_decls);
+            next_decls.clear();
         }
 
         Ok(())
     }
 
     let mut resolutions = Modules::new();
-    // let module = load_module(&resource, &mut resolutions, resolver)?;
     let module = Module::new(root, resource.clone());
+
+    let mut keep_decls: HashSet<usize> = keep
+        .iter()
+        .map(|id| {
+            module
+                .idents
+                .get(id)
+                .copied()
+                .ok_or_else(|| E::MissingDecl(resource.clone(), id.to_string()))
+        })
+        .try_collect()?;
+
+    // const_asserts of used modules must be included.
+    // https://github.com/wgsl-tooling-wg/wesl-spec/issues/66
+    let const_asserts = module
+        .source
+        .global_declarations
+        .iter()
+        .enumerate()
+        .filter_map(|(i, decl)| decl.is_const_assert().then_some(i));
+    keep_decls.extend(const_asserts);
+
+    let mut decls = Decls::new();
+    let mut next_decls = Decls::new();
+    decls.insert(resource.clone(), keep_decls);
+
     let module = Rc::new(RefCell::new(module));
     resolutions.insert(resource.clone(), module.clone());
 
-    let mut idents = Idents::new();
-    idents.insert(resource.clone(), keep);
-    let mut next_idents = Idents::new();
-
-    while !idents.is_empty() {
-        for (resource, idents) in &mut idents {
-            resolve_idents(
-                resource,
-                idents,
-                &mut next_idents,
-                resolver,
-                &mut resolutions,
-            )?;
+    while !decls.is_empty() {
+        for (resource, decls) in &mut decls {
+            resolve_decls(resource, decls, &mut next_decls, resolver, &mut resolutions)?;
         }
-        std::mem::swap(&mut idents, &mut next_idents);
-        next_idents.clear();
+        std::mem::swap(&mut decls, &mut next_decls);
+        next_decls.clear();
     }
 
     Ok(Resolutions(resolutions, resource.clone()))
