@@ -315,13 +315,12 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
     for decl in &wesl.global_declarations {
         let decl_name = decl.ident().map(|ident| ident.name().to_string());
         for ty in Visit::<TypeExpression>::visit(decl) {
-            if ty.ident.use_count() == 1
-                && !BUILTIN_NAMES.contains(&ty.ident.name().as_str())
-                && !wesl
-                    .global_declarations
-                    .iter()
-                    .filter_map(|decl| decl.ident())
-                    .any(|ident| ident.name().as_str() == ty.ident.name().as_str())
+            if ty.ident.use_count() == 1 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str())
+            // && !wesl
+            //     .global_declarations
+            //     .iter()
+            //     .filter_map(|decl| decl.ident())
+            //     .any(|ident| ident.name().as_str() == ty.ident.name().as_str())
             {
                 let mut err = Diagnostic::from(E::UndefinedSymbol(ty.ident.clone()));
                 err.declaration = decl_name;

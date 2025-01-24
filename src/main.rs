@@ -325,8 +325,8 @@ enum CliError {
     #[error("{0}")]
     WeslDiagnostic(#[from] wesl::Diagnostic<wesl::Error>),
     #[cfg(feature = "naga")]
-    #[error("naga error: {0}")]
-    Naga(#[from] naga::front::wgsl::ParseError),
+    #[error("naga error: {}", .0.emit_to_string(&.1))]
+    Naga(naga::front::wgsl::ParseError, String),
 }
 
 enum FileOrSource {
@@ -484,7 +484,8 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 CheckKind::Wgsl => {
                     #[cfg(feature = "naga")]
                     if args.naga {
-                        naga::front::wgsl::parse_str(&source)?;
+                        naga::front::wgsl::parse_str(&source)
+                            .map_err(|e| CliError::Naga(e, source.clone()))?;
                     }
                     WgslParser::recognize_str(&source)
                         .map_err(|e| Diagnostic::from(e).with_source(source))?;
@@ -497,7 +498,8 @@ fn run(cli: Cli) -> Result<(), CliError> {
                     let wgsl_source = wesl.to_string();
                     #[cfg(feature = "naga")]
                     if args.naga {
-                        naga::front::wgsl::parse_str(&wgsl_source)?;
+                        naga::front::wgsl::parse_str(&wgsl_source)
+                            .map_err(|e| CliError::Naga(e, wgsl_source))?;
                     }
                 }
             }
@@ -512,7 +514,12 @@ fn run(cli: Cli) -> Result<(), CliError> {
                         sourcemap: None,
                     })
                 })?;
-            println!("{}", comp.syntax);
+            #[cfg(feature = "naga")]
+            if !args.options.no_validate {
+                let source = comp.to_string();
+                naga::front::wgsl::parse_str(&source).map_err(|e| CliError::Naga(e, source))?;
+            }
+            println!("{}", comp);
         }
         Command::Eval(args) => {
             let comp = file_or_source(args.file)
