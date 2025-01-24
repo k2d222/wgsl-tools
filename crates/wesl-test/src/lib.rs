@@ -39,7 +39,7 @@ fn webgpu_samples() {
 
 #[derive(PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
-enum GptTestSyntaxKind {
+enum SyntaxKind {
     Declaration,
     Statement,
     Expression,
@@ -48,9 +48,9 @@ enum GptTestSyntaxKind {
 #[derive(PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[serde(tag = "kind")]
-enum GptTestKind {
+enum TestKind {
     Syntax {
-        syntax: GptTestSyntaxKind,
+        syntax: SyntaxKind,
     },
     Eval {
         eval: String,
@@ -59,40 +59,40 @@ enum GptTestKind {
     Context,
 }
 
-impl Display for GptTestKind {
+impl Display for TestKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GptTestKind::Syntax { .. } => f.write_str("Syntax"),
-            GptTestKind::Eval { .. } => f.write_str("Eval"),
-            GptTestKind::Context => f.write_str("Context"),
+            TestKind::Syntax { .. } => f.write_str("Syntax"),
+            TestKind::Eval { .. } => f.write_str("Eval"),
+            TestKind::Context => f.write_str("Context"),
         }
     }
 }
 
 #[derive(Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-enum GptTestExpect {
+enum Expectation {
     Pass,
     Fail,
 }
 
-impl Display for GptTestExpect {
+impl Display for Expectation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GptTestExpect::Pass => f.write_str("Pass"),
-            GptTestExpect::Fail => f.write_str("Fail"),
+            Expectation::Pass => f.write_str("Pass"),
+            Expectation::Fail => f.write_str("Fail"),
         }
     }
 }
 
 #[derive(Deserialize)]
-struct GptTest {
+struct Test {
     name: String,
     desc: String,
     #[serde(flatten)]
-    kind: GptTestKind,
+    kind: TestKind,
     code: String,
-    expect: GptTestExpect,
+    expect: Expectation,
     note: Option<String>,
 }
 
@@ -119,28 +119,6 @@ fn test_eval(
         None => Ok((false, eval_inst)),
     }
 }
-
-// #[test]
-// fn gpt_test() {
-//     let dir = std::fs::read_dir("gpt-tests").expect("missing directory gpt-tests");
-//     let mut total_fails = 0;
-//     let mut total_count = 0;
-
-//     for entry in dir {
-//         let entry = entry.expect("error reading entry");
-//         let path = entry.path();
-//         if path.extension().is_some_and(|path| path == "json") {
-//             let (fails, count) = json_test(&path);
-//             println!("{fails}/{count} failures");
-//             total_fails += fails;
-//             total_count += count;
-//         }
-//     }
-
-//     let total_pass = total_count - total_fails;
-//     println!("SUMMARY: {total_pass}/{total_count} Pass, {total_fails}/{total_count} Fails");
-//     assert!(total_fails == 0);
-// }
 
 #[test]
 fn spec_test() {
@@ -171,12 +149,12 @@ fn json_test(path: &Path) -> (u32, u32) {
 
     let file = File::open(path).expect("failed to read file");
     let reader = BufReader::new(file);
-    let json: Vec<GptTest> = serde_json::from_reader(reader)
+    let json: Vec<Test> = serde_json::from_reader(reader)
         .inspect_err(|err| eprintln!("{err}"))
         .expect("invalid json test file");
 
     for test in &json {
-        if test.kind == GptTestKind::Context {
+        if test.kind == TestKind::Context {
             todos += 1;
             continue;
         }
@@ -186,18 +164,16 @@ fn json_test(path: &Path) -> (u32, u32) {
         );
 
         match &test.kind {
-            GptTestKind::Syntax { syntax } => {
+            TestKind::Syntax { syntax } => {
                 let res = match syntax {
-                    GptTestSyntaxKind::Declaration => {
-                        test.code.parse::<TranslationUnit>().map(|_| ())
-                    }
-                    GptTestSyntaxKind::Statement => test.code.parse::<Statement>().map(|_| ()),
-                    GptTestSyntaxKind::Expression => test.code.parse::<Expression>().map(|_| ()),
+                    SyntaxKind::Declaration => test.code.parse::<TranslationUnit>().map(|_| ()),
+                    SyntaxKind::Statement => test.code.parse::<Statement>().map(|_| ()),
+                    SyntaxKind::Expression => test.code.parse::<Expression>().map(|_| ()),
                 };
                 let pass = res
                     .is_ok()
-                    .then_some(GptTestExpect::Pass)
-                    .unwrap_or(GptTestExpect::Fail);
+                    .then_some(Expectation::Pass)
+                    .unwrap_or(Expectation::Fail);
                 println!("{pass}");
                 if pass != test.expect {
                     println!(
@@ -213,11 +189,11 @@ fn json_test(path: &Path) -> (u32, u32) {
                     fails += 1;
                 }
             }
-            GptTestKind::Eval { eval, result } => {
+            TestKind::Eval { eval, result } => {
                 let res = test_eval(&eval, &result, &test.code);
                 let pass = matches!(res, Ok((true, _)))
-                    .then_some(GptTestExpect::Pass)
-                    .unwrap_or(GptTestExpect::Fail);
+                    .then_some(Expectation::Pass)
+                    .unwrap_or(Expectation::Fail);
                 println!("{pass}");
                 if pass != test.expect {
                     println!(
@@ -235,7 +211,7 @@ fn json_test(path: &Path) -> (u32, u32) {
                     fails += 1;
                 }
             }
-            GptTestKind::Context => {
+            TestKind::Context => {
                 println!("TODO");
             }
         }
