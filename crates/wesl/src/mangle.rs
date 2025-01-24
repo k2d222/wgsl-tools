@@ -113,7 +113,7 @@ impl Mangler for EscapeMangler {
         let item = path_parts.pop()?;
         let path = PathBuf::from_iter(path_parts);
 
-        let resource = Resource::from(path);
+        let resource = Resource::new(path);
         Some((resource, item))
     }
 }
@@ -128,9 +128,6 @@ pub struct NoMangler;
 impl Mangler for NoMangler {
     fn mangle(&self, _resource: &Resource, item: &str) -> String {
         item.to_string()
-    }
-    fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
-        Some((Resource::from(PathBuf::new()), mangled.to_string()))
     }
 }
 
@@ -212,12 +209,15 @@ impl UnicodeMangler {
 impl Mangler for UnicodeMangler {
     fn mangle(&self, resource: &Resource, item: &str) -> String {
         let sep = Self::SEP;
-        let path = resource.path().with_extension("");
+        let path = resource.path();
         let path = path.iter().map(|p| p.to_string_lossy()).format(sep);
         format!("{path}{sep}{item}")
     }
     fn unmangle(&self, mangled: &str) -> Option<(Resource, String)> {
-        Some((Resource::from(PathBuf::new()), mangled.to_string()))
+        let mut path = PathBuf::from_iter(mangled.split(Self::SEP));
+        let name = path.file_name().unwrap().to_str().unwrap().to_string();
+        path.pop();
+        Some((Resource::new(path), name))
     }
     fn mangle_types(&self, item: &str, _variant: u32, types: &[TypeExpression]) -> String {
         // these are NOT chevrons and comma!

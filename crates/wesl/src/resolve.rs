@@ -1,7 +1,7 @@
 use crate::{Diagnostic, Error, SyntaxUtil};
 
 use itertools::Itertools;
-use wgsl_parse::syntax::TranslationUnit;
+use wgsl_parse::syntax::{Ident, TranslationUnit};
 
 use std::{
     borrow::Cow,
@@ -25,20 +25,48 @@ pub enum ResolveError {
 /// A resource uniquely identify an importable module (file).
 ///
 /// Each module must be associated with a unique `Resource`, and a `Resource` must
-/// identify a unique Module.
+/// identify a unique module.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Resource {
     path: PathBuf,
 }
 
+/// An importable uniquely identify a declaration.
+///
+/// Each declaration must be associated with a unique `Importable`, and an `Importable` must
+/// identify a unique declaration.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Importable {
+    pub resource: Resource,
+    pub ident: Ident,
+}
+
 impl Resource {
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+        }
+    }
     pub fn path(&self) -> &Path {
         &self.path
     }
-}
-
-impl From<PathBuf> for Resource {
-    fn from(path: PathBuf) -> Self {
+    pub fn push(&mut self, item: &str) {
+        self.path.push(item);
+    }
+    pub fn parent(&self) -> Option<Self> {
+        self.path.parent().map(|p| Self {
+            path: p.to_path_buf(),
+        })
+    }
+    pub fn first(&self) -> Option<&str> {
+        self.path.iter().next().map(|p| p.to_str().unwrap())
+    }
+    pub fn last(&self) -> Option<&str> {
+        self.path.iter().last().map(|p| p.to_str().unwrap())
+    }
+    pub fn join(&self, suffix: impl AsRef<Path>) -> Self {
+        let mut path = self.path.clone();
+        path.push(suffix);
         Self { path }
     }
 }
@@ -198,14 +226,19 @@ impl Resolver for FileResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         let mut path = self.base.to_path_buf();
         path.extend(resource.path());
-        if path.extension().is_none() {
+        let has_extension = path.extension().is_some();
+        if !has_extension {
             path.set_extension(self.extension);
         }
 
         let source = fs::read_to_string(&path)
-            .or_else(|_| {
-                path.set_extension("wgsl");
-                fs::read_to_string(&path)
+            .or_else(|e| {
+                if !has_extension {
+                    path.set_extension("wgsl");
+                    fs::read_to_string(&path)
+                } else {
+                    Err(e)
+                }
             })
             .map_err(|_| ResolveError::FileNotFound(path, "physical file".to_string()))?;
 
@@ -361,7 +394,7 @@ impl Resolver for Router {
 
         // SAFETY: we just checked that resource.path() starts with mount_path
         let suffix = resource.path().strip_prefix(mount_path).unwrap();
-        let resource = Resource::from(suffix.to_path_buf());
+        let resource = Resource::new(suffix.to_path_buf());
         resolver.resolve_source(&resource)
     }
 }
@@ -465,7 +498,7 @@ impl Resolver for StandardResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
         if resource.path().has_root() {
             let path = resource.path().iter().skip(1).collect::<PathBuf>();
-            self.pkg.resolve_source(&Resource::from(path))
+            self.pkg.resolve_source(&Resource::new(path))
         } else {
             self.router.resolve_source(resource)
         }

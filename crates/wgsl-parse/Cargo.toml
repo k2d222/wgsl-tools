@@ -31,9 +31,9 @@ default = ["serde", "imports", "condcomp", "generics"]
 # reference: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md#appendix-updated-grammar
 attributes = []
 
-# # allow templates on function declarations
-# # reference: none yet
-# templates = []
+# allow templates on function declarations
+# reference: none yet
+templates = []
 
 # reference: none yet
 generics = ["attributes"]
@@ -45,4 +45,3 @@ condcomp = ["attributes"]
 # import declarations.
 # reference: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md#reference-level-explanation
 imports = []
-

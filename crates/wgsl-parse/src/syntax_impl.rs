@@ -22,6 +22,17 @@ impl GlobalDeclaration {
     }
 }
 
+impl TypeExpression {
+    pub fn new(ident: Ident) -> Self {
+        Self {
+            #[cfg(feature = "imports")]
+            path: None,
+            ident,
+            template_args: None,
+        }
+    }
+}
+
 impl CompoundStatement {
     pub fn remove_voids(&mut self) {
         self.statements.retain_mut(|stat| match stat.node_mut() {
@@ -73,6 +84,8 @@ impl AccessMode {
 impl From<Ident> for TypeExpression {
     fn from(name: Ident) -> Self {
         Self {
+            #[cfg(feature = "imports")]
+            path: None,
             ident: name,
             template_args: None,
         }

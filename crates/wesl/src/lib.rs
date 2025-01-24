@@ -672,10 +672,7 @@ impl CompileResult {
         // TODO: this is not the right way.
         // BUG: this is no longer working because of Ident PartialEq impl
         let expr = syntax::Expression::FunctionCall(syntax::FunctionCall {
-            ty: syntax::TypeExpression {
-                ident: Ident::new(entrypoint.to_string()),
-                template_args: None,
-            },
+            ty: syntax::TypeExpression::new(Ident::new(entrypoint.to_string())),
             arguments: Vec::new(),
         });
 
@@ -705,7 +702,7 @@ impl<R: Resolver> Wesl<R> {
     /// # WESL Reference
     /// Spec: not available yet.
     pub fn compile(&self, entrypoint: impl AsRef<Path>) -> Result<CompileResult, Error> {
-        let entrypoint = Resource::from(entrypoint.as_ref().to_path_buf());
+        let entrypoint = Resource::new(entrypoint.as_ref().to_path_buf());
 
         if self.use_sourcemap {
             let (syntax, sourcemap) =
@@ -804,11 +801,11 @@ impl<R: Resolver> Wesl<R> {
 }
 
 fn compile_impl(
-    entrypoint: &Resource,
+    root_module: &Resource,
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
-    main_names: &mut Vec<String>,
+    root_decls: &mut Vec<String>,
 ) -> Result<TranslationUnit, Error> {
     let resolver = Box::new(resolver);
 
@@ -822,14 +819,11 @@ fn compile_impl(
         resolver
     };
 
-    let source = resolver.resolve_source(entrypoint)?;
-    let wesl = resolver.source_to_module(&source, entrypoint)?;
+    let source = resolver.resolve_source(root_module)?;
+    let wesl = resolver.source_to_module(&source, root_module)?;
 
-    // hack, entry_names is passed by &mut just to return it from the function even in error case.
-    // *main_names = entry_points(&wesl)
-    //     .map(|name| name.to_string())
-    //     .collect_vec();
-    *main_names = wesl
+    // hack, this is passed by &mut just to return it from the function even in error case.
+    *root_decls = wesl
         .global_declarations
         .iter()
         .filter_map(|decl| decl.ident())
@@ -838,10 +832,31 @@ fn compile_impl(
 
     #[cfg(feature = "imports")]
     let wesl = if options.use_imports {
-        let mut module = import::Module::new(wesl, entrypoint.clone());
-        module.resolve(&resolver)?;
-        module.mangle(mangler);
-        module.assemble()
+        let keep = options
+            .entry_points
+            .as_ref()
+            .map(|names| {
+                wesl.global_declarations
+                    .iter()
+                    .filter_map(|decl| {
+                        let ident = decl.ident()?;
+                        names
+                            .iter()
+                            .any(|name| name == ident.name().as_str())
+                            .then_some(ident.clone())
+                    })
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                wesl.global_declarations
+                    .iter()
+                    .filter_map(|decl| decl.ident())
+                    .cloned()
+                    .collect()
+            });
+        let mut resolution = import::resolve(wesl, root_module, keep, &resolver)?;
+        resolution.mangle(mangler)?;
+        resolution.assemble(options.use_stripping)
     } else {
         wesl
     };
@@ -857,8 +872,9 @@ fn compile_impl(
         validate(&wesl)?;
     }
 
+    // TODO: this is no longer relevant with the new import stripping
     if options.use_stripping {
-        let entry_names = options.entry_points.as_ref().unwrap_or(main_names);
+        let entry_names = options.entry_points.as_ref().unwrap_or(root_decls);
         strip_except(&mut wesl, entry_names);
     }
 
@@ -867,20 +883,20 @@ fn compile_impl(
 
 /// Low-level version of [`Wesl::compile`].
 pub fn compile(
-    entrypoint: &Resource,
+    root_module: &Resource,
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Error> {
     let mut entry_names = Vec::new();
-    let mut wesl = compile_impl(entrypoint, resolver, mangler, options, &mut entry_names)?;
+    let mut wesl = compile_impl(root_module, resolver, mangler, options, &mut entry_names)?;
     lower(&mut wesl)?;
     Ok(wesl)
 }
 
 /// Like [`compile`], but provides better error diagnostics and returns the sourcemap.
 pub fn compile_sourcemap(
-    entrypoint: &Resource,
+    root_module: &Resource,
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
@@ -888,7 +904,7 @@ pub fn compile_sourcemap(
     let sourcemapper = SourceMapper::new(&resolver, &mangler);
     let mut main_names = Vec::new();
     let comp = compile_impl(
-        entrypoint,
+        root_module,
         &sourcemapper,
         &sourcemapper,
         options,
@@ -896,7 +912,7 @@ pub fn compile_sourcemap(
     );
     let mut sourcemap = sourcemapper.finish();
     for entry in &main_names {
-        sourcemap.add_decl(entry.clone(), entrypoint.clone(), entry.clone());
+        sourcemap.add_decl(entry.clone(), root_module.clone(), entry.clone());
     }
     let comp = if options.use_lower {
         comp.and_then(|mut wesl| {

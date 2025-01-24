@@ -190,7 +190,7 @@ impl Module {
     /// run validation checks on each of the scanned files.
     pub fn validate(self) -> Result<Self, Error> {
         fn validate_module(module: &Module) -> Result<(), Error> {
-            let resource = Resource::from(PathBuf::from(&module.name));
+            let resource = Resource::new(PathBuf::from(&module.name));
             let mut wesl: TranslationUnit = module.source.parse().map_err(|e| {
                 Diagnostic::from(e)
                     .with_file(resource)

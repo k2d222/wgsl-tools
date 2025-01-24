@@ -335,10 +335,10 @@ fn wesl_testsuite_test(path: &Path) {
             resolver.add_module(path, file);
         }
 
-        let entrypoint: Resource = PathBuf::from("./main.wgsl").into();
+        let root_module = Resource::new(PathBuf::from("main.wgsl"));
         let compile_options = CompileOptions::default();
 
-        wesl::compile(&entrypoint, &resolver, &HashMangler, &compile_options)
+        wesl::compile(&root_module, &resolver, &HashMangler, &compile_options)
             .inspect_err(|err| eprintln!("{err}"))
             .expect("parse error");
     }

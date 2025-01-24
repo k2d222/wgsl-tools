@@ -339,6 +339,7 @@ TypeSpecifier: TypeExpression = {
     TemplateElaboratedIdent,
 };
 
+#[cfg(not(feature = "imports"))]
 TemplateElaboratedIdent: TypeExpression = <ident: Ident> <template_args: TemplateList?> => TypeExpression {
     ident, template_args
 };
@@ -949,6 +950,13 @@ DiagnosticControl: (DiagnosticSeverity, String) = {
 // date: 2025-01-18, hash: 2db8e7f681087db6bdcd4a254963deb5c0159775
 
 #[cfg(feature = "imports")]
+TemplateElaboratedIdent: TypeExpression = <path: (<IdentPatternToken> "::")*> <ident: Ident> <template_args: TemplateList?> => TypeExpression {
+    path: if path.is_empty() { None } else { Some(PathBuf::from_iter(path)) },
+    ident, template_args
+};
+
+
+#[cfg(feature = "imports")]
 pub TranslationUnit: TranslationUnit = {
     <imports: Import*> <global_directives: GlobalDirective*> <global_declarations: GlobalDecl*> => TranslationUnit {
         imports, global_directives, global_declarations
@@ -987,7 +995,7 @@ pub Import: Import = {
 };
 
 #[cfg(feature = "imports")]
-ImportRelative: std::path::PathBuf = {
+ImportRelative: PathBuf = {
     "self" "::" <parents: ("super" "::")*> => {
         PathBuf::from_iter(std::iter::once(".").chain(parents.iter().map(|_| "..")))
     },
@@ -1001,9 +1009,9 @@ ImportRelative: std::path::PathBuf = {
 
 #[cfg(feature = "imports")]
 ImportPath: Import = {
-    <path: (<Ident> "::")+> <content: ImportContent> => Import {
+    <path: (<IdentPatternToken> "::")+> <content: ImportContent> => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
-        path: std::path::PathBuf::from_iter(path.iter().map(|ident| ident.name().to_string())), content
+        path: PathBuf::from_iter(path), content
     },
     ItemImport => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),

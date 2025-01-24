@@ -59,18 +59,20 @@ impl Ident {
     }
 }
 
+/// equality for idents is based on address, NOT internal value
 impl PartialEq for Ident {
     fn eq(&self, other: &Self) -> bool {
-        // checking both names at simultaneously can cause deadlock
-        Arc::ptr_eq(&self.0, &other.0) || *self.name() == *other.name()
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
+/// equality for idents is based on address, NOT internal value
 impl Eq for Ident {}
 
+/// hash for idents is based on address, NOT internal value
 impl std::hash::Hash for Ident {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.name().hash(state)
+        std::ptr::hash(&*self.0, state)
     }
 }
 
@@ -466,6 +468,8 @@ pub type FunctionCallExpression = FunctionCall;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeExpression {
+    #[cfg(feature = "imports")]
+    pub path: Option<std::path::PathBuf>,
     pub ident: Ident,
     pub template_args: TemplateArgs,
 }

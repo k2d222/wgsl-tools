@@ -160,9 +160,11 @@ fn zero_args(arguments: Option<Vec<ExpressionNode>>) -> bool {
 fn ident(expr: ExpressionNode) -> Option<Ident> {
     match expr.into_inner() {
         Expression::TypeOrIdentifier(TypeExpression {
-            ident: name,
+            #[cfg(feature = "imports")]
+                path: _,
+            ident,
             template_args: None,
-        }) => Some(name),
+        }) => Some(ident),
         _ => None,
     }
 }
@@ -185,7 +187,7 @@ pub(crate) fn parse_attribute(
             _ => Err(E::Attribute("blend_src", "expected 1 argument")),
         },
         "builtin" => match one_arg(args) {
-            Some(expr) => match ident(expr).and_then(|name| name.name().parse().ok()) {
+            Some(expr) => match ident(expr).and_then(|id| id.name().parse().ok()) {
                 Some(b) => Ok(Attribute::Builtin(b)),
                 _ => Err(E::Attribute(
                     "builtin",
@@ -200,14 +202,16 @@ pub(crate) fn parse_attribute(
         },
         "diagnostic" => match two_args(args) {
             Some((e1, e2)) => {
-                let severity = ident(e1).and_then(|name| name.name().parse().ok());
+                let severity = ident(e1).and_then(|id| id.name().parse().ok());
                 let rule = match e2.into_inner() {
                     Expression::TypeOrIdentifier(TypeExpression {
-                        ident: name,
+                        #[cfg(feature = "imports")]
+                            path: _,
+                        ident,
                         template_args: None,
-                    }) => Some(name.name().to_string()),
+                    }) => Some(ident.name().to_string()),
                     Expression::NamedComponent(e) => {
-                        ident(e.base).map(|name| format!("{}.{}", name.name(), e.component))
+                        ident(e.base).map(|id| format!("{}.{}", id.name(), e.component))
                     }
                     _ => None,
                 };
@@ -233,8 +237,8 @@ pub(crate) fn parse_attribute(
         },
         "interpolate" => match two_args(args) {
             Some((e1, e2)) => {
-                let ty = ident(e1).and_then(|name| name.name().parse().ok());
-                let sampling = ident(e2).and_then(|name| name.name().parse().ok());
+                let ty = ident(e1).and_then(|id| id.name().parse().ok());
+                let sampling = ident(e2).and_then(|id| id.name().parse().ok());
                 match (ty, sampling) {
                     (Some(ty), Some(sampling)) => {
                         Ok(Attribute::Interpolate(InterpolateAttribute {
@@ -329,43 +333,30 @@ fn parse_attr_type(arguments: Option<Vec<ExpressionNode>>) -> Result<TypeConstra
         }
     }
     match two_args(arguments) {
-        Some((e1, e2)) => match e1.into_inner() {
-            Expression::TypeOrIdentifier(TypeExpression {
-                ident: name,
-                template_args: None,
-            }) => parse_rec(e2.into_inner()).map(|variants| TypeConstraint {
-                ident: name,
-                variants,
-            }),
-            _ => Err(E::Attribute("type", "invalid first argument (type name)")),
-        },
+        Some((e1, e2)) => ident(e1)
+            .map(|ident| {
+                parse_rec(e2.into_inner()).map(|variants| TypeConstraint { ident, variants })
+            })
+            .unwrap_or_else(|| Err(E::Attribute("type", "invalid first argument (type name)"))),
+
         None => Err(E::Attribute("type", "expected 2 arguments")),
     }
 }
 
 pub(crate) fn parse_var_template(template_args: TemplateArgs) -> Result<Option<AddressSpace>, E> {
-    fn ident(expr: ExpressionNode) -> Option<String> {
-        match expr.into_inner() {
-            Expression::TypeOrIdentifier(TypeExpression {
-                ident: name,
-                template_args: None,
-            }) => Some(name.name().to_string()),
-            _ => None,
-        }
-    }
     match template_args {
         Some(tplt) => {
             let mut it = tplt.into_iter();
             match (it.next(), it.next(), it.next()) {
                 (Some(e1), e2, None) => {
                     let mut addr_space = ident(e1.expression)
-                        .and_then(|name| name.parse().ok())
+                        .and_then(|id| id.name().parse().ok())
                         .ok_or(E::VarTemplate("invalid address space"))?;
                     if let Some(e2) = e2 {
                         if let AddressSpace::Storage(access_mode) = &mut addr_space {
                             *access_mode = Some(
                                 ident(e2.expression)
-                                    .and_then(|name| name.parse().ok())
+                                    .and_then(|id| id.name().parse().ok())
                                     .ok_or(E::VarTemplate("invalid access mode"))?,
                             );
                         } else {
