@@ -119,10 +119,9 @@ pub use package::PkgBuilder;
 pub use error::{Diagnostic, Error};
 pub use lower::{lower, lower_sourcemap};
 pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
-use resolve::StandardResolver;
 pub use resolve::{
     CacheResolver, FileResolver, NoResolver, PkgModule, PkgResolver, Preprocessor, ResolveError,
-    Resolver, Resource, Router, VirtualResolver,
+    Resolver, Resource, Router, StandardResolver, VirtualResolver,
 };
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 pub use strip::strip_except;
@@ -132,7 +131,12 @@ pub use validate::{validate, ValidateError};
 pub use wgsl_parse::syntax;
 
 use itertools::Itertools;
-use std::{collections::HashMap, fmt::Display, path::Path, sync::LazyLock};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    path::Path,
+    sync::LazyLock,
+};
 use wgsl_parse::syntax::{Ident, TranslationUnit};
 
 #[derive(Debug)]
@@ -800,6 +804,32 @@ impl<R: Resolver> Wesl<R> {
     }
 }
 
+fn keep_idents(wesl: &TranslationUnit, keep: &Option<Vec<String>>, strip: bool) -> HashSet<Ident> {
+    if strip {
+        if let Some(keep) = keep {
+            wesl.global_declarations
+                .iter()
+                .filter_map(|decl| {
+                    let ident = decl.ident()?;
+                    keep.iter()
+                        .any(|name| name == ident.name().as_str())
+                        .then_some(ident.clone())
+                })
+                .collect()
+        } else {
+            // when stripping is enabled and keep is unset, we keep the entrypoints (default)
+            wesl.entry_points().cloned().collect()
+        }
+    } else {
+        // when stripping is disabled, we keep all declarations in the root module.
+        wesl.global_declarations
+            .iter()
+            .filter_map(|decl| decl.ident())
+            .cloned()
+            .collect()
+    }
+}
+
 fn compile_impl(
     root_module: &Resource,
     resolver: &impl Resolver,
@@ -832,28 +862,7 @@ fn compile_impl(
 
     #[cfg(feature = "imports")]
     let wesl = if options.use_imports {
-        let keep = options
-            .entry_points
-            .as_ref()
-            .map(|names| {
-                wesl.global_declarations
-                    .iter()
-                    .filter_map(|decl| {
-                        let ident = decl.ident()?;
-                        names
-                            .iter()
-                            .any(|name| name == ident.name().as_str())
-                            .then_some(ident.clone())
-                    })
-                    .collect()
-            })
-            .unwrap_or_else(|| {
-                wesl.global_declarations
-                    .iter()
-                    .filter_map(|decl| decl.ident())
-                    .cloned()
-                    .collect()
-            });
+        let keep = keep_idents(&wesl, &options.entry_points, options.use_stripping);
         let mut resolution = import::resolve(wesl, root_module, keep, &resolver)?;
         resolution.mangle(mangler)?;
         resolution.assemble(options.use_stripping)
@@ -873,10 +882,10 @@ fn compile_impl(
     }
 
     // TODO: this is no longer relevant with the new import stripping
-    if options.use_stripping {
-        let entry_names = options.entry_points.as_ref().unwrap_or(root_decls);
-        strip_except(&mut wesl, entry_names);
-    }
+    // if options.use_stripping {
+    //     let entry_names = options.entry_points.as_ref().unwrap_or(root_decls);
+    //     strip_except(&mut wesl, entry_names);
+    // }
 
     Ok(wesl)
 }

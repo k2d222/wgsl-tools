@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     ops::DerefMut,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     rc::Rc,
 };
 
@@ -47,14 +47,20 @@ impl Resolutions {
 
 fn resolve_inline_resource(path: &Path, parent_resource: &Resource, imports: &Imports) -> Resource {
     let prefix = path.iter().next().unwrap().to_str().unwrap();
-    let suffix = PathBuf::from_iter(path.iter().skip(1));
+    // let suffix = PathBuf::from_iter(path.iter().skip(1));
 
-    let parent_res = imports
+    let resource = imports
         .iter()
-        .find_map(|(ident, res)| (ident.name().as_str() == prefix).then_some(res))
-        .or(Some(parent_resource));
+        .find_map(|(ident, res)| {
+            if ident.name().as_str() == prefix {
+                Some(res.join(PathBuf::from_iter(path.iter().skip(1))))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| Resource::new(path));
 
-    canonical_resource(&suffix, parent_res)
+    canonical_resource(resource.path(), Some(parent_resource))
 }
 
 impl Module {
@@ -267,42 +273,19 @@ pub fn resolve(
     Ok(Resolutions(resolutions, resource.clone()))
 }
 
-fn clean_path(path: impl AsRef<Path>) -> PathBuf {
-    let mut res = PathBuf::new();
-    for comp in path.as_ref().components() {
-        match comp {
-            Component::Prefix(_) => {}
-            Component::RootDir => {
-                res.push(comp);
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                res.pop();
-            }
-            Component::Normal(_) => res.push(comp),
-        }
-    }
-    res
-}
-
 pub(crate) fn canonical_resource(
     import_path: &Path,
     parent_resource: Option<&Resource>,
 ) -> Resource {
-    let path = if import_path.starts_with(".") {
+    if import_path.starts_with(".") || import_path.starts_with("..") {
         if let Some(parent) = parent_resource {
-            // SAFETY: parent_path must be a file, therefore must have a containing directory
-            let mut path = parent.path().parent().unwrap().to_path_buf();
-            path.extend(import_path);
-            clean_path(path)
+            parent.join(import_path)
         } else {
-            clean_path(import_path)
+            Resource::new(import_path)
         }
     } else {
-        clean_path(import_path)
-    };
-
-    Resource::new(path)
+        Resource::new(import_path)
+    }
 }
 
 /// Flatten imports to a list of resources to import.

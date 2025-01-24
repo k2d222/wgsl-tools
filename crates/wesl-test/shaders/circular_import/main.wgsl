@@ -1,4 +1,4 @@
-import self::mod1::f1;
+import super::mod1::f1;
 
 fn foo() {
     

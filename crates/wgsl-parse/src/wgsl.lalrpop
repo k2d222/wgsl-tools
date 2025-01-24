@@ -950,9 +950,25 @@ DiagnosticControl: (DiagnosticSeverity, String) = {
 // date: 2025-01-18, hash: 2db8e7f681087db6bdcd4a254963deb5c0159775
 
 #[cfg(feature = "imports")]
-TemplateElaboratedIdent: TypeExpression = <path: (<IdentPatternToken> "::")*> <ident: Ident> <template_args: TemplateList?> => TypeExpression {
-    path: if path.is_empty() { None } else { Some(PathBuf::from_iter(path)) },
-    ident, template_args
+TemplateElaboratedIdent: TypeExpression = <relative: ImportRelative?> <path: (<IdentPatternToken> "::")*> <ident: Ident> <template_args: TemplateList?> => {
+    let path = match relative {
+        Some(mut relative) => {
+            relative.extend(path);
+            Some(relative)
+        },
+        None => {
+            if path.is_empty() {
+                None
+            } else {
+                let mut absolute = PathBuf::from("/");
+                absolute.extend(path);
+                Some(absolute)
+            }
+        }
+    };
+    TypeExpression {
+        path, ident, template_args
+    }
 };
 
 
@@ -965,13 +981,19 @@ pub TranslationUnit: TranslationUnit = {
 
 #[cfg(all(feature = "imports", not(feature = "attributes")))]
 pub Import: Import = {
-    "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => match relative {
-        Some(mut relative) => {
-            relative.extend(import.path);
-            import.path = relative;
-            import
-        },
-        None => import,
+    "import" <relative: ImportRelative?> <mut import: ImportPath> ";" => {
+        match relative {
+            Some(mut relative) => {
+                relative.extend(&import.path);
+                import.path = relative;
+            },
+            None => {
+                let mut absolute = PathBuf::from("/");
+                absolute.push(import.path);
+                import.path = absolute;
+            },
+        };
+        import
     }
 };
 

@@ -22,6 +22,8 @@ pub enum ResolveError {
     Error(#[from] Diagnostic<Error>),
 }
 
+type E = ResolveError;
+
 /// A resource uniquely identify an importable module (file).
 ///
 /// Each module must be associated with a unique `Resource`, and a `Resource` must
@@ -41,10 +43,34 @@ pub struct Importable {
     pub ident: Ident,
 }
 
+fn clean_path(path: impl AsRef<Path>) -> PathBuf {
+    let mut res = PathBuf::new();
+    for comp in path.as_ref().with_extension("").components() {
+        match comp {
+            Component::Prefix(_) => {}
+            Component::RootDir => {
+                res.push(comp);
+            }
+            Component::CurDir => {
+                if res == Path::new("") {
+                    res.push(comp)
+                }
+            }
+            Component::ParentDir => {
+                if !res.pop() {
+                    res.push(comp);
+                }
+            }
+            Component::Normal(_) => res.push(comp),
+        }
+    }
+    res
+}
+
 impl Resource {
     pub fn new(path: impl AsRef<Path>) -> Self {
         Self {
-            path: path.as_ref().to_path_buf(),
+            path: clean_path(path),
         }
     }
     pub fn path(&self) -> &Path {
@@ -67,7 +93,9 @@ impl Resource {
     pub fn join(&self, suffix: impl AsRef<Path>) -> Self {
         let mut path = self.path.clone();
         path.push(suffix);
-        Self { path }
+        Self {
+            path: clean_path(path),
+        }
     }
 }
 
@@ -84,7 +112,7 @@ impl Display for Resource {
         }
         if self.path.has_root() {
             write!(f, "{}", fmt_path(self.path.components().skip(1)))
-        } else if self.path.starts_with(".") {
+        } else if self.path.starts_with(".") || self.path.starts_with("..") {
             write!(f, "{}", fmt_path(self.path.components()))
         } else {
             write!(f, "crate::{}", fmt_path(self.path.components()))
@@ -99,12 +127,8 @@ impl Display for Resource {
 /// * TODO
 pub trait Resolver {
     /// Tries to resolve a source file identified by a resource.
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError>;
-    fn source_to_module(
-        &self,
-        source: &str,
-        resource: &Resource,
-    ) -> Result<TranslationUnit, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E>;
+    fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
         let mut wesl: TranslationUnit = source.parse().map_err(|e| {
             Diagnostic::from(e)
                 .with_file(resource.clone())
@@ -113,7 +137,7 @@ pub trait Resolver {
         wesl.retarget_idents(); // it's important to call that early on to have identifiers point at the right declaration.
         Ok(wesl)
     }
-    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, ResolveError> {
+    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
         let source = self.resolve_source(resource)?;
         let wesl = self.source_to_module(&source, resource)?;
         Ok(wesl)
@@ -121,33 +145,25 @@ pub trait Resolver {
 }
 
 impl<T: Resolver + ?Sized> Resolver for Box<T> {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
         (**self).resolve_source(resource)
     }
-    fn source_to_module(
-        &self,
-        source: &str,
-        resource: &Resource,
-    ) -> Result<TranslationUnit, ResolveError> {
+    fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
         (**self).source_to_module(source, resource)
     }
-    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, ResolveError> {
+    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
         (**self).resolve_module(resource)
     }
 }
 
 impl<T: Resolver> Resolver for &T {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
         (**self).resolve_source(resource)
     }
-    fn source_to_module(
-        &self,
-        source: &str,
-        resource: &Resource,
-    ) -> Result<TranslationUnit, ResolveError> {
+    fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
         (**self).source_to_module(source, resource)
     }
-    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, ResolveError> {
+    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
         (**self).resolve_module(resource)
     }
 }
@@ -159,8 +175,8 @@ impl<T: Resolver> Resolver for &T {
 pub struct NoResolver;
 
 impl Resolver for NoResolver {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
-        Err(ResolveError::InvalidResource(
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
+        Err(E::InvalidResource(
             resource.clone(),
             "no resolver".to_string(),
         ))
@@ -183,7 +199,7 @@ impl<'a> CacheResolver<'a> {
 }
 
 impl<'a> Resolver for CacheResolver<'a> {
-    fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, ResolveError> {
+    fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, E> {
         let mut cache = self.cache.borrow_mut();
 
         let source = if let Some(source) = cache.get(resource) {
@@ -223,7 +239,13 @@ impl FileResolver {
 }
 
 impl Resolver for FileResolver {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
+        if resource.path().has_root() {
+            return Err(E::InvalidResource(
+                resource.clone(),
+                "not a file".to_string(),
+            ));
+        }
         let mut path = self.base.to_path_buf();
         path.extend(resource.path());
         let has_extension = path.extension().is_some();
@@ -240,7 +262,7 @@ impl Resolver for FileResolver {
                     Err(e)
                 }
             })
-            .map_err(|_| ResolveError::FileNotFound(path, "physical file".to_string()))?;
+            .map_err(|_| E::FileNotFound(path, "physical file".to_string()))?;
 
         Ok(source.into())
     }
@@ -269,15 +291,16 @@ impl VirtualResolver {
 
     pub fn get_module(&self, resource: &Resource) -> Result<&str, Error> {
         let path = resource.path();
-        let source = self.files.get(path).ok_or_else(|| {
-            ResolveError::FileNotFound(path.to_path_buf(), "virtual module".to_string())
-        })?;
+        let source = self
+            .files
+            .get(path)
+            .ok_or_else(|| E::FileNotFound(path.to_path_buf(), "virtual module".to_string()))?;
         Ok(source)
     }
 }
 
 impl Resolver for VirtualResolver {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
         let source = self
             .get_module(resource)
             .map_err(|e| Diagnostic::from(e).with_file(resource.clone()))?;
@@ -311,15 +334,11 @@ impl<'a, F: ResolveFn> Preprocessor<'a, F> {
 }
 
 impl<'a, F: ResolveFn> Resolver for Preprocessor<'a, F> {
-    fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, ResolveError> {
+    fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, E> {
         let res = self.resolver.resolve_source(resource)?;
         Ok(res)
     }
-    fn source_to_module(
-        &self,
-        source: &str,
-        resource: &Resource,
-    ) -> Result<TranslationUnit, ResolveError> {
+    fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
         let mut wesl: TranslationUnit = source.parse().map_err(|e| {
             Diagnostic::from(e)
                 .with_file(resource.clone())
@@ -378,7 +397,7 @@ impl Default for Router {
 }
 
 impl Resolver for Router {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
         let (mount_path, resolver) = self
             .mount_points
             .iter()
@@ -388,9 +407,7 @@ impl Resolver for Router {
                 .fallback
                 .as_ref()
                 .take_if(|(path, _)| resource.path().starts_with(path)))
-            .ok_or_else(|| {
-                ResolveError::InvalidResource(resource.clone(), "no mount point".to_string())
-            })?;
+            .ok_or_else(|| E::InvalidResource(resource.clone(), "no mount point".to_string()))?;
 
         // SAFETY: we just checked that resource.path() starts with mount_path
         let suffix = resource.path().strip_prefix(mount_path).unwrap();
@@ -434,10 +451,7 @@ impl Default for PkgResolver {
 }
 
 impl Resolver for PkgResolver {
-    fn resolve_source<'a>(
-        &'a self,
-        resource: &Resource,
-    ) -> Result<std::borrow::Cow<'a, str>, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<std::borrow::Cow<'a, str>, E> {
         let path = resource.path();
         for pkg in &self.packages {
             // TODO: the resolution algorithm is currently not spec-compliant.
@@ -446,15 +460,12 @@ impl Resolver for PkgResolver {
                 let mut cur_mod = *pkg;
                 for segment in path.iter().skip(1) {
                     let name = segment.to_str().ok_or_else(|| {
-                        ResolveError::InvalidResource(
-                            resource.clone(),
-                            "invalid unicode".to_string(),
-                        )
+                        E::InvalidResource(resource.clone(), "invalid unicode".to_string())
                     })?;
                     if let Some(submod) = pkg.submodule(name) {
                         cur_mod = submod;
                     } else {
-                        return Err(ResolveError::FileNotFound(
+                        return Err(E::FileNotFound(
                             path.to_path_buf(),
                             format!("in package {}", pkg.name()),
                         ));
@@ -463,7 +474,7 @@ impl Resolver for PkgResolver {
                 return Ok(cur_mod.source().into());
             }
         }
-        Err(ResolveError::FileNotFound(
+        Err(E::FileNotFound(
             resource.path().to_path_buf(),
             "no package found".to_string(),
         ))
@@ -495,7 +506,7 @@ impl StandardResolver {
 }
 
 impl Resolver for StandardResolver {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, ResolveError> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
         if resource.path().has_root() {
             let path = resource.path().iter().skip(1).collect::<PathBuf>();
             self.pkg.resolve_source(&Resource::new(path))
