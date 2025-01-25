@@ -52,7 +52,7 @@ fn resolve_inline_resource(path: &Path, parent_resource: &Resource, imports: &Im
     let resource = imports
         .iter()
         .find_map(|(ident, res)| {
-            if ident.name().as_str() == prefix {
+            if &*ident.name() == prefix {
                 Some(res.join(PathBuf::from_iter(path.iter().skip(1))))
             } else {
                 None
@@ -172,7 +172,7 @@ pub fn resolve(
             let ext_id = ext_mod
                 .idents
                 .keys()
-                .find(|id| id.name().as_str() == ty.ident.name().as_str())
+                .find(|id| *id.name() == *ty.ident.name())
                 .cloned();
 
             if let Some(ext_id) = ext_id {
@@ -329,7 +329,7 @@ fn mangle_decls<'a>(
         .iter_mut()
         .filter_map(|decl| decl.ident_mut())
         .for_each(|ident| {
-            let new_name = mangler.mangle(resource, ident.name().as_str());
+            let new_name = mangler.mangle(resource, &*ident.name());
             ident.rename(new_name.clone());
         })
 }

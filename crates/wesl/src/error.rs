@@ -154,7 +154,7 @@ impl<E: std::error::Error> Diagnostic<E> {
     #[cfg(feature = "eval")]
     pub fn with_ctx(mut self, ctx: &Context) -> Self {
         let (decl, span) = ctx.err_ctx();
-        self.declaration = decl.map(|d| d.name().to_string());
+        self.declaration = decl.map(|id| id.to_string());
         self.span = span;
         self
     }
@@ -187,7 +187,7 @@ impl<E: std::error::Error> Diagnostic<E> {
 impl Diagnostic<Error> {
     pub fn unmangle(mut self, mangler: &impl Mangler) -> Self {
         fn unmangle_id(id: &mut Ident, mangler: &impl Mangler) {
-            let unmangled = mangler.unmangle(id.name().as_str());
+            let unmangled = mangler.unmangle(&*id.name());
             if let Some((resource, name)) = unmangled {
                 *id = Ident::new(format!("{resource}::{name}"));
             }

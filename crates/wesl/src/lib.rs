@@ -812,7 +812,7 @@ fn keep_idents(wesl: &TranslationUnit, keep: &Option<Vec<String>>, strip: bool) 
                 .filter_map(|decl| {
                     let ident = decl.ident()?;
                     keep.iter()
-                        .any(|name| name == ident.name().as_str())
+                        .any(|name| name == &*ident.name())
                         .then_some(ident.clone())
                 })
                 .collect()
