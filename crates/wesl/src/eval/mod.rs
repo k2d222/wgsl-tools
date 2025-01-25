@@ -30,7 +30,7 @@ use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
 pub struct Scope {
-    stack: Vec<HashMap<Ident, Instance>>,
+    stack: Vec<HashMap<String, Instance>>,
 }
 
 impl Scope {
@@ -48,40 +48,28 @@ impl Scope {
         self.stack.pop().expect("failed to pop scope");
     }
 
-    pub fn add_val(&mut self, ident: Ident, value: Instance) {
-        if self
-            .stack
-            .last_mut()
-            .unwrap()
-            .insert(ident, value)
-            .is_some()
-        {
+    pub fn add_val(&mut self, name: String, value: Instance) {
+        if self.stack.last_mut().unwrap().insert(name, value).is_some() {
             panic!("duplicate variable insertion")
         }
     }
 
-    pub fn add_var(&mut self, ident: Ident, inst: RefInstance) {
+    pub fn add_var(&mut self, name: String, inst: RefInstance) {
         let value = Instance::from(inst);
-        if self
-            .stack
-            .last_mut()
-            .unwrap()
-            .insert(ident, value)
-            .is_some()
-        {
+        if self.stack.last_mut().unwrap().insert(name, value).is_some() {
             panic!("duplicate variable insertion")
         }
     }
 
-    pub fn get(&self, ident: &Ident) -> Option<Instance> {
+    pub fn get(&self, name: &str) -> Option<Instance> {
         self.stack
             .iter()
             .rev()
-            .find_map(|scope| scope.get(ident).cloned())
+            .find_map(|scope| scope.get(name).cloned())
     }
 
-    pub fn has(&self, ident: &Ident) -> bool {
-        self.stack.last().unwrap().contains_key(ident)
+    pub fn has(&self, name: &str) -> bool {
+        self.stack.last().unwrap().contains_key(name)
     }
 }
 
@@ -134,7 +122,7 @@ pub struct Context<'s> {
     pub(crate) overrides: HashMap<String, Instance>,
     pub(crate) kind: ScopeKind,
     pub(crate) stage: EvalStage,
-    err_decl: Option<Ident>,
+    err_decl: Option<String>,
     err_expr: Option<Span>,
 }
 
@@ -162,7 +150,7 @@ impl<'s> Context<'s> {
         }
     }
 
-    fn set_err_decl_ctx(&mut self, decl: Ident) {
+    fn set_err_decl_ctx(&mut self, decl: String) {
         if self.err_decl.is_none() {
             self.err_decl = Some(decl)
         }
@@ -173,7 +161,7 @@ impl<'s> Context<'s> {
         }
     }
 
-    pub fn err_ctx(&self) -> (Option<Ident>, Option<Span>) {
+    pub fn err_ctx(&self) -> (Option<String>, Option<Span>) {
         (self.err_decl.clone(), self.err_expr.clone())
     }
 
@@ -204,54 +192,55 @@ impl<'s> Context<'s> {
 }
 
 pub trait SyntaxUtil {
-    /// find a global declaration by ident.
-    fn decl(&self, ident: &Ident) -> Option<&GlobalDeclaration>;
+    /// find a global declaration by name.
+    fn decl(&self, name: &str) -> Option<&GlobalDeclaration>;
 
-    /// find a struct declaration by ident.
+    /// find a struct declaration by name.
     ///
     /// see also: [`Self::resolve_alias`] to resolve the name before calling this function.
-    fn decl_struct(&self, ident: &Ident) -> Option<&Struct>;
+    fn decl_struct(&self, name: &str) -> Option<&Struct>;
 
-    /// find a function declaration by ident.
-    fn decl_function(&self, ident: &Ident) -> Option<&Function>;
+    /// find a function declaration by name.
+    fn decl_function(&self, name: &str) -> Option<&Function>;
 
-    /// resolve an alias ident.
-    fn resolve_alias(&self, ident: &Ident) -> Option<TypeExpression>;
+    /// resolve an alias name.
+    fn resolve_alias(&self, name: &str) -> Option<TypeExpression>;
 }
 
 impl SyntaxUtil for TranslationUnit {
-    fn decl(&self, ident: &Ident) -> Option<&GlobalDeclaration> {
+    fn decl(&self, name: &str) -> Option<&GlobalDeclaration> {
         self.global_declarations
             .iter()
             .chain(PRELUDE.global_declarations.iter())
             .find(|d| match d {
-                GlobalDeclaration::Declaration(d) => &d.ident == ident,
-                GlobalDeclaration::TypeAlias(d) => &d.ident == ident,
-                GlobalDeclaration::Struct(d) => &d.ident == ident,
-                GlobalDeclaration::Function(d) => &d.ident == ident,
+                GlobalDeclaration::Declaration(d) => &*d.ident.name() == name,
+                GlobalDeclaration::TypeAlias(d) => &*d.ident.name() == name,
+                GlobalDeclaration::Struct(d) => &*d.ident.name() == name,
+                GlobalDeclaration::Function(d) => &*d.ident.name() == name,
                 _ => false,
             })
     }
-    fn decl_struct(&self, ident: &Ident) -> Option<&Struct> {
-        match self.decl(ident) {
+    fn decl_struct(&self, name: &str) -> Option<&Struct> {
+        match self.decl(name) {
             Some(GlobalDeclaration::Struct(s)) => Some(s),
             _ => None,
         }
     }
 
-    fn decl_function(&self, ident: &Ident) -> Option<&Function> {
-        match self.decl(ident) {
+    fn decl_function(&self, name: &str) -> Option<&Function> {
+        match self.decl(name) {
             Some(GlobalDeclaration::Function(f)) => Some(f),
             _ => None,
         }
     }
 
     // TODO return borrowed
-    fn resolve_alias(&self, ident: &Ident) -> Option<TypeExpression> {
-        match self.decl(ident) {
+    fn resolve_alias(&self, name: &str) -> Option<TypeExpression> {
+        match self.decl(name) {
             Some(GlobalDeclaration::TypeAlias(t)) => {
                 if t.ty.template_args.is_none() {
-                    self.resolve_alias(&t.ty.ident).or(Some(t.ty.clone()))
+                    self.resolve_alias(&t.ty.ident.name())
+                        .or(Some(t.ty.clone()))
                 } else {
                     Some(t.ty.clone())
                 }

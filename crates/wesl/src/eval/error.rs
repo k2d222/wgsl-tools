@@ -13,9 +13,9 @@ pub enum EvalError {
     #[error("unknown type or variable `{0}`")]
     UnknownType(String),
     #[error("unknown function `{0}`")]
-    UnknownFunction(Ident),
+    UnknownFunction(String),
     #[error("no declaration named `{0}` in scope")]
-    NoDecl(Ident),
+    NoDecl(String),
     #[error("`{0}` is not constructible")]
     NotConstructible(Type),
     #[error("expected a scalar type, got `{0}`")]
@@ -45,13 +45,13 @@ pub enum EvalError {
 
     // indexing
     #[error("`{0}` has no component `{1}`")]
-    Component(Type, Ident),
+    Component(Type, String),
     #[error("invalid array index type `{0}`")]
     Index(Type),
     #[error("`{0}` cannot be indexed")]
     NotIndexable(Type),
     #[error("invalid vector component or swizzle `{0}`")]
-    Swizzle(Ident),
+    Swizzle(String),
     #[error("index `{0}` is out-of-bounds for `{1}` of `{2}` components")]
     OutOfBounds(usize, Type, usize),
 
@@ -90,17 +90,17 @@ pub enum EvalError {
     #[error("invalid template arguments to `{0}`")]
     TemplateArgs(&'static str),
     #[error("type `{0}` does not take any template arguments")]
-    UnexpectedTemplate(Ident),
+    UnexpectedTemplate(String),
     #[error("missing template arguments for type `{0}`")]
     MissingTemplate(&'static str),
     #[error("incorrect number of arguments to `{0}`, expected `{1}`, got `{2}`")]
-    ParamCount(Ident, usize, usize),
+    ParamCount(String, usize, usize),
     #[error("invalid parameter type, expected `{0}`, got `{1}`")]
     ParamType(Type, Type),
     #[error("returned `{0}` from a function that returns `{1}`")]
     ReturnType(Type, Type),
     #[error("calling non-const function `{0}` in const context")]
-    NotConst(Ident),
+    NotConst(String),
 
     // declarations
     #[error("override-declarations are not permitted in const contexts")]
@@ -110,13 +110,13 @@ pub enum EvalError {
     #[error("let-declarations are not permitted at the module scope")]
     LetInMod,
     #[error("uninitialized const-declaration `{0}`")]
-    UninitConst(Ident),
+    UninitConst(String),
     #[error("uninitialized let-declaration `{0}`")]
-    UninitLet(Ident),
+    UninitLet(String),
     #[error("uninitialized override-declaration `{0}` with no override")]
-    UninitOverride(Ident),
+    UninitOverride(String),
     #[error("duplicate declaration of `{0}` in the current scope")]
-    DuplicateDecl(Ident),
+    DuplicateDecl(String),
     #[error("a declaration must have an explicit type or an initializer")]
     UntypedDecl,
     #[error("`{0}` declarations are forbidden in `{1}` scope")]

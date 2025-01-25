@@ -286,7 +286,7 @@ impl Instance {
             Type::U32 => Ok(LiteralInstance::U32(0).into()),
             Type::F32 => Ok(LiteralInstance::F32(0.0).into()),
             Type::F16 => Ok(LiteralInstance::F16(f16::zero()).into()),
-            Type::Struct(ident) => StructInstance::zero_value(ident.clone(), ctx).map(Into::into),
+            Type::Struct(name) => StructInstance::zero_value(name, ctx).map(Into::into),
             Type::Array(Some(n), a_ty) => ArrayInstance::zero_value(*n, a_ty, ctx).map(Into::into),
             Type::Array(None, _) => Err(E::NotConstructible(ty.clone())),
             Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
@@ -315,10 +315,10 @@ impl LiteralInstance {
 
 impl StructInstance {
     /// zero-value initialize a struct instance.
-    pub fn zero_value(ident: Ident, ctx: &mut Context) -> Result<Self, E> {
+    pub fn zero_value(name: &str, ctx: &mut Context) -> Result<Self, E> {
         let decl = ctx
             .source
-            .decl_struct(&ident)
+            .decl_struct(name)
             .expect("struct declaration not found");
 
         let members = decl
@@ -327,11 +327,11 @@ impl StructInstance {
             .map(|m| {
                 let ty = m.ty.eval_ty(ctx)?;
                 let val = Instance::zero_value(&ty, ctx)?;
-                Ok((m.ident.clone(), val))
+                Ok((m.ident.to_string(), val))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(StructInstance::new(ident, members))
+        Ok(StructInstance::new(name.to_string(), members))
     }
 }
 
@@ -627,7 +627,7 @@ fn call_array_t(tplt: ArrayTemplate, args: &[Instance]) -> Result<Instance, E> {
 
     if Some(args.len()) != tplt.n {
         return Err(E::ParamCount(
-            IDENT_ARRAY.clone(),
+            "array".to_string(),
             tplt.n.unwrap_or_default(),
             args.len(),
         ));
@@ -817,11 +817,7 @@ fn call_mat_t(
         // overload 2: mat from column vectors
         if ty.is_vec() {
             if args.len() != c {
-                return Err(E::ParamCount(
-                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
-                    c,
-                    args.len(),
-                ));
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
             }
 
             Ok(MatInstance::from_cols(args).into())
@@ -829,11 +825,7 @@ fn call_mat_t(
         // overload 3: mat from scalar values
         else {
             if args.len() != c * r {
-                return Err(E::ParamCount(
-                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
-                    c * r,
-                    args.len(),
-                ));
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c * r, args.len()));
             }
 
             let args = args
@@ -883,11 +875,7 @@ fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
         // overload 2: mat from column vectors
         if ty.is_vec() {
             if args.len() != c {
-                return Err(E::ParamCount(
-                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
-                    c,
-                    args.len(),
-                ));
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c, args.len()));
             }
 
             Ok(MatInstance::from_cols(args).into())
@@ -895,11 +883,7 @@ fn call_mat(c: usize, r: usize, args: &[Instance]) -> Result<Instance, E> {
         // overload 3: mat from scalar values
         else {
             if args.len() != c * r {
-                return Err(E::ParamCount(
-                    name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap(),
-                    c * r,
-                    args.len(),
-                ));
+                return Err(E::ParamCount(format!("mat{c}x{r}"), c * r, args.len()));
             }
             let args = args
                 .chunks(r)
@@ -962,11 +946,7 @@ fn call_vec_t(
             })
             .collect_vec();
         if args.len() != n {
-            return Err(E::ParamCount(
-                name_to_builtin_ident(&format!("vec{n}")).unwrap(),
-                n,
-                args.len(),
-            ));
+            return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
         }
 
         let comps = args
@@ -1012,11 +992,7 @@ fn call_vec(n: usize, args: &[Instance]) -> Result<Instance, E> {
             .cloned()
             .collect_vec();
         if args.len() != n {
-            return Err(E::ParamCount(
-                name_to_builtin_ident(&format!("vec{n}")).unwrap(),
-                n,
-                args.len(),
-            ));
+            return Err(E::ParamCount(format!("vec{n}"), n, args.len()));
         }
 
         let comps =
@@ -1521,11 +1497,8 @@ fn call_frexp(e: &Instance) -> Result<Instance, E> {
     const ERR: E = E::Builtin("`frexp` expects a float or vector of float argument");
     fn make_frexp_inst(ty: &'static str, fract: Instance, exp: Instance) -> Instance {
         Instance::Struct(StructInstance::new(
-            Ident::new(format!("__frexp_result_{ty}")),
-            vec![
-                (Ident::new("fract".to_string()), fract),
-                (Ident::new("exp".to_string()), exp),
-            ],
+            format!("__frexp_result_{ty}"),
+            vec![("fract".to_string(), fract), ("exp".to_string(), exp)],
         ))
     }
     // from: https://docs.rs/libm/latest/src/libm/math/frexp.rs.html#1-20

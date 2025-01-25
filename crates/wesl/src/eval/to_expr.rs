@@ -48,15 +48,15 @@ impl ToExpr for StructInstance {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         let decl = ctx
             .source
-            .decl_struct(self.ident())
+            .decl_struct(self.name())
             .expect("struct declaration not found");
         Ok(Expression::FunctionCall(FunctionCall {
-            ty: TypeExpression::new(self.ident().clone()),
+            ty: TypeExpression::new(Ident::new(self.name().to_string())),
             arguments: decl
                 .members
                 .iter()
                 .map(|m| {
-                    self.member(&m.ident)
+                    self.member(&*m.ident.name())
                         .expect("struct member not found")
                         .to_expr(ctx)
                         .map(Spanned::from)
@@ -112,7 +112,7 @@ impl ToExpr for Type {
             Type::U32 => Ok(TypeExpression::new(IDENT_U32.clone())),
             Type::F32 => Ok(TypeExpression::new(IDENT_F32.clone())),
             Type::F16 => Ok(TypeExpression::new(IDENT_F16.clone())),
-            Type::Struct(s) => Ok(TypeExpression::new(s.clone())),
+            Type::Struct(s) => Ok(TypeExpression::new(Ident::new(s.clone()))),
             Type::Array(Some(n), inner_ty) => {
                 let mut ty = TypeExpression::new(IDENT_ARRAY.clone());
                 ty.template_args = Some(vec![

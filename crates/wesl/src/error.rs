@@ -192,6 +192,12 @@ impl Diagnostic<Error> {
                 *id = Ident::new(format!("{resource}::{name}"));
             }
         }
+        fn unmangle_name(mangled: &mut String, mangler: &impl Mangler) {
+            let unmangled = mangler.unmangle(mangled);
+            if let Some((resource, name)) = unmangled {
+                *mangled = format!("{resource}::{name}");
+            }
+        }
         fn unmangle_expr(expr: &mut Expression, mangler: &impl Mangler) {
             match expr {
                 Expression::Literal(_) => {}
@@ -231,17 +237,17 @@ impl Diagnostic<Error> {
             Error::GenericsError(_) => {}
             #[cfg(feature = "eval")]
             Error::EvalError(e) => match e {
-                EvalError::UnknownFunction(id) => unmangle_id(id, mangler),
-                EvalError::NoDecl(id) => unmangle_id(id, mangler),
-                EvalError::Component(_, id) => unmangle_id(id, mangler),
+                EvalError::UnknownFunction(name) => unmangle_name(name, mangler),
+                EvalError::NoDecl(name) => unmangle_name(name, mangler),
+                EvalError::Component(_, name) => unmangle_name(name, mangler),
                 EvalError::Signature(ty, _) => unmangle_id(&mut ty.ident, mangler),
-                EvalError::UnexpectedTemplate(id) => unmangle_id(id, mangler),
-                EvalError::ParamCount(id, _, _) => unmangle_id(id, mangler),
-                EvalError::NotConst(id) => unmangle_id(id, mangler),
-                EvalError::UninitConst(id) => unmangle_id(id, mangler),
-                EvalError::UninitLet(id) => unmangle_id(id, mangler),
-                EvalError::UninitOverride(id) => unmangle_id(id, mangler),
-                EvalError::DuplicateDecl(id) => unmangle_id(id, mangler),
+                EvalError::UnexpectedTemplate(name) => unmangle_name(name, mangler),
+                EvalError::ParamCount(name, _, _) => unmangle_name(name, mangler),
+                EvalError::NotConst(name) => unmangle_name(name, mangler),
+                EvalError::UninitConst(name) => unmangle_name(name, mangler),
+                EvalError::UninitLet(name) => unmangle_name(name, mangler),
+                EvalError::UninitOverride(name) => unmangle_name(name, mangler),
+                EvalError::DuplicateDecl(name) => unmangle_name(name, mangler),
                 EvalError::ConstAssertFailure(expr) => unmangle_expr(expr, mangler),
                 _ => {}
             },

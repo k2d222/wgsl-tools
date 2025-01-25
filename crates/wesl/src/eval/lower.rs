@@ -349,7 +349,7 @@ impl Lower for TranslationUnit {
             }
             .inspect_err(|_| {
                 decl.ident()
-                    .inspect(|&ident| ctx.set_err_decl_ctx(ident.clone()));
+                    .inspect(|&ident| ctx.set_err_decl_ctx(ident.to_string()));
             })?;
         }
         self.global_declarations.retain(|decl| match decl {

@@ -16,7 +16,7 @@ pub enum Type {
     U32,
     F32,
     F16,
-    Struct(Ident),
+    Struct(String),
     // TODO: swap these two members
     Array(Option<usize>, Box<Type>),
     Vec(u8, Box<Type>),
@@ -175,7 +175,7 @@ impl Ty for LiteralInstance {
 }
 impl Ty for StructInstance {
     fn ty(&self) -> Type {
-        Type::Struct(self.ident().clone())
+        Type::Struct(self.name().to_string())
     }
 }
 
@@ -240,9 +240,9 @@ impl<T: Ty> EvalTy for T {
     }
 }
 
-impl EvalTy for Ident {
+impl EvalTy for str {
     fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError> {
-        match self.name().as_str() {
+        match self {
             "bool" => Ok(Type::Bool),
             "i32" => Ok(Type::I32),
             "u32" => Ok(Type::U32),
@@ -252,7 +252,7 @@ impl EvalTy for Ident {
                 if let Some(ty) = ctx.source.resolve_alias(self) {
                     ty.eval_ty(ctx)
                 } else if ctx.source.decl_struct(self).is_some() {
-                    let ty = Type::Struct(self.clone());
+                    let ty = Type::Struct(self.to_string());
                     Ok(ty)
                 } else {
                     Err(EvalError::UnknownType(self.to_string()))
@@ -312,15 +312,15 @@ impl EvalTy for TypeExpression {
                     Ok(tplt.ty())
                 }
                 _ => {
-                    if let Some(ty) = ctx.source.resolve_alias(&self.ident) {
+                    if let Some(ty) = ctx.source.resolve_alias(&*self.ident.name()) {
                         ty.eval_ty(ctx)
                     } else {
-                        Err(EvalError::UnexpectedTemplate(self.ident.clone()))
+                        Err(EvalError::UnexpectedTemplate(self.ident.to_string()))
                     }
                 }
             }
         } else {
-            self.ident.eval_ty(ctx)
+            self.ident.name().eval_ty(ctx)
         }
     }
 }

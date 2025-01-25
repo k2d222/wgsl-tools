@@ -85,12 +85,11 @@ impl Eval for ParenthesizedExpression {
 
 impl Eval for NamedComponentExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        fn vec_comp(v: &VecInstance, comp: &Ident, r: Option<&RefInstance>) -> Result<Instance, E> {
-            if !check_swizzle(&comp.name()) {
-                return Err(E::Swizzle(comp.clone()));
+        fn vec_comp(v: &VecInstance, comp: &str, r: Option<&RefInstance>) -> Result<Instance, E> {
+            if !check_swizzle(comp) {
+                return Err(E::Swizzle(comp.to_string()));
             }
             let indices = comp
-                .name()
                 .chars()
                 .map(|c| match c {
                     'x' | 'r' => 0usize,
@@ -121,26 +120,26 @@ impl Eval for NamedComponentExpression {
             }
         }
 
-        fn inst_comp(base: Instance, comp: &Ident) -> Result<Instance, E> {
+        fn inst_comp(base: Instance, comp: &str) -> Result<Instance, E> {
             match &base {
                 Instance::Struct(s) => {
                     let val = s.member(comp).ok_or_else(|| {
-                        E::Component(Type::Struct(s.ident().clone()), comp.clone())
+                        E::Component(Type::Struct(s.name().to_string()), comp.to_string())
                     })?;
                     Ok(val.clone())
                 }
                 Instance::Vec(v) => vec_comp(v, comp, None),
                 Instance::Ref(r) => match &*r.read()? {
-                    Instance::Struct(_) => r.view_member(comp.clone()).map(Into::into),
+                    Instance::Struct(_) => r.view_member(comp.to_string()).map(Into::into),
                     Instance::Vec(v) => vec_comp(v, comp, Some(r)),
-                    _ => Err(E::Component(base.ty(), comp.clone())),
+                    _ => Err(E::Component(base.ty(), comp.to_string())),
                 },
-                _ => Err(E::Component(base.ty(), comp.clone())),
+                _ => Err(E::Component(base.ty(), comp.to_string())),
             }
         }
 
         let base = self.base.eval(ctx)?;
-        inst_comp(base, &self.component)
+        inst_comp(base, &*self.component.name())
     }
 }
 
@@ -265,10 +264,11 @@ impl Eval for FunctionCall {
             .is_none()
             .then(|| {
                 ctx.source
-                    .resolve_alias(&self.ty.ident)
+                    .resolve_alias(&*self.ty.ident.name())
                     .unwrap_or(self.ty.clone())
             })
             .unwrap_or(self.ty.clone());
+        let fn_name = ty.ident.to_string();
 
         let args = self
             .arguments
@@ -277,7 +277,7 @@ impl Eval for FunctionCall {
             .collect::<Result<Vec<_>, _>>()?;
 
         // struct constructor
-        if let Some(decl) = ctx.source.decl_struct(&ty.ident) {
+        if let Some(decl) = ctx.source.decl_struct(&fn_name) {
             if args.len() == decl.members.len() {
                 let members = decl
                     .members
@@ -288,24 +288,24 @@ impl Eval for FunctionCall {
                         let inst = inst
                             .convert_to(&ty)
                             .ok_or_else(|| E::ParamType(ty, inst.ty()))?;
-                        Ok((member.ident.clone(), inst))
+                        Ok((member.ident.to_string(), inst))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(StructInstance::new(ty.ident.clone(), members).into())
+                Ok(StructInstance::new(fn_name, members).into())
             } else if args.is_empty() {
-                StructInstance::zero_value(decl.ident.clone(), ctx).map(Into::into)
+                StructInstance::zero_value(&*decl.ident.name(), ctx).map(Into::into)
             } else {
                 Err(E::ParamCount(
-                    decl.ident.clone(),
+                    decl.ident.to_string(),
                     decl.members.len(),
                     args.len(),
                 ))
             }
         }
         // function call
-        else if let Some(decl) = ctx.source.decl_function(&ty.ident) {
+        else if let Some(decl) = ctx.source.decl_function(&fn_name) {
             if !decl.attributes.contains(&Attribute::Const) && ctx.stage == EvalStage::Const {
-                return Err(E::NotConst(decl.ident.clone()));
+                return Err(E::NotConst(decl.ident.to_string()));
             }
 
             if decl.body.attributes.contains(&ATTR_INTRINSIC) {
@@ -314,7 +314,7 @@ impl Eval for FunctionCall {
 
             if self.arguments.len() != decl.parameters.len() {
                 return Err(E::ParamCount(
-                    decl.ident.clone(),
+                    decl.ident.to_string(),
                     decl.parameters.len(),
                     self.arguments.len(),
                 ));
@@ -325,7 +325,7 @@ impl Eval for FunctionCall {
                 .as_ref()
                 .map(|e| e.eval_ty(ctx))
                 .unwrap_or(Ok(Type::Void))
-                .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone()))?;
+                .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.to_string()))?;
 
             ctx.scope.push();
             let flow = {
@@ -338,16 +338,16 @@ impl Eval for FunctionCall {
                             .ok_or_else(|| E::ParamType(param_ty.clone(), arg.ty()))
                     })
                     .collect::<Result<Vec<_>, _>>()
-                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone()))?;
+                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.to_string()))?;
 
                 for (a, p) in zip(args, &decl.parameters) {
-                    ctx.scope.add_val(p.ident.clone(), a);
+                    ctx.scope.add_val(p.ident.to_string(), a);
                 }
 
                 let flow = decl
                     .body
                     .exec(ctx)
-                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone()))?;
+                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.to_string()))?;
                 flow
             };
             ctx.scope.pop();
@@ -364,13 +364,13 @@ impl Eval for FunctionCall {
                 Flow::Return(inst) => inst
                     .convert_to(&ret_ty)
                     .ok_or(E::ReturnType(inst.ty(), ret_ty))
-                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.clone())),
+                    .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.to_string())),
             };
             inst
         }
         // not struct constructor and not function
         else {
-            Err(E::UnknownFunction(ty.ident.clone()))
+            Err(E::UnknownFunction(fn_name))
         }
     }
 }
@@ -378,10 +378,10 @@ impl Eval for FunctionCall {
 impl Eval for TypeExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
         if self.template_args.is_none() {
-            if let Some(r) = ctx.scope.get(&self.ident) {
+            if let Some(r) = ctx.scope.get(&*self.ident.name()) {
                 Ok(r)
             } else {
-                let ty = self.ident.eval_ty(ctx)?;
+                let ty = self.ident.name().eval_ty(ctx)?;
                 Ok(ty.into())
             }
         } else {
