@@ -37,7 +37,7 @@
 //! # use wesl::{Wesl, FileResolver};
 //! fn main() {
 //!     Wesl::new_spec_compliant("src/shaders")
-//!         .build("main.wesl");
+//!         .build_artefact("main.wesl", "my_shader");
 //! }
 //! ```
 //!
@@ -45,8 +45,8 @@
 //! ```rust
 //! # use wesl::include_wesl;
 //! let module = device.create_shader_module(ShaderModuleDescriptor {
-//!     label: Some("main.wesl"),
-//!     source: ShaderSource::Wgsl(include_wesl!("main.wesl")),
+//!     label: Some("my_shader"),
+//!     source: ShaderSource::Wgsl(include_wesl!("my_shader")),
 //! })
 //! ```
 //! NOTE: [`include_wesl`] is a very simple convenience macro.
@@ -189,14 +189,16 @@ fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
     }
 }
 
-/// Include a WGSL file compiled with [`Wesl::build`] as a string.
+/// Include a WGSL file compiled with [`Wesl::build_artefact`] as a string.
+///
+/// The argument corresponds to the `out_name` passed to [`Wesl::build_artefact`].
 ///
 /// This is a very simple convenience macro. See the crate documentation for a usage
 /// example.
 #[macro_export]
 macro_rules! include_wesl {
     ($root:literal) => {
-        include_str!(concat!(env!("OUT_DIR"), "/", $root))
+        include_str!(concat!(env!("OUT_DIR"), "/", $root, ".wgsl"))
     };
 }
 
@@ -756,14 +758,22 @@ impl<R: Resolver> Wesl<R> {
     /// be available with the [`include_wesl`] macro. See the crate documentation for a
     /// usage example.
     ///
+    /// * The first argument is the path to the entrypoint file relative to the base directory.
+    /// * The second argument is the name of the artefact, used in [`include_wesl`].
+    ///
     /// # Panics
     /// Panics when compilation fails or if the output file cannot be written.
     /// Pretty-prints the WESL error message to stderr.
-    pub fn build_artefact(&self, entrypoint: impl AsRef<Path>) {
+    pub fn build_artefact(&self, entrypoint: impl AsRef<Path>, out_name: &str) {
         let entrypoint = entrypoint.as_ref();
         let dirname = std::env::var("OUT_DIR").unwrap();
-        let filename = entrypoint.file_name().unwrap();
-        let output = Path::new(&dirname).join(filename);
+        let out_name = Path::new(out_name);
+        if out_name.iter().count() != 1 || out_name.extension().is_some() {
+            eprintln!("`out_name` cannot contain path separators or file extension");
+            panic!()
+        }
+        let mut output = Path::new(&dirname).join(out_name);
+        output.set_extension("wgsl");
         self.compile(entrypoint)
             .inspect_err(|e| {
                 eprintln!(

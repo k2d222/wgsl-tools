@@ -13,3 +13,7 @@ wesl = { path = "../../crates/wesl" }
 [build-dependencies]
 wesl-random = { path = "../wesl-random" }
 wesl = { path = "../../crates/wesl" }
+
+[features]
+# use WESL at build-time (in build.rs) instead of run-time (in main.rs)
+build-time = []

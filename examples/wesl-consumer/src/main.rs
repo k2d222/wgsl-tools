@@ -1,17 +1,14 @@
-use wesl::include_wesl;
-
 fn main() {
-    // let source = include_wesl!("main.wgsl");
-    // println!("{source}");
+    #[cfg(feature = "build-time")]
+    let source = {
+        use wesl::include_wesl;
+        include_wesl!("main")
+    };
 
-    let mut pkg_resolver = wesl::PkgResolver::new();
-    pkg_resolver.add_package(&wesl_random::random::Mod);
-    let mut file_resolver = wesl::FileResolver::new("src/shaders");
-    file_resolver.set_extension("wgsl");
-    pkg_resolver.mount_fallback_resolver(file_resolver);
-    let source2 = wesl::Wesl::new_spec_compliant()
-        .set_custom_resolver(pkg_resolver)
-        .compile("main.wgsl")
+    #[cfg(not(feature = "build-time"))]
+    let source = wesl::Wesl::new_spec_compliant("src/shaders")
+        .add_package(&wesl_random::random::Mod)
+        .compile("main")
         .inspect_err(|e| {
             eprintln!("{e}");
             panic!();
@@ -19,5 +16,5 @@ fn main() {
         .unwrap()
         .to_string();
 
-    // assert_eq!(source, source2);
+    println!("{source}");
 }
