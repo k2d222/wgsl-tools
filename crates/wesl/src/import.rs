@@ -11,7 +11,7 @@ use wgsl_parse::syntax::{self, Ident, TranslationUnit, TypeExpression};
 
 use crate::{visit::Visit, Mangler, ResolveError, Resolver, Resource};
 
-type Imports = HashMap<Ident, Resource>;
+type Imports = HashMap<Ident, (Resource, Ident)>;
 type Decls = HashMap<Resource, HashSet<usize>>;
 type Modules = HashMap<Resource, Rc<RefCell<Module>>>;
 
@@ -46,21 +46,27 @@ impl Resolutions {
 }
 
 fn resolve_inline_resource(path: &Path, parent_resource: &Resource, imports: &Imports) -> Resource {
-    let prefix = path.iter().next().unwrap().to_str().unwrap();
-    // let suffix = PathBuf::from_iter(path.iter().skip(1));
+    if path.has_root() {
+        // we skip the slash and get the first ident
+        let prefix = path.iter().skip(1).next().unwrap().to_str().unwrap();
 
-    let resource = imports
-        .iter()
-        .find_map(|(ident, res)| {
-            if &*ident.name() == prefix {
-                Some(res.join(PathBuf::from_iter(path.iter().skip(1))))
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| Resource::new(path));
-
-    canonical_resource(resource.path(), Some(parent_resource))
+        imports
+            .iter()
+            .find_map(|(ident, (ext_res, ext_ident))| {
+                if &*ident.name() == prefix {
+                    // import a::b::c as foo; foo::bar::baz() => a::b::c::bar::baz()
+                    let mut res = ext_res.clone(); // a::b
+                    res.push(&*ext_ident.name()); // c
+                    let suffix = PathBuf::from_iter(path.iter().skip(2)); // bar
+                    Some(res.join(suffix))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| Resource::new(path))
+    } else {
+        absolute_resource(path, Some(parent_resource))
+    }
 }
 
 impl Module {
@@ -140,58 +146,54 @@ pub fn resolve(
             }
 
             // get the the resource associated with the type, if it points at a decl in another module.
-            let ext_resource = if let Some(path) = &ty.path {
-                resolve_inline_resource(path, &module.resource, &module.imports)
-            } else if let Some(resource) = module.imports.get(&ty.ident) {
-                resource.clone()
+            let (ext_res, ext_id) = if let Some(path) = &ty.path {
+                let res = resolve_inline_resource(path, &module.resource, &module.imports);
+                let ident = ty.ident.clone();
+                (res, ident)
+            } else if let Some((resource, ident)) = module.imports.get(&ty.ident) {
+                (resource.clone(), ident.clone())
             } else {
+                // points at a local decl, we stop here.
                 if let Some(decl) = module.idents.get(&ty.ident) {
                     local_decls.insert(*decl);
                 }
                 continue;
             };
 
-            // if the import path point at the current module, it must be a local decl
-            if ext_resource == module.resource {
+            // if the import path points at a local decl, we stop here
+            if ext_res == module.resource {
                 if let Some(decl) = module.idents.get(&ty.ident) {
                     local_decls.insert(*decl);
                     continue;
                 } else {
-                    return Err(E::MissingDecl(ext_resource, ty.ident.name().to_string()));
+                    return Err(E::MissingDecl(ext_res, ty.ident.name().to_string()));
                 }
             }
 
             // get or load the external module
-            let ext_mod = load_module(&ext_resource, &mut HashSet::new(), resolutions, resolver)?;
+            let ext_mod = load_module(&ext_res, &mut HashSet::new(), resolutions, resolver)?;
             let mut ext_mod = ext_mod
                 .try_borrow_mut()
                 .map_err(|_| E::CircularDependency(module.resource.clone()))?;
             let ext_mod = ext_mod.deref_mut();
 
             // get the ident of the external declaration pointed to by the type
-            let ext_id = ext_mod
+            let (ext_id, ext_decl) = ext_mod
                 .idents
-                .keys()
-                .find(|id| *id.name() == *ty.ident.name())
-                .cloned();
+                .iter()
+                .find(|(id, _)| *id.name() == *ext_id.name())
+                .map(|(id, decl)| (id.clone(), *decl))
+                .ok_or_else(|| E::MissingDecl(ext_res.clone(), ext_id.to_string()))?;
 
-            if let Some(ext_id) = ext_id {
-                if !ext_mod.treated_idents.contains(&ext_id) {
-                    let decl = *ext_mod
-                        .idents
-                        .get(&ext_id)
-                        .ok_or_else(|| E::MissingDecl(ext_resource.clone(), ext_id.to_string()))?;
-                    extern_decls
-                        .entry(ext_resource)
-                        .or_insert(Default::default())
-                        .insert(decl);
-                }
-
-                ty.path = None;
-                ty.ident = ext_id;
-            } else {
-                return Err(E::MissingDecl(ext_resource, ty.ident.to_string()));
+            if !ext_mod.treated_idents.contains(&ext_id) {
+                extern_decls
+                    .entry(ext_res)
+                    .or_insert(Default::default())
+                    .insert(ext_decl);
             }
+
+            ty.path = None;
+            ty.ident = ext_id;
         }
 
         Ok(())
@@ -273,7 +275,7 @@ pub fn resolve(
     Ok(Resolutions(resolutions, resource.clone()))
 }
 
-pub(crate) fn canonical_resource(
+pub(crate) fn absolute_resource(
     import_path: &Path,
     parent_resource: Option<&Resource>,
 ) -> Resource {
@@ -295,9 +297,9 @@ pub(crate) fn imported_resources(imports: &[syntax::Import], parent_res: &Resour
     for import in imports {
         match &import.content {
             syntax::ImportContent::Item(item) => {
-                let resource = canonical_resource(&import.path, Some(parent_res));
+                let resource = absolute_resource(&import.path, Some(parent_res));
                 let ident = item.rename.as_ref().unwrap_or(&item.ident).clone();
-                res.insert(ident, resource);
+                res.insert(ident, (resource, item.ident.clone()));
             }
             syntax::ImportContent::Collection(imports) => {
                 // prepend the parent import path to the children in the collection

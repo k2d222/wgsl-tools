@@ -2,8 +2,8 @@
   {
     "name": "import ./bar/foo",
     "src": {
-      "./main.wgsl": "\n          import ./bar/foo; \n          fn main() {\n            foo();\n          }\n       ",
-      "./bar.wgsl": "\n          export fn foo() { }\n       "
+      "./main.wgsl": "\n          import super::bar::foo;\n          fn main() {\n            foo();\n          }\n       ",
+      "./bar.wgsl": "\n          fn foo() { }\n       "
     }
   },
   {
@@ -15,105 +15,105 @@
   {
     "name": "import foo as bar",
     "src": {
-      "./main.wgsl": "\n        import ./file1/foo as bar;\n\n        fn main() {\n          bar();\n        }\n      ",
-      "./file1.wgsl": "\n        export fn foo() { /* fooImpl */ }\n      "
+      "./main.wgsl": "\n        import super::file1::foo as bar;\n\n        fn main() {\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        fn foo() { /* fooImpl */ }\n      "
     }
   },
   {
     "name": "import twice doesn't get two copies",
     "src": {
-      "./main.wgsl": "\n        import ./file1/foo;\n        import ./file2/bar;\n\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
-      "./file1.wgsl": "\n        export fn foo() { /* fooImpl */ }\n      ",
-      "./file2.wgsl": "\n        import ./file1/foo;\n        export fn bar() { foo(); }\n      "
+      "./main.wgsl": "\n        import super::file1::foo;\n        import super::file2::bar;\n\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        fn foo() { /* fooImpl */ }\n      ",
+      "./file2.wgsl": "\n        import super::file1::foo;\n        fn bar() { foo(); }\n      "
     }
   },
   {
     "name": "imported fn calls support fn with root conflict",
     "src": {
-      "./main.wgsl": "\n        import foo from ./file1;\n\n        fn main() { foo(); }\n        fn conflicted() { }\n      ",
-      "./file1.wgsl": "\n        export fn foo() {\n          conflicted(0);\n          conflicted(1);\n        }\n        fn conflicted(a:i32) {}\n      "
+      "./main.wgsl": "\n        import super::file1::foo;\n\n        fn main() { foo(); }\n        fn conflicted() { }\n      ",
+      "./file1.wgsl": "\n        fn foo() {\n          conflicted(0);\n          conflicted(1);\n        }\n        fn conflicted(a:i32) {}\n      "
     }
   },
   {
     "name": "import twice with two as names",
     "src": {
-      "./main.wgsl": "\n        import ./file1/foo as bar;\n        import ./file1/foo as zap;\n\n        fn main() { bar(); zap(); }\n      ",
-      "./file1.wgsl": "\n        export fn foo() { }\n      "
+      "./main.wgsl": "\n        import super::file1::foo as bar;\n        import super::file1::foo as zap;\n\n        fn main() { bar(); zap(); }\n      ",
+      "./file1.wgsl": "\n        fn foo() { }\n      "
     }
   },
   {
     "name": "import transitive conflicts with main",
     "src": {
-      "./main.wgsl": "\n        import ./file1/mid;\n\n        fn main() {\n          mid();\n        }\n\n        fn grand() {\n          /* main impl */\n        }\n      ",
-      "./file1.wgsl": "\n        import ./file2/grand;\n        \n        export fn mid() { grand(); }\n      ",
-      "./file2.wgsl": "\n        export fn grand() { /* grandImpl */ }\n      "
+      "./main.wgsl": "\n        import super::file1::mid;\n\n        fn main() {\n          mid();\n        }\n\n        fn grand() {\n          /* main impl */\n        }\n      ",
+      "./file1.wgsl": "\n        import super::file2::grand;\n\n        fn mid() { grand(); }\n      ",
+      "./file2.wgsl": "\n        fn grand() { /* grandImpl */ }\n      "
     }
   },
   {
     "name": "multiple exports from the same module",
     "src": {
-      "./main.wgsl": "\n        import ./file1/{foo, bar};\n\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
-      "./file1.wgsl": "\n        export fn foo() { }\n        export fn bar() { }\n      "
+      "./main.wgsl": "\n        import super::file1::{foo, bar};\n\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        fn foo() { }\n        fn bar() { }\n      "
     }
   },
   {
     "name": "import and resolve conflicting support function",
     "src": {
-      "./main.wgsl": "\n        import ./file1/foo as bar;\n\n        fn support() { \n          bar();\n        }\n      ",
-      "./file1.wgsl": "\n        export\n        fn foo() {\n          support();\n        }\n\n        fn support() { }\n      "
+      "./main.wgsl": "\n        import super::file1::foo as bar;\n\n        fn support() {\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        fn foo() {\n          support();\n        }\n\n        fn support() { }\n      "
     }
   },
   {
     "name": "import support fn that references another import",
     "src": {
-      "./main.wgsl": "\n        import ./file1/foo;\n\n        fn support() { \n          foo();\n        }\n      ",
-      "./file1.wgsl": "\n        import ./file2/bar;\n\n        export fn foo() {\n          support();\n          bar();\n        }\n\n        fn support() { }\n      ",
-      "./file2.wgsl": "\n        export fn bar() {\n          support();\n        }\n\n        fn support() { }\n      "
+      "./main.wgsl": "\n        import super::file1::foo;\n\n        fn support() {\n          foo();\n        }\n      ",
+      "./file1.wgsl": "\n        import super::file2::bar;\n\n        fn foo() {\n          support();\n          bar();\n        }\n\n        fn support() { }\n      ",
+      "./file2.wgsl": "\n        fn bar() {\n          support();\n        }\n\n        fn support() { }\n      "
     }
   },
   {
     "name": "import support fn from two exports",
     "src": {
-      "./main.wgsl": "\n        import ./file1/foo;\n        import ./file1/bar;\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
-      "./file1.wgsl": "\n        export fn foo() {\n          support();\n        }\n\n        export fn bar() {\n          support();\n        }\n\n        fn support() { }\n      "
+      "./main.wgsl": "\n        import super::file1::foo;\n        import super::file1::bar;\n        fn main() {\n          foo();\n          bar();\n        }\n      ",
+      "./file1.wgsl": "\n        fn foo() {\n          support();\n        }\n\n        fn bar() {\n          support();\n        }\n\n        fn support() { }\n      "
     }
   },
   {
     "name": "import a struct",
     "src": {
-      "./main.wgsl": "\n          import ./file1/AStruct;\n\n          fn main() {\n            let a = AStruct(1u); \n          }\n      ",
-      "./file1.wgsl": "\n        export struct AStruct {\n          x: u32,\n        }\n      ",
+      "./main.wgsl": "\n          import super::file1::AStruct;\n\n          fn main() {\n            let a = AStruct(1u);\n          }\n      ",
+      "./file1.wgsl": "\n        struct AStruct {\n          x: u32,\n        }\n      ",
       "./file2.wgsl": "\n      "
     }
   },
   {
     "name": "import fn with support struct constructor",
     "src": {
-      "./main.wgsl": "\n        import ./file1/elemOne;\n\n        fn main() {\n          let ze = elemOne();\n        }\n      ",
-      "./file1.wgsl": "\n        struct Elem {\n          sum: u32\n        }\n\n        export fn elemOne() -> Elem {\n          return Elem(1u);\n        }\n      ",
+      "./main.wgsl": "\n        import super::file1::elemOne;\n\n        fn main() {\n          let ze = elemOne();\n        }\n      ",
+      "./file1.wgsl": "\n        struct Elem {\n          sum: u32\n        }\n\n        fn elemOne() -> Elem {\n          return Elem(1u);\n        }\n      ",
       "./file2.wgsl": "\n      "
     }
   },
   {
     "name": "import a transitive struct",
     "src": {
-      "./main.wgsl": "\n        import ./file1/AStruct;\n\n        struct SrcStruct {\n          a: AStruct,\n        }\n      ",
-      "./file1.wgsl": "\n        import ./file2/BStruct;\n\n        export struct AStruct {\n          s: BStruct,\n        }\n      ",
-      "./file2.wgsl": "\n        export struct BStruct {\n          x: u32,\n        }\n      "
+      "./main.wgsl": "\n        import super::file1::AStruct;\n\n        struct SrcStruct {\n          a: AStruct,\n        }\n      ",
+      "./file1.wgsl": "\n        import super::file2::BStruct;\n\n        struct AStruct {\n          s: BStruct,\n        }\n      ",
+      "./file2.wgsl": "\n        struct BStruct {\n          x: u32,\n        }\n      "
     }
   },
   {
     "name": "'import as' a struct",
     "src": {
-      "./main.wgsl": "\n        import ./file1/AStruct as AA;\n\n        fn foo (a: AA) { }\n      ",
-      "./file1.wgsl": "\n        export struct AStruct { x: u32 }\n      "
+      "./main.wgsl": "\n        import super::file1::AStruct as AA;\n\n        fn foo (a: AA) { }\n      ",
+      "./file1.wgsl": "\n        struct AStruct { x: u32 }\n      "
     }
   },
   {
     "name": "import a struct with name conflicting support struct",
     "src": {
-      "./main.wgsl": "\n        import ./file1/AStruct;\n\n        struct Base {\n          b: i32\n        }\n\n        fn foo() -> AStruct {let a:AStruct; return a;}\n      ",
-      "./file1.wgsl": "\n        struct Base {\n          x: u32\n        }\n\n        export struct AStruct {\n          x: Base\n        }\n      "
+      "./main.wgsl": "\n        import super::file1::AStruct;\n\n        struct Base {\n          b: i32\n        }\n\n        fn foo() -> AStruct {var a:AStruct; return a;}\n      ",
+      "./file1.wgsl": "\n        struct Base {\n          x: u32\n        }\n\n        struct AStruct {\n          x: Base\n        }\n      "
     }
   },
   {
@@ -126,6 +126,77 @@
     "name": "copy diagnostics to output",
     "src": {
       "./main.wgsl": "\n        diagnostic(off,derivative_uniformity);\n      "
+    }
+  },
+  {
+    "name": "struct referenced by a fn param",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::foo;\n\n        fn main() { foo(); }\n      ",
+      "./file1.wgsl": "\n        struct AStruct {\n          x: u32\n        }\n        fn foo(a: AStruct) {\n          let b = a.x;\n        }\n      "
+    }
+  },
+  {
+    "name": "const referenced by imported fn",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::foo;\n\n        fn main() { foo(); }\n      ",
+      "./file1.wgsl": "\n        const conA = 7;\n\n        fn foo() {\n          let a = conA;\n        }\n      "
+    }
+  },
+  {
+    "name": "fn call with a separator",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::foo;\n\n        fn main() { foo::bar(); }\n      ",
+      "./file1/foo.wgsl": "\n        fn bar() { }\n      "
+    }
+  },
+  {
+    "name": "local var to struct",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::AStruct;\n\n        fn main() {\n          var a: AStruct;\n        }\n      ",
+      "./file1.wgsl": "\n        struct AStruct { x: u32 }\n      "
+    }
+  },
+  {
+    "name": "global var to struct",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::Uniforms;\n\n        @group(0) @binding(0) var<uniform> u: Uniforms;\n      ",
+      "./file1.wgsl": "\n        struct Uniforms { model: mat4x4<f32> }\n      "
+    }
+  },
+  {
+    "name": "return type of function",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::A;\n\n        fn b() -> A { }\n      ",
+      "./file1.wgsl": "\n        struct A { y: i32 }\n      "
+    }
+  },
+  {
+    "name": "import a const",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::conA;\n\n        fn m() { let a = conA; }\n      ",
+      "./file1.wgsl": "\n        const conA = 11;\n      "
+    }
+  },
+  {
+    "name": "import an alias",
+    "src": {
+      "./main.wgsl": "\n        import super::file1::aliasA;\n\n        fn m() { let a: aliasA = 4; }\n      ",
+      "./file1.wgsl": "\n        alias aliasA = u32;\n      "
+    }
+  },
+  {
+    "name": "alias f32",
+    "src": {
+      "./main.wgsl": "\n      import super::file1::foo;\n      fn main() { foo(); }\n      ",
+      "./file1.wgsl": "\n      struct AStruct { x: u32 }\n      alias f32 = AStruct;\n      fn foo(a: f32) { }\n      "
+    }
+  },
+  {
+    "name": "fn f32()",
+    "src": {
+      "./main.wgsl": "\n      import super::file1::foo;\n      fn main() { foo(); }\n      ",
+      "./file1.wgsl": "\n      fn f32() { }\n      fn foo() { f32(); }\n      ",
+      "./file2.wgsl": "\n      "
     }
   }
 ]

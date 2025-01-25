@@ -274,7 +274,7 @@ impl Resolver for FileResolver {
 /// runtime-generated files.
 #[derive(Default)]
 pub struct VirtualResolver {
-    files: HashMap<PathBuf, String>,
+    files: HashMap<Resource, String>,
 }
 
 impl VirtualResolver {
@@ -286,15 +286,13 @@ impl VirtualResolver {
 
     /// resolves imports in `path` with the given WESL string.
     pub fn add_module(&mut self, path: impl AsRef<Path>, file: String) {
-        self.files.insert(path.as_ref().to_path_buf(), file);
+        self.files.insert(Resource::new(path), file);
     }
 
     pub fn get_module(&self, resource: &Resource) -> Result<&str, Error> {
-        let path = resource.path();
-        let source = self
-            .files
-            .get(path)
-            .ok_or_else(|| E::FileNotFound(path.to_path_buf(), "virtual module".to_string()))?;
+        let source = self.files.get(resource).ok_or_else(|| {
+            E::FileNotFound(resource.path.to_path_buf(), "virtual module".to_string())
+        })?;
         Ok(source)
     }
 }
