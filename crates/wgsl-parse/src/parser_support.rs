@@ -235,22 +235,35 @@ pub(crate) fn parse_attribute(
             Some(expr) => Ok(Attribute::Id(expr)),
             _ => Err(E::Attribute("id", "expected 1 argument")),
         },
-        "interpolate" => match two_args(args) {
-            Some((e1, e2)) => {
+        "interpolate" => match args {
+            Some(v) if v.len() == 2 => {
+                let (e1, e2) = v.into_iter().collect_tuple().unwrap();
                 let ty = ident(e1).and_then(|id| id.name().parse().ok());
                 let sampling = ident(e2).and_then(|id| id.name().parse().ok());
                 match (ty, sampling) {
                     (Some(ty), Some(sampling)) => {
                         Ok(Attribute::Interpolate(InterpolateAttribute {
                             ty,
-                            sampling,
+                            sampling: Some(sampling),
                         }))
                     }
                     _ => Err(E::Attribute("interpolate", "invalid arguments")),
                 }
             }
+            Some(v) if v.len() == 1 => {
+                let e1 = v.into_iter().next().unwrap();
+                let ty = ident(e1).and_then(|id| id.name().parse().ok());
+                match ty {
+                    Some(ty) => Ok(Attribute::Interpolate(InterpolateAttribute {
+                        ty,
+                        sampling: None,
+                    })),
+                    _ => Err(E::Attribute("interpolate", "invalid arguments")),
+                }
+            }
             _ => Err(E::Attribute("interpolate", "invalid arguments")),
         },
+
         "invariant" => match zero_args(args) {
             true => Ok(Attribute::Invariant),
             false => Err(E::Attribute("invariant", "expected 0 arguments")),

@@ -342,7 +342,11 @@ impl Display for Attribute {
             Attribute::Group(e1) => write!(f, "@group({e1})"),
             Attribute::Id(e1) => write!(f, "@id({e1})"),
             Attribute::Interpolate(InterpolateAttribute { ty, sampling }) => {
-                write!(f, "@interpolate({ty}, {sampling})")
+                if let Some(sampling) = sampling {
+                    write!(f, "@interpolate({ty}, {sampling})")
+                } else {
+                    write!(f, "@interpolate({ty})")
+                }
             }
             Attribute::Invariant => write!(f, "@invariant"),
             Attribute::Location(e1) => write!(f, "@location({e1})"),

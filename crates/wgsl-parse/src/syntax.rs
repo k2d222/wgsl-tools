@@ -302,7 +302,7 @@ pub struct DiagnosticAttribute {
 #[derive(Clone, Debug, PartialEq)]
 pub struct InterpolateAttribute {
     pub ty: InterpolationType,
-    pub sampling: InterpolationSampling,
+    pub sampling: Option<InterpolationSampling>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
