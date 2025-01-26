@@ -1,3 +1,5 @@
+import foo::bar::Baz;
+
 // PCG pseudo random generator from vec2u to vec4f
 // the random output is in the range from zero to 1
 fn pcg_2u_3f(pos: vec2u) -> vec3f {

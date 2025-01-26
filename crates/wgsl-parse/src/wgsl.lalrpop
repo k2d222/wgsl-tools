@@ -1035,7 +1035,7 @@ ImportPath: Import = {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: PathBuf::from_iter(path), content
     },
-    ItemImport => Import {
+    ImportItem => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: Default::default(), content: ImportContent::Item(<>)
     },
@@ -1044,11 +1044,11 @@ ImportPath: Import = {
 #[cfg(feature = "imports")]
 ImportContent: ImportContent = {
     CollectionImport => ImportContent::Collection(<>),
-    ItemImport => ImportContent::Item(<>),
+    ImportItem => ImportContent::Item(<>),
 };
 
 #[cfg(feature = "imports")]
-ItemImport: ImportItem = {
+ImportItem: ImportItem = {
     <ident: Ident> <rename: ("as" <Ident>)?> => ImportItem {
         ident, rename
     }
