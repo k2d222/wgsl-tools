@@ -46,7 +46,8 @@ pub enum Error {
 pub struct Diagnostic<E: std::error::Error> {
     pub error: Box<E>,
     pub source: Option<String>,
-    pub file: Option<Resource>,
+    pub resource: Option<Resource>,
+    pub display_name: Option<String>,
     pub declaration: Option<String>,
     pub span: Option<Span>,
 }
@@ -137,7 +138,8 @@ impl<E: std::error::Error> Diagnostic<E> {
         Self {
             error: Box::new(error),
             source: None,
-            file: None,
+            resource: None,
+            display_name: None,
             declaration: None,
             span: None,
         }
@@ -146,8 +148,9 @@ impl<E: std::error::Error> Diagnostic<E> {
         self.source = Some(source);
         self
     }
-    pub fn with_file(mut self, file: Resource) -> Self {
-        self.file = Some(file);
+    pub fn with_resource(mut self, resource: Resource, disp_name: Option<String>) -> Self {
+        self.resource = Some(resource);
+        self.display_name = disp_name;
         self
     }
 
@@ -159,11 +162,14 @@ impl<E: std::error::Error> Diagnostic<E> {
         self
     }
 
-    pub fn with_sourcemap(mut self, sourcemap: &(impl SourceMap + std::fmt::Debug)) -> Self {
+    pub fn with_sourcemap(mut self, sourcemap: &impl SourceMap) -> Self {
         if let Some(decl) = &self.declaration {
             if let Some((resource, decl)) = sourcemap.get_decl(decl) {
-                self.file = Some(resource.clone());
+                self.resource = Some(resource.clone());
                 self.declaration = Some(decl.to_string());
+                self.display_name = sourcemap
+                    .get_display_name(resource)
+                    .map(|name| name.to_string());
                 self.source = sourcemap
                     .get_source(resource)
                     .map(|s| s.to_string())
@@ -182,40 +188,85 @@ impl<E: std::error::Error> Diagnostic<E> {
         }
         self
     }
+
+    pub fn origin(&self) -> Option<String> {
+        self.display_name
+            .clone()
+            .or_else(|| self.resource.as_ref().map(|res| res.to_string()))
+    }
+
+    pub fn error_message(&self) -> String {
+        self.error.to_string()
+    }
 }
 
 impl Diagnostic<Error> {
-    pub fn unmangle(mut self, mangler: &impl Mangler) -> Self {
-        fn unmangle_id(id: &mut Ident, mangler: &impl Mangler) {
-            let unmangled = mangler.unmangle(&*id.name());
-            if let Some((resource, name)) = unmangled {
-                *id = Ident::new(format!("{resource}::{name}"));
+    // XXX: this function has issues when the root module identifiers are not mangled.
+    pub fn unmangle(
+        mut self,
+        sourcemap: Option<&impl SourceMap>,
+        mangler: Option<&impl Mangler>,
+    ) -> Self {
+        fn unmangle_id(
+            id: &mut Ident,
+            sourcemap: Option<&impl SourceMap>,
+            mangler: Option<&impl Mangler>,
+        ) {
+            let res_name = if let Some(sourcemap) = sourcemap {
+                sourcemap
+                    .get_decl(&*id.name())
+                    .map(|(res, name)| (res.clone(), name.to_string()))
+            } else if let Some(mangler) = mangler {
+                mangler.unmangle(&*id.name())
+            } else {
+                None
+            };
+            if let Some((res, name)) = res_name {
+                *id = Ident::new(format!("{res}::{name}"));
             }
         }
-        fn unmangle_name(mangled: &mut String, mangler: &impl Mangler) {
-            let unmangled = mangler.unmangle(mangled);
-            if let Some((resource, name)) = unmangled {
-                *mangled = format!("{resource}::{name}");
+        fn unmangle_name(
+            mangled: &mut String,
+            sourcemap: Option<&impl SourceMap>,
+            mangler: Option<&impl Mangler>,
+        ) {
+            let res_name = if let Some(sourcemap) = sourcemap {
+                sourcemap
+                    .get_decl(mangled)
+                    .map(|(res, name)| (res.clone(), name.to_string()))
+            } else if let Some(mangler) = mangler {
+                mangler.unmangle(mangled)
+            } else {
+                None
+            };
+            if let Some((res, name)) = res_name {
+                *mangled = format!("{res}::{name}");
             }
         }
-        fn unmangle_expr(expr: &mut Expression, mangler: &impl Mangler) {
+        fn unmangle_expr(
+            expr: &mut Expression,
+            sourcemap: Option<&impl SourceMap>,
+            mangler: Option<&impl Mangler>,
+        ) {
             match expr {
                 Expression::Literal(_) => {}
-                Expression::Parenthesized(e) => unmangle_expr(&mut e.expression, mangler),
-                Expression::NamedComponent(e) => unmangle_expr(&mut e.base, mangler),
-                Expression::Indexing(e) => unmangle_expr(&mut e.base, mangler),
-                Expression::Unary(e) => unmangle_expr(&mut e.operand, mangler),
+                Expression::Parenthesized(e) => {
+                    unmangle_expr(&mut e.expression, sourcemap, mangler)
+                }
+                Expression::NamedComponent(e) => unmangle_expr(&mut e.base, sourcemap, mangler),
+                Expression::Indexing(e) => unmangle_expr(&mut e.base, sourcemap, mangler),
+                Expression::Unary(e) => unmangle_expr(&mut e.operand, sourcemap, mangler),
                 Expression::Binary(e) => {
-                    unmangle_expr(&mut e.left, mangler);
-                    unmangle_expr(&mut e.right, mangler);
+                    unmangle_expr(&mut e.left, sourcemap, mangler);
+                    unmangle_expr(&mut e.right, sourcemap, mangler);
                 }
                 Expression::FunctionCall(e) => {
-                    unmangle_id(&mut e.ty.ident, mangler);
+                    unmangle_id(&mut e.ty.ident, sourcemap, mangler);
                     for arg in &mut e.arguments {
-                        unmangle_expr(arg, mangler);
+                        unmangle_expr(arg, sourcemap, mangler);
                     }
                 }
-                Expression::TypeOrIdentifier(ty) => unmangle_id(&mut ty.ident, mangler),
+                Expression::TypeOrIdentifier(ty) => unmangle_id(&mut ty.ident, sourcemap, mangler),
             }
         }
         match &mut *self.error {
@@ -223,32 +274,32 @@ impl Diagnostic<Error> {
             Error::ValidateError(e) => match e {
                 ValidateError::UndefinedSymbol(id)
                 | ValidateError::ParamCount(id, _, _)
-                | ValidateError::UnknownFunction(id) => unmangle_id(id, mangler),
+                | ValidateError::UnknownFunction(id) => unmangle_id(id, sourcemap, mangler),
             },
             Error::ResolveError(_) => {}
             #[cfg(feature = "imports")]
             Error::ImportError(_) => todo!(),
             #[cfg(feature = "condcomp")]
             Error::CondCompError(e) => match e {
-                CondCompError::InvalidExpression(expr) => unmangle_expr(expr, mangler),
+                CondCompError::InvalidExpression(expr) => unmangle_expr(expr, sourcemap, mangler),
                 CondCompError::InvalidFeatureFlag(_) | CondCompError::MissingFeatureFlag(_) => {}
             },
             #[cfg(feature = "generics")]
             Error::GenericsError(_) => {}
             #[cfg(feature = "eval")]
             Error::EvalError(e) => match e {
-                EvalError::UnknownFunction(name) => unmangle_name(name, mangler),
-                EvalError::NoDecl(name) => unmangle_name(name, mangler),
-                EvalError::Component(_, name) => unmangle_name(name, mangler),
-                EvalError::Signature(ty, _) => unmangle_id(&mut ty.ident, mangler),
-                EvalError::UnexpectedTemplate(name) => unmangle_name(name, mangler),
-                EvalError::ParamCount(name, _, _) => unmangle_name(name, mangler),
-                EvalError::NotConst(name) => unmangle_name(name, mangler),
-                EvalError::UninitConst(name) => unmangle_name(name, mangler),
-                EvalError::UninitLet(name) => unmangle_name(name, mangler),
-                EvalError::UninitOverride(name) => unmangle_name(name, mangler),
-                EvalError::DuplicateDecl(name) => unmangle_name(name, mangler),
-                EvalError::ConstAssertFailure(expr) => unmangle_expr(expr, mangler),
+                EvalError::UnknownFunction(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::NoDecl(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::Component(_, name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::Signature(ty, _) => unmangle_id(&mut ty.ident, sourcemap, mangler),
+                EvalError::UnexpectedTemplate(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::ParamCount(name, _, _) => unmangle_name(name, sourcemap, mangler),
+                EvalError::NotConst(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::UninitConst(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::UninitLet(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::UninitOverride(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::DuplicateDecl(name) => unmangle_name(name, sourcemap, mangler),
+                EvalError::ConstAssertFailure(expr) => unmangle_expr(expr, sourcemap, mangler),
                 _ => {}
             },
             Error::Error(_) => {}
@@ -266,10 +317,7 @@ impl<E: std::error::Error> Display for Diagnostic<E> {
         let title = format!("{}", self.error);
         let mut msg = Level::Error.title(&title);
 
-        let orig = self
-            .file
-            .as_ref()
-            .map(|file| file.path().display().to_string());
+        let orig = self.origin();
 
         if let Some(span) = &self.span {
             let source = self.source.as_deref();

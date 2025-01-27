@@ -193,7 +193,7 @@ impl Module {
             let resource = Resource::new(PathBuf::from(&module.name));
             let mut wesl: TranslationUnit = module.source.parse().map_err(|e| {
                 Diagnostic::from(e)
-                    .with_file(resource)
+                    .with_resource(resource, None)
                     .with_source(module.source.clone())
             })?;
             wesl.retarget_idents();

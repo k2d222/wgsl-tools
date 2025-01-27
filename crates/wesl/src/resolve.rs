@@ -97,6 +97,15 @@ impl Resource {
             path: clean_path(path),
         }
     }
+    pub fn is_package(&self) -> bool {
+        self.path.has_root()
+    }
+    pub fn package_local(&self) -> Option<Resource> {
+        self.is_package().then(|| {
+            let path = self.path.iter().skip(1).collect::<PathBuf>();
+            Resource::new(path)
+        })
+    }
 }
 
 impl Display for Resource {
@@ -131,7 +140,7 @@ pub trait Resolver {
     fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
         let mut wesl: TranslationUnit = source.parse().map_err(|e| {
             Diagnostic::from(e)
-                .with_file(resource.clone())
+                .with_resource(resource.clone(), self.display_name(resource))
                 .with_source(source.to_string())
         })?;
         wesl.retarget_idents(); // it's important to call that early on to have identifiers point at the right declaration.
@@ -141,6 +150,9 @@ pub trait Resolver {
         let source = self.resolve_source(resource)?;
         let wesl = self.source_to_module(&source, resource)?;
         Ok(wesl)
+    }
+    fn display_name(&self, _resource: &Resource) -> Option<String> {
+        None
     }
 }
 
@@ -154,6 +166,9 @@ impl<T: Resolver + ?Sized> Resolver for Box<T> {
     fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
         (**self).resolve_module(resource)
     }
+    fn display_name(&self, resource: &Resource) -> Option<String> {
+        (**self).display_name(resource)
+    }
 }
 
 impl<T: Resolver> Resolver for &T {
@@ -165,6 +180,9 @@ impl<T: Resolver> Resolver for &T {
     }
     fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
         (**self).resolve_module(resource)
+    }
+    fn display_name(&self, resource: &Resource) -> Option<String> {
+        (**self).display_name(resource)
     }
 }
 
@@ -212,6 +230,15 @@ impl<'a> Resolver for CacheResolver<'a> {
 
         Ok(source.clone().into())
     }
+    fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
+        self.resolver.source_to_module(source, resource)
+    }
+    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
+        self.resolver.resolve_module(resource)
+    }
+    fn display_name(&self, resource: &Resource) -> Option<String> {
+        self.resolver.display_name(resource)
+    }
 }
 
 /// A resolver that looks for files in the filesystem.
@@ -236,10 +263,8 @@ impl FileResolver {
     pub fn set_extension(&mut self, extension: &'static str) {
         self.extension = extension;
     }
-}
 
-impl Resolver for FileResolver {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
+    fn file_path(&self, resource: &Resource) -> Result<PathBuf, E> {
         if resource.path().has_root() {
             return Err(E::InvalidResource(
                 resource.clone(),
@@ -252,19 +277,33 @@ impl Resolver for FileResolver {
         if !has_extension {
             path.set_extension(self.extension);
         }
+        if path.exists() {
+            Ok(path)
+        } else if !has_extension {
+            path.set_extension("wgsl");
+            if path.exists() {
+                Ok(path)
+            } else {
+                Err(E::FileNotFound(path, "physical file".to_string()))
+            }
+        } else {
+            Err(E::FileNotFound(path, "physical file".to_string()))
+        }
+    }
+}
 
+impl Resolver for FileResolver {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
+        let path = self.file_path(resource)?;
         let source = fs::read_to_string(&path)
-            .or_else(|e| {
-                if !has_extension {
-                    path.set_extension("wgsl");
-                    fs::read_to_string(&path)
-                } else {
-                    Err(e)
-                }
-            })
             .map_err(|_| E::FileNotFound(path, "physical file".to_string()))?;
 
         Ok(source.into())
+    }
+    fn display_name(&self, resource: &Resource) -> Option<String> {
+        self.file_path(resource)
+            .ok()
+            .map(|path| path.display().to_string())
     }
 }
 
@@ -289,7 +328,7 @@ impl VirtualResolver {
         self.files.insert(Resource::new(path), file);
     }
 
-    pub fn get_module(&self, resource: &Resource) -> Result<&str, Error> {
+    pub fn get_module(&self, resource: &Resource) -> Result<&str, E> {
         let source = self.files.get(resource).ok_or_else(|| {
             E::FileNotFound(resource.path.to_path_buf(), "virtual module".to_string())
         })?;
@@ -299,9 +338,7 @@ impl VirtualResolver {
 
 impl Resolver for VirtualResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
-        let source = self
-            .get_module(resource)
-            .map_err(|e| Diagnostic::from(e).with_file(resource.clone()))?;
+        let source = self.get_module(resource)?;
         Ok(source.into())
     }
 }
@@ -339,16 +376,19 @@ impl<'a, F: ResolveFn> Resolver for Preprocessor<'a, F> {
     fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
         let mut wesl: TranslationUnit = source.parse().map_err(|e| {
             Diagnostic::from(e)
-                .with_file(resource.clone())
+                .with_resource(resource.clone(), self.display_name(resource))
                 .with_source(source.to_string())
         })?;
         wesl.retarget_idents(); // it's important to call that early on to have identifiers point at the right declaration.
         (self.preprocess)(&mut wesl).map_err(|e| {
             Diagnostic::from(e)
-                .with_file(resource.clone())
+                .with_resource(resource.clone(), self.display_name(resource))
                 .with_source(source.to_string())
         })?;
         Ok(wesl)
+    }
+    fn display_name(&self, resource: &Resource) -> Option<String> {
+        self.resolver.display_name(resource)
     }
 }
 
@@ -386,16 +426,8 @@ impl Router {
     pub fn mount_fallback_resolver(&mut self, resolver: impl Resolver + 'static) {
         self.mount_resolver("", resolver);
     }
-}
 
-impl Default for Router {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Resolver for Router {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
+    fn route(&self, resource: &Resource) -> Result<(&Box<dyn Resolver>, Resource), E> {
         let (mount_path, resolver) = self
             .mount_points
             .iter()
@@ -410,7 +442,32 @@ impl Resolver for Router {
         // SAFETY: we just checked that resource.path() starts with mount_path
         let suffix = resource.path().strip_prefix(mount_path).unwrap();
         let resource = Resource::new(suffix.to_path_buf());
+        Ok((resolver, resource))
+    }
+}
+
+impl Default for Router {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Resolver for Router {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
+        let (resolver, resource) = self.route(resource)?;
         resolver.resolve_source(&resource)
+    }
+    fn source_to_module(&self, source: &str, resource: &Resource) -> Result<TranslationUnit, E> {
+        let (resolver, resource) = self.route(resource)?;
+        resolver.source_to_module(source, &resource)
+    }
+    fn resolve_module<'a>(&'a self, resource: &Resource) -> Result<TranslationUnit, E> {
+        let (resolver, resource) = self.route(resource)?;
+        resolver.resolve_module(&resource)
+    }
+    fn display_name(&self, resource: &Resource) -> Option<String> {
+        let (resolver, resource) = self.route(resource).ok()?;
+        resolver.display_name(&resource)
     }
 }
 
@@ -505,11 +562,24 @@ impl StandardResolver {
 
 impl Resolver for StandardResolver {
     fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
-        if resource.path().has_root() {
-            let path = resource.path().iter().skip(1).collect::<PathBuf>();
-            self.pkg.resolve_source(&Resource::new(path))
+        if let Some(res) = resource.package_local() {
+            self.pkg.resolve_source(&res)
         } else {
             self.router.resolve_source(resource)
+        }
+    }
+    fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
+        if let Some(res) = resource.package_local() {
+            self.pkg.resolve_module(&res)
+        } else {
+            self.router.resolve_module(resource)
+        }
+    }
+    fn display_name(&self, resource: &Resource) -> Option<String> {
+        if let Some(res) = resource.package_local() {
+            self.pkg.display_name(&res)
+        } else {
+            self.router.display_name(resource)
         }
     }
 }

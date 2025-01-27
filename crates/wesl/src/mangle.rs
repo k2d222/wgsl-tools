@@ -81,7 +81,7 @@ impl Mangler for EscapeMangler {
         let path = resource.path().with_extension("");
         let path = path
             .iter()
-            .map(|p| p.to_string_lossy().replace('_', "__").replace('/', "crate"))
+            .map(|p| p.to_string_lossy().replace('_', "__").replace('/', "pkg"))
             .format("_")
             .to_string();
         format!("{path}_{}", item.replace('_', "__"))
@@ -91,7 +91,7 @@ impl Mangler for EscapeMangler {
         let mut path_parts = Vec::new();
 
         while let Some(part) = parts.next() {
-            if part == "crate" {
+            if part == "pkg" {
                 path_parts.push("/".to_string());
             } else {
                 let mut part = part.to_string();

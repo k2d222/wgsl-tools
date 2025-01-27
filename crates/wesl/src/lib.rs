@@ -859,8 +859,7 @@ fn compile_impl(
         resolver
     };
 
-    let source = resolver.resolve_source(root_module)?;
-    let wesl = resolver.source_to_module(&source, root_module)?;
+    let wesl = resolver.resolve_module(root_module)?;
 
     // hack, this is passed by &mut just to return it from the function even in error case.
     *root_decls = wesl
@@ -944,7 +943,7 @@ pub fn compile_sourcemap(
     let comp = comp.map_err(|e| match e {
         Error::Error(diagnostic) => diagnostic
             .with_sourcemap(&sourcemap)
-            .unmangle(&mangler)
+            .unmangle(Some(&sourcemap), Some(&mangler))
             .into(),
         _ => e,
     });
