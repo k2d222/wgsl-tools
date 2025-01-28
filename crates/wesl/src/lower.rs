@@ -1,15 +1,13 @@
-use crate::{sourcemap::NoSourceMap, Error, SourceMap};
+use crate::Error;
 
 #[cfg(feature = "attributes")]
 use crate::attributes::query_attrs;
 
 use wgsl_parse::syntax::*;
 
-/// Like [`lower`], but provides better error diagnostics.
-pub fn lower_sourcemap(
-    wesl: &mut TranslationUnit,
-    _sourcemap: &impl SourceMap,
-) -> Result<(), Error> {
+/// Performs conversions on the final syntax tree to make it more compatible with naga,
+/// catch errors early and perform optimizations.
+pub fn lower(wesl: &mut TranslationUnit) -> Result<(), Error> {
     #[cfg(feature = "imports")]
     wesl.imports.clear();
 
@@ -35,12 +33,6 @@ pub fn lower_sourcemap(
         // *wesl = new_wesl;
     }
     Ok(())
-}
-
-/// Performs conversions on the final syntax tree to make it more compatible with naga,
-/// catch errors early and perform optimizations.
-pub fn lower(wesl: &mut TranslationUnit) -> Result<(), Error> {
-    lower_sourcemap(wesl, &NoSourceMap)
 }
 
 /// Eliminate all type aliases.

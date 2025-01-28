@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use wgsl_parse::{
-    error::ParseError,
     span::Span,
     syntax::{Expression, Ident},
 };
@@ -21,7 +20,7 @@ use crate::eval::{Context, EvalError};
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0}")]
-    ParseError(#[from] ParseError),
+    ParseError(#[from] wgsl_parse::Error),
     #[error("{0}")]
     ValidateError(#[from] ValidateError),
     #[error("{0}")]
@@ -46,6 +45,7 @@ pub enum Error {
 pub struct Diagnostic<E: std::error::Error> {
     pub error: Box<E>,
     pub source: Option<String>,
+    pub output: Option<String>,
     pub resource: Option<Resource>,
     pub display_name: Option<String>,
     pub declaration: Option<String>,
@@ -54,15 +54,10 @@ pub struct Diagnostic<E: std::error::Error> {
 
 impl From<wgsl_parse::Error> for Diagnostic<Error> {
     fn from(error: wgsl_parse::Error) -> Self {
-        let mut res = Self::new(Error::ParseError(error.error));
-        res.span = Some(error.span);
+        let span = error.span.clone();
+        let mut res = Self::new(Error::ParseError(error));
+        res.span = Some(span);
         res
-    }
-}
-
-impl From<ParseError> for Diagnostic<Error> {
-    fn from(error: ParseError) -> Self {
-        Self::new(error.into())
     }
 }
 
@@ -138,6 +133,7 @@ impl<E: std::error::Error> Diagnostic<E> {
         Self {
             error: Box::new(error),
             source: None,
+            output: None,
             resource: None,
             display_name: None,
             declaration: None,
@@ -146,6 +142,10 @@ impl<E: std::error::Error> Diagnostic<E> {
     }
     pub fn with_source(mut self, source: String) -> Self {
         self.source = Some(source);
+        self
+    }
+    pub fn with_output(mut self, out: String) -> Self {
+        self.output = Some(out);
         self
     }
     pub fn with_resource(mut self, resource: Resource, disp_name: Option<String>) -> Self {
@@ -278,7 +278,7 @@ impl Diagnostic<Error> {
             },
             Error::ResolveError(_) => {}
             #[cfg(feature = "imports")]
-            Error::ImportError(_) => todo!(),
+            Error::ImportError(_) => {}
             #[cfg(feature = "condcomp")]
             Error::CondCompError(e) => match e {
                 CondCompError::InvalidExpression(expr) => unmangle_expr(expr, sourcemap, mangler),

@@ -117,7 +117,7 @@ pub use generics::GenericsError;
 pub use package::PkgBuilder;
 
 pub use error::{Diagnostic, Error};
-pub use lower::{lower, lower_sourcemap};
+pub use lower::lower;
 pub use mangle::{CacheMangler, EscapeMangler, HashMangler, Mangler, NoMangler, UnicodeMangler};
 pub use resolve::{
     CacheResolver, FileResolver, NoResolver, PkgModule, PkgResolver, Preprocessor, ResolveError,
@@ -840,7 +840,7 @@ fn keep_idents(wesl: &TranslationUnit, keep: &Option<Vec<String>>, strip: bool) 
     }
 }
 
-fn compile_impl(
+fn compile_pre_assembly(
     root_module: &Resource,
     resolver: &impl Resolver,
     mangler: &impl Mangler,
@@ -878,25 +878,30 @@ fn compile_impl(
     } else {
         wesl
     };
-    let mut wesl = wesl;
+    Ok(wesl)
+}
 
+fn compile_post_assembly(
+    wesl: &mut TranslationUnit,
+    options: &CompileOptions,
+) -> Result<(), Error> {
     #[cfg(feature = "generics")]
     if options.use_generics {
-        generics::generate_variants(&mut wesl)?;
-        generics::replace_calls(&mut wesl)?;
+        generics::generate_variants(wesl)?;
+        generics::replace_calls(wesl)?;
     };
-
     if options.use_validate {
         validate(&wesl)?;
     }
-
+    if options.use_lower {
+        lower(wesl)?;
+    }
     // TODO: this is no longer relevant with the new import stripping
     // if options.use_stripping {
     //     let entry_names = options.entry_points.as_ref().unwrap_or(root_decls);
     //     strip_except(&mut wesl, entry_names);
     // }
-
-    Ok(wesl)
+    Ok(())
 }
 
 /// Low-level version of [`Wesl::compile`].
@@ -905,10 +910,10 @@ pub fn compile(
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
-) -> Result<TranslationUnit, Error> {
+) -> Result<TranslationUnit, Diagnostic<Error>> {
     let mut entry_names = Vec::new();
-    let mut wesl = compile_impl(root_module, resolver, mangler, options, &mut entry_names)?;
-    lower(&mut wesl)?;
+    let mut wesl = compile_pre_assembly(root_module, resolver, mangler, options, &mut entry_names)?;
+    compile_post_assembly(&mut wesl, options)?;
     Ok(wesl)
 }
 
@@ -921,7 +926,7 @@ pub fn compile_sourcemap(
 ) -> (Result<TranslationUnit, Error>, BasicSourceMap) {
     let sourcemapper = SourceMapper::new(&resolver, &mangler);
     let mut main_names = Vec::new();
-    let comp = compile_impl(
+    let comp = compile_pre_assembly(
         root_module,
         &sourcemapper,
         &sourcemapper,
@@ -932,21 +937,23 @@ pub fn compile_sourcemap(
     for entry in &main_names {
         sourcemap.add_decl(entry.clone(), root_module.clone(), entry.clone());
     }
-    let comp = if options.use_lower {
-        comp.and_then(|mut wesl| {
-            lower_sourcemap(&mut wesl, &sourcemap)?;
-            Ok(wesl)
-        })
-    } else {
-        comp
-    };
-    let comp = comp.map_err(|e| match e {
-        Error::Error(diagnostic) => diagnostic
+
+    let comp = match comp {
+        Ok(mut wesl) => compile_post_assembly(&mut wesl, options)
+            .map_err(|e| {
+                Diagnostic::from(e)
+                    .with_output(wesl.to_string())
+                    .with_sourcemap(&sourcemap)
+                    .unmangle(Some(&sourcemap), Some(&mangler))
+                    .into()
+            })
+            .map(|()| wesl),
+        Err(e) => Err(Diagnostic::from(e)
             .with_sourcemap(&sourcemap)
             .unmangle(Some(&sourcemap), Some(&mangler))
-            .into(),
-        _ => e,
-    });
+            .into()),
+    };
+
     (comp, sourcemap)
 }
 
