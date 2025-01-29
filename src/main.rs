@@ -453,7 +453,12 @@ fn parse_override(src: &str, wgsl: &TranslationUnit) -> Result<Instance, CliErro
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let cli = Cli::try_parse()
+        .inspect_err(|e| {
+            eprintln!("invalid arguments: {e}");
+            std::process::exit(1)
+        })
+        .unwrap();
     run(cli).inspect_err(|e| eprintln!("{e}")).ok();
 }
 

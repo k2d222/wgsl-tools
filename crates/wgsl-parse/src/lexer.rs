@@ -1,9 +1,10 @@
 //! Prefer using [`Parser::parse_str`]. You shouldn't need to manipulate the lexer.
 
 use crate::{error::CustomLalrError, parser::Parser};
-use lazy_static::lazy_static;
 use logos::{Logos, SpannedIter};
-use std::{fmt::Display, num::NonZeroU8};
+use std::{fmt::Display, num::NonZeroU8, sync::LazyLock};
+
+type Span = std::ops::Range<usize>;
 
 fn maybe_template_end(
     lex: &mut logos::Lexer<Token>,
@@ -11,11 +12,18 @@ fn maybe_template_end(
     lookahead: Option<Token>,
 ) -> Token {
     if let Some(depth) = lex.extras.template_depths.last() {
+        // if found a ">" on the same nesting level as the opening "<", it is a template end.
         if lex.extras.depth == *depth {
-            // found a ">" on the same nesting level as the opening "<"
             lex.extras.template_depths.pop();
-            if lookahead == Some(Token::SymGreaterThan) && !lex.extras.template_depths.is_empty() {
-                lex.extras.lookahead = Some(Token::TemplateArgsEnd);
+            // if lookahead is GreaterThan, we may have a second closing template.
+            // note that >>= can never be (TemplateEnd, TemplateEnd, Equal).
+            if let Some(depth) = lex.extras.template_depths.last() {
+                if lex.extras.depth == *depth && lookahead == Some(Token::SymGreaterThan) {
+                    lex.extras.template_depths.pop();
+                    lex.extras.lookahead = Some(Token::TemplateArgsEnd);
+                } else {
+                    lex.extras.lookahead = lookahead;
+                }
             } else {
                 lex.extras.lookahead = lookahead;
             }
@@ -58,14 +66,13 @@ const HEX_FORMAT: u128 = lexical::NumberFormatBuilder::new()
     .exponent_radix(NonZeroU8::new(10))
     .build();
 
-lazy_static! {
-    static ref FLOAT_HEX_OPTIONS: lexical::parse_float_options::Options =
-        lexical::parse_float_options::OptionsBuilder::new()
-            .exponent(b'p')
-            .decimal_point(b'.')
-            .build()
-            .unwrap();
-}
+static FLOAT_HEX_OPTIONS: LazyLock<lexical::parse_float_options::Options> = LazyLock::new(|| {
+    lexical::parse_float_options::OptionsBuilder::new()
+        .exponent(b'p')
+        .decimal_point(b'.')
+        .build()
+        .unwrap()
+});
 
 fn parse_dec_abstract_int(lex: &mut logos::Lexer<Token>) -> Option<i64> {
     let options = &lexical::parse_integer_options::STANDARD;
@@ -115,9 +122,7 @@ fn parse_dec_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
 
 fn parse_hex_abs_float(lex: &mut logos::Lexer<Token>) -> Option<f64> {
     let str = lex.slice();
-    lexical::parse_with_options::<f64, _, HEX_FORMAT>(str, &FLOAT_HEX_OPTIONS)
-        .inspect_err(|e| println!("ERR {str} {e}"))
-        .ok()
+    lexical::parse_with_options::<f64, _, HEX_FORMAT>(str, &FLOAT_HEX_OPTIONS).ok()
 }
 
 fn parse_dec_f32(lex: &mut logos::Lexer<Token>) -> Option<f32> {
@@ -579,8 +584,8 @@ impl Display for Token {
             Token::U32(n) => write!(f, "{n}u"),
             Token::F32(n) => write!(f, "{n}f"),
             Token::F16(n) => write!(f, "{n}h"),
-            Token::TemplateArgsStart => f.write_str("<"),
-            Token::TemplateArgsEnd => f.write_str(">"),
+            Token::TemplateArgsStart => f.write_str("start of template"),
+            Token::TemplateArgsEnd => f.write_str("end of template"),
             #[cfg(feature = "imports")]
             Token::SymColonColon => write!(f, "::"),
             #[cfg(feature = "imports")]
@@ -603,10 +608,12 @@ pub type Spanned<Tok, Loc, ParseError> = Result<(Loc, Tok, Loc), (Loc, ParseErro
 pub struct Lexer<'s> {
     source: &'s str,
     token_stream: SpannedIter<'s, Token>,
-    next_token: Option<(Result<Token, CustomLalrError>, std::ops::Range<usize>)>,
-    parsing_template: bool,
+    next_token: Option<(Result<Token, CustomLalrError>, Span)>,
+    recognizing_template: bool,
     opened_templates: u32,
 }
+
+type NextToken = Option<(Result<Token, CustomLalrError>, Span)>;
 
 impl<'s> Lexer<'s> {
     pub fn new(source: &'s str) -> Self {
@@ -616,13 +623,65 @@ impl<'s> Lexer<'s> {
             source,
             token_stream,
             next_token,
-            parsing_template: false,
+            recognizing_template: false,
             opened_templates: 0,
         }
     }
 
     pub fn source(&self) -> &str {
         self.source
+    }
+
+    fn take_two_tokens(&mut self) -> (NextToken, NextToken) {
+        let mut tok1 = self.next_token.take();
+
+        let lookahead = self.token_stream.extras.lookahead.take();
+        let tok2 = match lookahead {
+            Some(tok) => {
+                let (_, span1) = tok1.as_mut().unwrap(); // safety: lookahead implies lexer looked at a `<` token
+                let span2 = span1.start + 1..span1.end;
+                span1.end = span1.start + 1;
+                Some((Ok(tok), span2))
+            }
+            None => self.token_stream.next(),
+        };
+
+        (tok1, tok2)
+    }
+
+    fn next_token(&mut self) -> NextToken {
+        let (cur, mut next) = self.take_two_tokens();
+
+        let (cur_tok, cur_span) = match cur {
+            Some((Ok(tok), span)) => (tok, span),
+            Some((Err(e), span)) => return Some((Err(e), span)),
+            None => return None,
+        };
+
+        if let Some((Ok(next_tok), next_span)) = &mut next {
+            if (matches!(cur_tok, Token::Ident(_)) || cur_tok.is_keyword())
+                && *next_tok == Token::SymLessThan
+            {
+                let source = &self.source[next_span.start..];
+                if recognize_template_list(source) {
+                    *next_tok = Token::TemplateArgsStart;
+                    let cur_depth = self.token_stream.extras.depth;
+                    self.token_stream.extras.template_depths.push(cur_depth);
+                    self.opened_templates += 1;
+                }
+            }
+        }
+
+        // if we finished recognition of a template
+        if self.recognizing_template && cur_tok == Token::TemplateArgsEnd {
+            self.opened_templates -= 1;
+            if self.opened_templates == 0 {
+                next = None; // push eof after end of template
+            }
+        }
+
+        self.next_token = next;
+        Some((Ok(cur_tok), cur_span))
     }
 }
 
@@ -671,11 +730,10 @@ pub fn recognize_template_list(source: &str) -> bool {
         Some((Ok(ref mut t), _)) if *t == Token::SymLessThan => *t = Token::TemplateArgsStart,
         _ => return false,
     };
-    lexer.parsing_template = true;
+    lexer.recognizing_template = true;
     lexer.opened_templates = 1;
     lexer.token_stream.extras.template_depths.push(0);
-    let parse = Parser::recognize_template_list(&mut lexer);
-    parse.is_ok()
+    Parser::recognize_template_list(&mut lexer).is_ok()
 }
 
 #[test]
@@ -688,42 +746,8 @@ impl<'s> Iterator for Lexer<'s> {
     type Item = Spanned<Token, usize, CustomLalrError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let cur_token = &self.next_token;
-
-        let lookahead = self.token_stream.extras.lookahead.take();
-        let mut next_token = match lookahead {
-            Some(next_token) => {
-                let (_, span) = cur_token.as_ref().unwrap(); // safety: lookahead implies lexer looked at a token
-                let span = (span.start + 1)..span.end;
-                Some((Ok(next_token), span))
-            }
-            None => self.token_stream.next(),
-        };
-
-        if let (Some((Ok(cur_tok), _)), Some((Ok(next_tok), span))) = (cur_token, &mut next_token) {
-            if (matches!(cur_tok, Token::Ident(_)) || cur_tok.is_keyword())
-                && *next_tok == Token::SymLessThan
-            {
-                let source = &self.source[span.start..];
-                if recognize_template_list(source) {
-                    *next_tok = Token::TemplateArgsStart;
-                    let cur_depth = self.token_stream.extras.depth;
-                    self.token_stream.extras.template_depths.push(cur_depth);
-                    self.opened_templates += 1;
-                }
-            }
-        }
-
-        if self.parsing_template && matches!(cur_token, Some((Ok(Token::TemplateArgsEnd), _))) {
-            self.opened_templates -= 1;
-            if self.opened_templates == 0 {
-                next_token = None; // push eof after end of template
-            }
-        }
-
-        std::mem::swap(&mut self.next_token, &mut next_token);
-
-        next_token.map(|(token, span)| match token {
+        let tok = self.next_token();
+        tok.map(|(tok, span)| match tok {
             Ok(tok) => Ok((span.start, tok, span.end)),
             Err(err) => Err((span.start, err, span.end)),
         })

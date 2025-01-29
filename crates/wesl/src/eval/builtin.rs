@@ -4,7 +4,6 @@ use half::prelude::*;
 use num_traits::{real::Real, FromPrimitive, One, ToBytes, ToPrimitive, Zero};
 
 use itertools::{chain, izip, Itertools};
-use lazy_static::lazy_static;
 use wgsl_parse::syntax::{
     AccessMode, AddressSpace, Attribute, CustomAttribute, Expression, GlobalDeclaration, Ident,
     LiteralExpression, TemplateArg, TranslationUnit, TypeExpression,
@@ -73,50 +72,51 @@ pub fn name_to_builtin_ident(name: &str) -> Option<Ident> {
     }
 }
 
-lazy_static! {
-    pub static ref ATTR_INTRINSIC: Attribute = Attribute::Custom(CustomAttribute {
+pub static ATTR_INTRINSIC: LazyLock<Attribute> = LazyLock::new(|| {
+    Attribute::Custom(CustomAttribute {
         name: "__intrinsic".to_string(),
-        arguments: None
+        arguments: None,
+    })
+});
+
+pub static PRELUDE: LazyLock<TranslationUnit> = LazyLock::new(|| {
+    let mut prelude = include_str!("prelude.wgsl")
+        .parse::<TranslationUnit>()
+        .inspect_err(|e| eprintln!("{e}"))
+        .unwrap();
+
+    let attr_internal = Attribute::Custom(CustomAttribute {
+        name: "internal".to_string(),
+        arguments: None,
     });
-    pub static ref PRELUDE: TranslationUnit = {
-        let mut prelude = include_str!("prelude.wgsl")
-            .parse::<TranslationUnit>()
-            .inspect_err(|e| eprintln!("{e}"))
-            .unwrap();
+    let attr_intrinsic = Attribute::Custom(CustomAttribute {
+        name: "intrinsic".to_string(),
+        arguments: None,
+    });
 
-        let attr_internal = Attribute::Custom(CustomAttribute {
-            name: "internal".to_string(),
-            arguments: None,
-        });
-        let attr_intrinsic = Attribute::Custom(CustomAttribute {
-            name: "intrinsic".to_string(),
-            arguments: None,
-        });
-
-        for decl in &mut prelude.global_declarations {
-            match decl {
-                GlobalDeclaration::Struct(s) => {
-                    if s.attributes.contains(&attr_internal) {
-                        s.ident = Ident::new(format!("__{}", s.ident));
-                    }
+    for decl in &mut prelude.global_declarations {
+        match decl {
+            GlobalDeclaration::Struct(s) => {
+                if s.attributes.contains(&attr_internal) {
+                    s.ident = Ident::new(format!("__{}", s.ident));
                 }
-                GlobalDeclaration::Function(f) => {
-                    if let Some(attr) = f
-                        .body
-                        .attributes
-                        .iter_mut()
-                        .find(|attr| **attr == attr_intrinsic)
-                    {
-                        *attr = ATTR_INTRINSIC.clone();
-                    }
-                }
-                _ => (),
             }
+            GlobalDeclaration::Function(f) => {
+                if let Some(attr) = f
+                    .body
+                    .attributes
+                    .iter_mut()
+                    .find(|attr| **attr == attr_intrinsic)
+                {
+                    *attr = ATTR_INTRINSIC.clone();
+                }
+            }
+            _ => (),
         }
+    }
 
-        prelude
-    };
-}
+    prelude
+});
 
 pub fn call_builtin(
     ty: &TypeExpression,
