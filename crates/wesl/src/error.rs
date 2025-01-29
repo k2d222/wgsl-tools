@@ -144,6 +144,14 @@ impl<E: std::error::Error> Diagnostic<E> {
         self.source = Some(source);
         self
     }
+    pub fn with_span(mut self, span: Span) -> Self {
+        self.span = Some(span);
+        self
+    }
+    pub fn with_declaration(mut self, decl: String) -> Self {
+        self.declaration = Some(decl);
+        self
+    }
     pub fn with_output(mut self, out: String) -> Self {
         self.output = Some(out);
         self
@@ -153,7 +161,6 @@ impl<E: std::error::Error> Diagnostic<E> {
         self.display_name = disp_name;
         self
     }
-
     #[cfg(feature = "eval")]
     pub fn with_ctx(mut self, ctx: &Context) -> Self {
         let (decl, span) = ctx.err_ctx();
@@ -189,7 +196,18 @@ impl<E: std::error::Error> Diagnostic<E> {
         self
     }
 
-    pub fn origin(&self) -> Option<String> {
+    pub fn display_origin(&self) -> String {
+        match (&self.resource, &self.display_name) {
+            (Some(res), Some(name)) => {
+                format!("{res} ({name})")
+            }
+            (Some(res), None) => res.to_string(),
+            (None, Some(name)) => name.to_string(),
+            (None, None) => "unknown module".to_string(),
+        }
+    }
+
+    pub fn display_short_origin(&self) -> Option<String> {
         self.display_name
             .clone()
             .or_else(|| self.resource.as_ref().map(|res| res.to_string()))
@@ -317,7 +335,8 @@ impl<E: std::error::Error> Display for Diagnostic<E> {
         let title = format!("{}", self.error);
         let mut msg = Level::Error.title(&title);
 
-        let orig = self.origin();
+        let orig = self.display_origin();
+        let short_orig = self.display_short_origin();
 
         if let Some(span) = &self.span {
             let source = self.source.as_deref();
@@ -327,8 +346,8 @@ impl<E: std::error::Error> Display for Diagnostic<E> {
                     let annot = Level::Error.span(span.range()).label(&title);
                     let mut snip = Snippet::source(source).fold(true).annotation(annot);
 
-                    if let Some(file) = orig.as_ref() {
-                        snip = snip.origin(file);
+                    if let Some(orig) = &short_orig {
+                        snip = snip.origin(orig);
                     }
 
                     msg = msg.snippet(snip);
@@ -344,11 +363,7 @@ impl<E: std::error::Error> Display for Diagnostic<E> {
 
         let note;
         if let Some(decl) = &self.declaration {
-            if let Some(file) = orig.as_ref() {
-                note = format!("in declaration of `{decl}` in `{file}`");
-            } else {
-                note = format!("in declaration of `{decl}`");
-            }
+            note = format!("in declaration of `{decl}` in {orig}");
             msg = msg.footer(Level::Note.title(&note));
         }
 

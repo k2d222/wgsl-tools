@@ -1,3 +1,4 @@
+use wesl_macros::query;
 use wgsl_parse::syntax::{
     Expression, ExpressionNode, GlobalDeclaration, Ident, TranslationUnit, TypeExpression,
 };
@@ -11,7 +12,7 @@ pub enum ValidateError {
     UndefinedSymbol(Ident),
     #[error("incorrect number of arguments to `{0}`, expected `{1}`, got `{2}`")]
     ParamCount(Ident, usize, usize),
-    #[error("unknown function `{0}`")]
+    #[error("`{0}` is not callable")]
     UnknownFunction(Ident),
 }
 
@@ -311,22 +312,60 @@ const BUILTIN_FUNCTIONS: &[&str] = &[
     "unpack2x16float",
 ];
 
+// note that this function could be simplified if we didn't care about the diagnostics metadata (declaration and expression)
 fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
-    for decl in &wesl.global_declarations {
-        let decl_name = decl.ident().map(|ident| ident.name().to_string());
-        for ty in Visit::<TypeExpression>::visit(decl) {
-            if ty.ident.use_count() == 1 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str())
-            // && !wesl
-            //     .global_declarations
-            //     .iter()
-            //     .filter_map(|decl| decl.ident())
-            //     .any(|ident| ident.name().as_str() == ty.ident.name().as_str())
-            {
-                let mut err = Diagnostic::from(E::UndefinedSymbol(ty.ident.clone()));
-                err.declaration = decl_name;
-                return Err(err);
+    fn check_ty(ty: &TypeExpression) -> Result<(), Diagnostic<Error>> {
+        println!("ty {ty}");
+        if ty.ident.use_count() == 1 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str()) {
+            Err(E::UndefinedSymbol(ty.ident.clone()).into())
+        } else {
+            for arg in ty.template_args.iter().flatten() {
+                check_expr(&arg.expression)?;
             }
+            Ok(())
         }
+    }
+    fn check_expr(expr: &ExpressionNode) -> Result<(), Diagnostic<Error>> {
+        println!("expr {expr}");
+        if let Expression::TypeOrIdentifier(ty) = expr.node() {
+            check_ty(ty).map_err(|d| d.with_span(expr.span().clone()))
+        } else if let Expression::FunctionCall(call) = expr.node() {
+            check_ty(&call.ty).map_err(|d| d.with_span(expr.span().clone()))
+        } else {
+            for expr in Visit::<ExpressionNode>::visit(expr.node()) {
+                check_expr(expr)?;
+            }
+            Ok(())
+        }
+    }
+    fn check_decl(decl: &GlobalDeclaration) -> Result<(), Diagnostic<Error>> {
+        let decl_name = decl.ident().map(|ident| ident.name().to_string());
+        println!("name {decl_name:?}");
+        for expr in Visit::<ExpressionNode>::visit(decl) {
+            check_expr(expr).map_err(|mut d| {
+                d.declaration = decl_name.clone();
+                d
+            })?;
+        }
+
+        // those are the attributes that don't have an expression as parent.
+        // unfortunately the diagnostic won't have a span :(
+        for ty in query!(decl.{
+            GlobalDeclaration::Declaration.ty.[],
+            GlobalDeclaration::TypeAlias.ty,
+            GlobalDeclaration::Struct.members.[].ty,
+            GlobalDeclaration::Function.{ parameters.[].ty, return_type.[] }
+        }) {
+            check_ty(ty).map_err(|mut d| {
+                d.declaration = decl_name.clone();
+                d
+            })?;
+        }
+        Ok(())
+    }
+
+    for decl in &wesl.global_declarations {
+        check_decl(decl)?;
     }
     Ok(())
 }
