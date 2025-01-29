@@ -1,6 +1,6 @@
 use wesl_macros::query;
 use wgsl_parse::syntax::{
-    Expression, ExpressionNode, GlobalDeclaration, Ident, TranslationUnit, TypeExpression,
+    Expression, ExpressionNode, GlobalDeclaration, TranslationUnit, TypeExpression,
 };
 
 use crate::visit::Visit;
@@ -9,11 +9,11 @@ use crate::{Diagnostic, Error};
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ValidateError {
     #[error("cannot find declaration of `{0}`")]
-    UndefinedSymbol(Ident),
+    UndefinedSymbol(String),
     #[error("incorrect number of arguments to `{0}`, expected `{1}`, got `{2}`")]
-    ParamCount(Ident, usize, usize),
+    ParamCount(String, usize, usize),
     #[error("`{0}` is not callable")]
-    UnknownFunction(Ident),
+    UnknownFunction(String),
 }
 
 type E = ValidateError;
@@ -317,7 +317,7 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
     fn check_ty(ty: &TypeExpression) -> Result<(), Diagnostic<Error>> {
         println!("ty {ty}");
         if ty.ident.use_count() == 1 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str()) {
-            Err(E::UndefinedSymbol(ty.ident.clone()).into())
+            Err(E::UndefinedSymbol(ty.ident.to_string()).into())
         } else {
             for arg in ty.template_args.iter().flatten() {
                 check_expr(&arg.expression)?;
@@ -373,36 +373,45 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
 fn check_function_calls(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
     fn check_expr(expr: &Expression, wesl: &TranslationUnit) -> Result<(), E> {
         if let Expression::FunctionCall(call) = expr {
-            if let Some(decl) = wesl.global_declarations.iter().find_map(|decl| match decl {
-                GlobalDeclaration::Function(f) if f.ident == call.ty.ident => Some(f),
-                _ => None,
-            }) {
-                if call.arguments.len() != decl.parameters.len() {
-                    return Err(E::ParamCount(
-                        call.ty.ident.clone(),
-                        decl.parameters.len(),
-                        call.arguments.len(),
-                    ));
-                }
-            } else if let Some(decl) = wesl.global_declarations.iter().find_map(|decl| match decl {
-                GlobalDeclaration::Struct(s) if s.ident == call.ty.ident => Some(s),
-                _ => None,
-            }) {
-                if call.arguments.len() != decl.members.len() && !call.arguments.is_empty() {
-                    return Err(E::ParamCount(
-                        call.ty.ident.clone(),
-                        decl.members.len(),
-                        call.arguments.len(),
-                    ));
-                }
-            } else if BUILTIN_FUNCTIONS
+            let decl = wesl
+                .global_declarations
                 .iter()
-                .any(|name| name == &*call.ty.ident.name())
-            {
-                // TODO: check num args for builtin functions
-            } else {
-                return Err(E::UnknownFunction(call.ty.ident.clone()));
-            }
+                .find(|decl| decl.ident().is_some_and(|id| id == &call.ty.ident));
+
+            match decl {
+                Some(GlobalDeclaration::Function(decl)) => {
+                    if call.arguments.len() != decl.parameters.len() {
+                        return Err(E::ParamCount(
+                            call.ty.ident.to_string(),
+                            decl.parameters.len(),
+                            call.arguments.len(),
+                        ));
+                    }
+                }
+                Some(GlobalDeclaration::Struct(decl)) => {
+                    if call.arguments.len() != decl.members.len() && !call.arguments.is_empty() {
+                        return Err(E::ParamCount(
+                            call.ty.ident.to_string(),
+                            decl.members.len(),
+                            call.arguments.len(),
+                        ));
+                    }
+                }
+                Some(GlobalDeclaration::TypeAlias(_)) => {
+                    // TODO: resolve type-alias
+                }
+                Some(_) => return Err(E::UnknownFunction(call.ty.ident.to_string())),
+                None => {
+                    if BUILTIN_FUNCTIONS
+                        .iter()
+                        .any(|name| name == &*call.ty.ident.name())
+                    {
+                        // TODO: check num args for builtin functions
+                    } else {
+                        return Err(E::UnknownFunction(call.ty.ident.to_string()));
+                    }
+                }
+            };
         }
         Ok(())
     }

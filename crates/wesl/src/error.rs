@@ -290,9 +290,9 @@ impl Diagnostic<Error> {
         match &mut *self.error {
             Error::ParseError(_) => {}
             Error::ValidateError(e) => match e {
-                ValidateError::UndefinedSymbol(id)
-                | ValidateError::ParamCount(id, _, _)
-                | ValidateError::UnknownFunction(id) => unmangle_id(id, sourcemap, mangler),
+                ValidateError::UndefinedSymbol(name)
+                | ValidateError::ParamCount(name, _, _)
+                | ValidateError::UnknownFunction(name) => unmangle_name(name, sourcemap, mangler),
             },
             Error::ResolveError(_) => {}
             #[cfg(feature = "imports")]
