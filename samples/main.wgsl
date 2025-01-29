@@ -1,3 +1,1 @@
-fn bar() {
- return e();
-}
+var<uniform> dispatch: u32;

@@ -60,7 +60,7 @@ const BUILTIN_NAMES: &[&str] = &[
     "texture_storage_3d",
     "vec2",
     "vec3",
-    "vec4 ",
+    "vec4",
     // predeclared aliases
     "vec2i",
     "vec3i",
@@ -93,7 +93,9 @@ const BUILTIN_NAMES: &[&str] = &[
     "mat4x3h",
     "mat4x4h",
     // built-in functions
+    // : bitcast
     "bitcast",
+    // : logical
     "all",
     "any",
     "select",
@@ -158,6 +160,45 @@ const BUILTIN_NAMES: &[&str] = &[
     "tanh",
     "transpose",
     "trunc",
+    // : derivative
+    "dpdx",
+    "dpdxCoarse",
+    "dpdxFine",
+    "dpdy",
+    "dpdyCoarse",
+    "dpdyFine",
+    "fwidth",
+    "fwidthCoarse",
+    "fwidthFine",
+    // : texture
+    "textureDimensions",
+    "textureGather",
+    "textureGatherCompare",
+    "textureLoad",
+    "textureNumLayers",
+    "textureNumLevels",
+    "textureNumSamples",
+    "textureSample",
+    "textureSampleBias",
+    "textureSampleCompare",
+    "textureSampleCompareLevel",
+    "textureSampleGrad",
+    "textureSampleLevel",
+    "textureSampleBaseClampToEdge",
+    "textureStore",
+    // : atomic
+    "atomicLoad",
+    "atomicStore",
+    "atomicAdd",
+    "atomicSub",
+    "atomicMax",
+    "atomicMin",
+    "atomicAnd",
+    "atomicOr",
+    "atomicXor",
+    "atomicExchange",
+    "atomicCompareExchangeWeak",
+    // : packing
     "pack4x8snorm",
     "pack4x8unorm",
     "pack4xI8",
@@ -174,6 +215,64 @@ const BUILTIN_NAMES: &[&str] = &[
     "unpack2x16snorm",
     "unpack2x16unorm",
     "unpack2x16float",
+    // : synchronization
+    "storageBarrier",
+    "textureBarrier",
+    "workgroupBarrier",
+    "workgroupUniformLoad",
+    // : subgroup
+    "subgroupAdd",
+    "subgroupExclusiveAdd",
+    "subgroupInclusiveAdd",
+    "subgroupAll",
+    "subgroupAnd",
+    "subgroupAny",
+    "subgroupBallot",
+    "subgroupBroadcast",
+    "subgroupBroadcastFirst",
+    "subgroupElect",
+    "subgroupMax",
+    "subgroupMin",
+    "subgroupMul",
+    "subgroupExclusiveMul",
+    "subgroupInclusiveMul",
+    "subgroupOr",
+    "subgroupShuffle",
+    "subgroupShuffleDown",
+    "subgroupShuffleUp",
+    "subgroupShuffleXor",
+    "subgroupXor",
+    // : quad
+    "quadBroadcast",
+    "quadSwapDiagonal",
+    "quadSwapX",
+    "quadSwapY",
+    // : predeclared enumerants
+    "read",
+    "write",
+    "read_write",
+    "function",
+    "private",
+    "workgroup",
+    "uniform",
+    "storage",
+    "rgba8unorm",
+    "rgba8snorm",
+    "rgba8uint",
+    "rgba8sint",
+    "rgba16uint",
+    "rgba16sint",
+    "rgba16float",
+    "r32uint",
+    "r32sint",
+    "r32float",
+    "rg32uint",
+    "rg32sint",
+    "rg32float",
+    "rgba32uint",
+    "rgba32sint",
+    "rgba32float",
+    "bgra8unorm",
 ];
 
 const BUILTIN_FUNCTIONS: &[&str] = &[
@@ -196,7 +295,7 @@ const BUILTIN_FUNCTIONS: &[&str] = &[
     "mat4x4",
     "vec2",
     "vec3",
-    "vec4 ",
+    "vec4",
     // predeclared aliases
     "vec2i",
     "vec3i",
@@ -229,7 +328,9 @@ const BUILTIN_FUNCTIONS: &[&str] = &[
     "mat4x3h",
     "mat4x4h",
     // built-in functions
+    // : bitcast
     "bitcast",
+    // : logical
     "all",
     "any",
     "select",
@@ -294,6 +395,45 @@ const BUILTIN_FUNCTIONS: &[&str] = &[
     "tanh",
     "transpose",
     "trunc",
+    // : derivative
+    "dpdx",
+    "dpdxCoarse",
+    "dpdxFine",
+    "dpdy",
+    "dpdyCoarse",
+    "dpdyFine",
+    "fwidth",
+    "fwidthCoarse",
+    "fwidthFine",
+    // : texture
+    "textureDimensions",
+    "textureGather",
+    "textureGatherCompare",
+    "textureLoad",
+    "textureNumLayers",
+    "textureNumLevels",
+    "textureNumSamples",
+    "textureSample",
+    "textureSampleBias",
+    "textureSampleCompare",
+    "textureSampleCompareLevel",
+    "textureSampleGrad",
+    "textureSampleLevel",
+    "textureSampleBaseClampToEdge",
+    "textureStore",
+    // : atomic
+    "atomicLoad",
+    "atomicStore",
+    "atomicAdd",
+    "atomicSub",
+    "atomicMax",
+    "atomicMin",
+    "atomicAnd",
+    "atomicOr",
+    "atomicXor",
+    "atomicExchange",
+    "atomicCompareExchangeWeak",
+    // : packing
     "pack4x8snorm",
     "pack4x8unorm",
     "pack4xI8",
@@ -310,12 +450,43 @@ const BUILTIN_FUNCTIONS: &[&str] = &[
     "unpack2x16snorm",
     "unpack2x16unorm",
     "unpack2x16float",
+    // : synchronization
+    "storageBarrier",
+    "textureBarrier",
+    "workgroupBarrier",
+    "workgroupUniformLoad",
+    // : subgroup
+    "subgroupAdd",
+    "subgroupExclusiveAdd",
+    "subgroupInclusiveAdd",
+    "subgroupAll",
+    "subgroupAnd",
+    "subgroupAny",
+    "subgroupBallot",
+    "subgroupBroadcast",
+    "subgroupBroadcastFirst",
+    "subgroupElect",
+    "subgroupMax",
+    "subgroupMin",
+    "subgroupMul",
+    "subgroupExclusiveMul",
+    "subgroupInclusiveMul",
+    "subgroupOr",
+    "subgroupShuffle",
+    "subgroupShuffleDown",
+    "subgroupShuffleUp",
+    "subgroupShuffleXor",
+    "subgroupXor",
+    // : quad
+    "quadBroadcast",
+    "quadSwapDiagonal",
+    "quadSwapX",
+    "quadSwapY",
 ];
 
 // note that this function could be simplified if we didn't care about the diagnostics metadata (declaration and expression)
 fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
     fn check_ty(ty: &TypeExpression) -> Result<(), Diagnostic<Error>> {
-        println!("ty {ty}");
         if ty.ident.use_count() == 1 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str()) {
             Err(E::UndefinedSymbol(ty.ident.to_string()).into())
         } else {
@@ -326,7 +497,6 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
         }
     }
     fn check_expr(expr: &ExpressionNode) -> Result<(), Diagnostic<Error>> {
-        println!("expr {expr}");
         if let Expression::TypeOrIdentifier(ty) = expr.node() {
             check_ty(ty).map_err(|d| d.with_span(expr.span().clone()))
         } else if let Expression::FunctionCall(call) = expr.node() {
@@ -340,7 +510,6 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
     }
     fn check_decl(decl: &GlobalDeclaration) -> Result<(), Diagnostic<Error>> {
         let decl_name = decl.ident().map(|ident| ident.name().to_string());
-        println!("name {decl_name:?}");
         for expr in Visit::<ExpressionNode>::visit(decl) {
             check_expr(expr).map_err(|mut d| {
                 d.declaration = decl_name.clone();
