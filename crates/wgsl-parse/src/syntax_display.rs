@@ -36,8 +36,9 @@ impl<T: Display> Display for Indent<T> {
 impl Display for TranslationUnit {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if cfg!(feature = "imports") && !self.imports.is_empty() {
-            let imports = self.imports.iter().format("\n");
-            write!(f, "{imports}\n\n")?;
+            for import in &self.imports {
+                writeln!(f, "import {import}\n")?;
+            }
         }
         if !self.global_directives.is_empty() {
             let directives = self.global_directives.iter().format("\n");
@@ -72,9 +73,9 @@ impl Display for Import {
                 _ => "?",
             })
             .format("::");
-        let relative = if self.path.has_root() { "" } else { "crate::" };
+        let absolute = if self.path.has_root() { "crate::" } else { "" };
         let content = &self.content;
-        write!(f, "{relative}{path}::{content};")
+        write!(f, "{absolute}{path}::{content};")
     }
 }
 
