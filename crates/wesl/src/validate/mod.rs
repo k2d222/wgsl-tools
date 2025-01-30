@@ -13,7 +13,7 @@ pub enum ValidateError {
     #[error("incorrect number of arguments to `{0}`, expected `{1}`, got `{2}`")]
     ParamCount(String, usize, usize),
     #[error("`{0}` is not callable")]
-    UnknownFunction(String),
+    NotCallable(String),
 }
 
 type E = ValidateError;
@@ -569,7 +569,7 @@ fn check_function_calls(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>>
                 Some(GlobalDeclaration::TypeAlias(_)) => {
                     // TODO: resolve type-alias
                 }
-                Some(_) => return Err(E::UnknownFunction(call.ty.ident.to_string())),
+                Some(_) => return Err(E::NotCallable(call.ty.ident.to_string())),
                 None => {
                     if BUILTIN_FUNCTIONS
                         .iter()
@@ -577,7 +577,8 @@ fn check_function_calls(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>>
                     {
                         // TODO: check num args for builtin functions
                     } else {
-                        return Err(E::UnknownFunction(call.ty.ident.to_string()));
+                        // the ident is not a global declaration, it must be a local variable.
+                        return Err(E::NotCallable(call.ty.ident.to_string()));
                     }
                 }
             };

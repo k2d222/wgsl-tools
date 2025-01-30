@@ -292,7 +292,7 @@ impl Diagnostic<Error> {
             Error::ValidateError(e) => match e {
                 ValidateError::UndefinedSymbol(name)
                 | ValidateError::ParamCount(name, _, _)
-                | ValidateError::UnknownFunction(name) => unmangle_name(name, sourcemap, mangler),
+                | ValidateError::NotCallable(name) => unmangle_name(name, sourcemap, mangler),
             },
             Error::ResolveError(_) => {}
             #[cfg(feature = "imports")]

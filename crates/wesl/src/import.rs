@@ -37,6 +37,25 @@ pub(crate) struct Module {
     imports: Imports,
 }
 
+impl Module {
+    fn new(source: TranslationUnit, resource: Resource) -> Self {
+        let idents = source
+            .global_declarations
+            .iter()
+            .enumerate()
+            .filter_map(|(i, decl)| decl.ident().map(|id| (id.clone(), i)))
+            .collect();
+        let imports = imported_resources(&source.imports, &resource);
+        Self {
+            source,
+            resource,
+            idents,
+            treated_idents: Default::default(),
+            imports,
+        }
+    }
+}
+
 pub(crate) struct Resolutions {
     modules: Modules,
     order: Vec<Resource>,
@@ -72,25 +91,6 @@ fn resolve_inline_resource(path: &Path, parent_resource: &Resource, imports: &Im
             .unwrap_or_else(|| Resource::new(path))
     } else {
         absolute_resource(path, Some(parent_resource))
-    }
-}
-
-impl Module {
-    fn new(source: TranslationUnit, resource: Resource) -> Self {
-        let idents = source
-            .global_declarations
-            .iter()
-            .enumerate()
-            .filter_map(|(i, decl)| decl.ident().map(|id| (id.clone(), i)))
-            .collect();
-        let imports = imported_resources(&source.imports, &resource);
-        Self {
-            source,
-            resource,
-            idents,
-            treated_idents: Default::default(),
-            imports,
-        }
     }
 }
 
@@ -367,17 +367,23 @@ impl Resolutions {
     pub fn assemble(&self, strip: bool) -> TranslationUnit {
         let mut wesl = TranslationUnit::default();
         for module in self.modules() {
-            let source = module.source.clone();
             if strip {
-                wesl.global_declarations
-                    .extend(source.global_declarations.into_iter().filter(|decl| {
-                        decl.is_const_assert()
-                            || decl
-                                .ident()
-                                .is_some_and(|id| module.treated_idents.contains(id))
-                    }));
+                wesl.global_declarations.extend(
+                    module
+                        .source
+                        .global_declarations
+                        .iter()
+                        .filter(|decl| {
+                            decl.is_const_assert()
+                                || decl
+                                    .ident()
+                                    .is_some_and(|id| module.treated_idents.contains(id))
+                        })
+                        .cloned(),
+                );
             } else {
-                wesl.global_declarations.extend(source.global_declarations);
+                wesl.global_declarations
+                    .extend(module.source.global_declarations.clone());
             }
         }
         wesl

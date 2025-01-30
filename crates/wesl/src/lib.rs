@@ -874,16 +874,18 @@ fn compile_pre_assembly(
         let keep = keep_idents(&wesl, &options.entry_points, options.use_stripping);
         let mut resolution = import::resolve(wesl, root_resource, keep, &resolver)?;
         resolution.mangle(mangler)?;
-        if options.use_validate {
-            for module in resolution.modules() {
-                validate(&module.source).map_err(|d| {
-                    d.with_resource(
-                        module.resource.clone(),
-                        resolver.display_name(&module.resource),
-                    )
-                })?;
-            }
-        }
+        // TODO: unfortunately validate() does not work with resolution because the imported identifiers
+        // do not point to a declaration in the TranslationUnit and the use_count is broken.
+        // if options.use_validate {
+        //     for module in resolution.modules() {
+        //         validate(&module.source).map_err(|d| {
+        //             d.with_resource(
+        //                 module.resource.clone(),
+        //                 resolver.display_name(&module.resource),
+        //             )
+        //         })?;
+        //     }
+        // }
         resolution.assemble(options.use_stripping)
     } else {
         wesl
