@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     ops::DerefMut,
     path::{Path, PathBuf},
@@ -42,6 +42,14 @@ pub(crate) struct Resolutions(Modules, Resource);
 impl Resolutions {
     pub(crate) fn root_resource(&self) -> &Resource {
         &self.1
+    }
+    pub(crate) fn modules(&self) -> impl Iterator<Item = (&Resource, Ref<TranslationUnit>)> {
+        self.0.iter().map(|(res, m)| {
+            (
+                res,
+                std::cell::Ref::<'_, Module>::map(m.borrow(), |m| &m.source),
+            )
+        })
     }
 }
 

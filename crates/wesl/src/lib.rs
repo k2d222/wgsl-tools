@@ -841,7 +841,7 @@ fn keep_idents(wesl: &TranslationUnit, keep: &Option<Vec<String>>, strip: bool) 
 }
 
 fn compile_pre_assembly(
-    root_module: &Resource,
+    root_resource: &Resource,
     resolver: &impl Resolver,
     mangler: &impl Mangler,
     options: &CompileOptions,
@@ -859,7 +859,7 @@ fn compile_pre_assembly(
         resolver
     };
 
-    let wesl = resolver.resolve_module(root_module)?;
+    let wesl = resolver.resolve_module(root_resource)?;
 
     // hack, this is passed by &mut just to return it from the function even in error case.
     *root_decls = wesl
@@ -872,8 +872,14 @@ fn compile_pre_assembly(
     #[cfg(feature = "imports")]
     let wesl = if options.use_imports {
         let keep = keep_idents(&wesl, &options.entry_points, options.use_stripping);
-        let mut resolution = import::resolve(wesl, root_module, keep, &resolver)?;
+        let mut resolution = import::resolve(wesl, root_resource, keep, &resolver)?;
         resolution.mangle(mangler)?;
+        if options.use_validate {
+            for (res, module) in resolution.modules() {
+                validate(&module)
+                    .map_err(|d| d.with_resource(res.clone(), resolver.display_name(res)))?;
+            }
+        }
         resolution.assemble(options.use_stripping)
     } else {
         wesl
