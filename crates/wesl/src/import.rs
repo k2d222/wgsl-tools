@@ -29,27 +29,25 @@ pub enum ImportError {
 
 type E = ImportError;
 
-struct Module {
-    source: TranslationUnit,
-    resource: Resource,
+pub(crate) struct Module {
+    pub(crate) source: TranslationUnit,
+    pub(crate) resource: Resource,
     idents: HashMap<Ident, usize>,  // lookup (ident, decl_index)
     treated_idents: HashSet<Ident>, // used idents that have already been usage-analyzed
     imports: Imports,
 }
 
-pub(crate) struct Resolutions(Modules, Resource);
+pub(crate) struct Resolutions {
+    modules: Modules,
+    order: Vec<Resource>,
+}
 
 impl Resolutions {
     pub(crate) fn root_resource(&self) -> &Resource {
-        &self.1
+        &self.order.first().unwrap() // safety: always a root module
     }
-    pub(crate) fn modules(&self) -> impl Iterator<Item = (&Resource, Ref<TranslationUnit>)> {
-        self.0.iter().map(|(res, m)| {
-            (
-                res,
-                std::cell::Ref::<'_, Module>::map(m.borrow(), |m| &m.source),
-            )
-        })
+    pub(crate) fn modules(&self) -> impl Iterator<Item = Ref<Module>> {
+        self.order.iter().map(|res| self.modules[res].borrow())
     }
 }
 
@@ -106,10 +104,10 @@ pub fn resolve(
     fn load_module(
         resource: &Resource,
         local_decls: &mut HashSet<usize>,
-        resolutions: &mut Modules,
+        resolutions: &mut Resolutions,
         resolver: &impl Resolver,
     ) -> Result<Rc<RefCell<Module>>, E> {
-        if let Some(module) = resolutions.get(resource) {
+        if let Some(module) = resolutions.modules.get(resource) {
             Ok(module.clone())
         } else {
             let source = resolver.resolve_module(resource)?;
@@ -126,7 +124,7 @@ pub fn resolve(
             local_decls.extend(const_asserts);
 
             let module = Rc::new(RefCell::new(module));
-            resolutions.insert(resource.clone(), module.clone());
+            resolutions.push_module(resource.clone(), module.clone());
 
             Ok(module)
         }
@@ -137,7 +135,7 @@ pub fn resolve(
         decl: usize,
         local_decls: &mut HashSet<usize>,
         extern_decls: &mut Decls,
-        resolutions: &mut Modules,
+        resolutions: &mut Resolutions,
         resolver: &impl Resolver,
     ) -> Result<(), E> {
         let decl = module.source.global_declarations.get_mut(decl).unwrap();
@@ -212,7 +210,7 @@ pub fn resolve(
         local_decls: &mut HashSet<usize>,
         extern_decls: &mut Decls,
         resolver: &impl Resolver,
-        resolutions: &mut Modules,
+        resolutions: &mut Resolutions,
     ) -> Result<(), E> {
         let module = load_module(&resource, &mut HashSet::new(), resolutions, resolver)?;
         let mut module = module
@@ -241,7 +239,7 @@ pub fn resolve(
         Ok(())
     }
 
-    let mut resolutions = Modules::new();
+    let mut resolutions = Resolutions::new();
     let module = Module::new(root, resource.clone());
 
     let mut keep_decls: HashSet<usize> = keep
@@ -270,7 +268,7 @@ pub fn resolve(
     decls.insert(resource.clone(), keep_decls);
 
     let module = Rc::new(RefCell::new(module));
-    resolutions.insert(resource.clone(), module.clone());
+    resolutions.push_module(resource.clone(), module.clone());
 
     while !decls.is_empty() {
         for (resource, decls) in &mut decls {
@@ -280,7 +278,7 @@ pub fn resolve(
         next_decls.clear();
     }
 
-    Ok(Resolutions(resolutions, resource.clone()))
+    Ok(resolutions)
 }
 
 pub(crate) fn absolute_resource(
@@ -345,9 +343,19 @@ fn mangle_decls<'a>(
 }
 
 impl Resolutions {
+    fn new() -> Self {
+        Resolutions {
+            modules: Default::default(),
+            order: Default::default(),
+        }
+    }
+    fn push_module(&mut self, resource: Resource, module: Rc<RefCell<Module>>) {
+        self.modules.insert(resource.clone(), module);
+        self.order.push(resource);
+    }
     pub fn mangle(&mut self, mangler: &impl Mangler) -> Result<(), E> {
         let root_resource = self.root_resource().clone();
-        for (resource, module) in self.0.iter_mut() {
+        for (resource, module) in self.modules.iter_mut() {
             if resource != &root_resource {
                 let mut module = module.borrow_mut();
                 mangle_decls(&mut module.source, resource, mangler);
@@ -358,8 +366,7 @@ impl Resolutions {
 
     pub fn assemble(&self, strip: bool) -> TranslationUnit {
         let mut wesl = TranslationUnit::default();
-        for module in self.0.values() {
-            let module = module.borrow();
+        for module in self.modules() {
             let source = module.source.clone();
             if strip {
                 wesl.global_declarations

@@ -1,6 +1,4 @@
-//! The Command-line interface for the `wgsl-tools` suite.
-//!
-//! Very much a work in progress.
+//! The Command-line interface for `wesl-rs`.
 
 use clap::{command, Args, Parser, Subcommand, ValueEnum};
 use std::{
