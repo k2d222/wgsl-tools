@@ -95,6 +95,10 @@ struct CompOptsArgs {
     /// Disable performing validation checks
     #[arg(long)]
     no_validate: bool,
+    /// Disable performing validation checks with naga
+    #[cfg(feature = "naga")]
+    #[arg(long)]
+    no_naga: bool,
     /// Root module declaration names to keep. Keeps all root module declarations by
     /// default. Can be repeated to keep multiple declarations
     #[arg(long)]
@@ -518,7 +522,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
                     })
                 })?;
             #[cfg(feature = "naga")]
-            if !args.options.no_validate {
+            if !args.options.no_naga {
                 let source = comp.to_string();
                 naga::front::wgsl::parse_str(&source).map_err(|e| CliError::Naga(e, source))?;
             }
