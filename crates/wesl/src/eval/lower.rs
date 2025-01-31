@@ -1,9 +1,65 @@
-use crate::eval::{Context, Eval, EvalError, Exec};
+use std::iter::zip;
+
+use crate::{
+    eval::{Context, Eval, EvalError, Exec},
+    visit::Visit,
+};
+use wesl_macros::query_mut;
 use wgsl_parse::{span::Spanned, syntax::*};
 
 use super::{to_expr::ToExpr, SyntaxUtil, EXPR_FALSE, EXPR_TRUE};
 
 type E = EvalError;
+
+// TODO: I am aware that it is not correct to make all implicit conversions explicit.
+// I should fix that at some point, but meanwhile it fixes Naga not supporting automatic conversions.
+pub fn make_explicit_conversions(wesl: &mut TranslationUnit, ctx: &Context) {
+    fn explicit_call(call: &mut FunctionCall, ctx: &Context) {
+        let decl = ctx.source.decl_function(&*call.ty.ident.name());
+        if let Some(decl) = decl {
+            for (arg, param) in zip(&mut call.arguments, &decl.parameters) {
+                *arg.node_mut() = Expression::FunctionCall(FunctionCall {
+                    ty: param.ty.clone(),
+                    arguments: vec![arg.clone()],
+                })
+            }
+        }
+    }
+    fn explicit_expr(expr: &mut Expression, ctx: &Context) {
+        if let Expression::FunctionCall(call) = expr {
+            explicit_call(call, ctx);
+        }
+        for expr in Visit::<ExpressionNode>::visit_mut(expr) {
+            explicit_expr(expr, ctx);
+        }
+    }
+    for expr in Visit::<ExpressionNode>::visit_mut(wesl) {
+        explicit_expr(expr, ctx);
+    }
+
+    fn explicit_stat(stat: &mut Statement, ret: &TypeExpression, ctx: &Context) {
+        if let Statement::Return(stat) = stat {
+            if let Some(expr) = &mut stat.expression {
+                *expr.node_mut() = Expression::FunctionCall(FunctionCall {
+                    ty: ret.clone(),
+                    arguments: vec![expr.clone()],
+                })
+            }
+        } else if let Statement::FunctionCall(stat) = stat {
+            explicit_call(&mut stat.call, ctx);
+        }
+        for stat in Visit::<StatementNode>::visit_mut(stat) {
+            explicit_stat(stat, ret, ctx);
+        }
+    }
+    for decl in query_mut!(wesl.global_declarations.[].GlobalDeclaration::Function) {
+        if let Some(ret) = &decl.return_type {
+            for stat in &mut decl.body.statements {
+                explicit_stat(stat, ret, ctx);
+            }
+        }
+    }
+}
 
 pub trait Lower {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E>;

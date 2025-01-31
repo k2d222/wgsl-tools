@@ -25,10 +25,11 @@ pub fn lower(wesl: &mut TranslationUnit, _keep: &[String]) -> Result<(), Error> 
 
     #[cfg(feature = "eval")]
     {
-        use crate::eval::{mark_functions_const, Context, Lower};
+        use crate::eval::{make_explicit_conversions, mark_functions_const, Context, Lower};
         mark_functions_const(wesl);
         let wesl2 = wesl.clone();
         let mut ctx = Context::new(&wesl2);
+        make_explicit_conversions(wesl, &ctx);
         wesl.lower(&mut ctx)
             .map_err(|e| Diagnostic::from(e).with_ctx(&ctx))?;
 
