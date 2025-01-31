@@ -1,4 +1,5 @@
-import super::imp1::foo;
-fn main() -> u32 {
-    return foo();
+import super::imp1::fib;
+
+fn main() {
+    let x = fib(10);
 }

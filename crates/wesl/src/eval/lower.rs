@@ -87,7 +87,7 @@ impl Lower for Expression {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
         match self.eval_value(ctx) {
             Ok(inst) => *self = inst.to_expr(ctx)?,
-            Err(e) => match self {
+            Err(_) => match self {
                 Expression::Literal(_) => (),
                 Expression::Parenthesized(expr) => expr.expression.lower(ctx)?,
                 Expression::NamedComponent(expr) => expr.base.lower(ctx)?,
@@ -100,15 +100,7 @@ impl Lower for Expression {
                     expr.left.lower(ctx)?;
                     expr.right.lower(ctx)?;
                 }
-                Expression::FunctionCall(expr) => {
-                    let decl = ctx.source.decl_function(&*expr.ty.ident.name());
-                    if let Some(decl) = decl {
-                        if decl.attributes.contains(&Attribute::Const) {
-                            return Err(e);
-                        }
-                    }
-                    expr.lower(ctx)?
-                }
+                Expression::FunctionCall(expr) => expr.lower(ctx)?,
                 Expression::TypeOrIdentifier(_) => {
                     if let Ok(expr) = self.eval_value(ctx).and_then(|inst| inst.to_expr(ctx)) {
                         *self = expr;
@@ -207,6 +199,9 @@ impl Lower for Struct {
 
 impl Lower for Function {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        if self.attributes.contains(&Attribute::Const) && self.return_type.is_none() {
+            self.body.statements.clear();
+        }
         self.attributes.lower(ctx)?;
         for p in &mut self.parameters {
             p.attributes.lower(ctx)?;
@@ -300,10 +295,10 @@ impl Lower for Statement {
                     *self = Statement::Void;
                 }
             }
-            Statement::Break(_)
-            | Statement::Continue(_)
-            | Statement::Return(_)
-            | Statement::Discard(_) => (),
+            Statement::Break(_) => (),
+            Statement::Continue(_) => (),
+            Statement::Return(stat) => stat.lower(ctx)?,
+            Statement::Discard(_) => (),
             Statement::FunctionCall(stat) => {
                 let decl = ctx.source.decl_function(&*stat.call.ty.ident.name());
                 if let Some(decl) = decl {
@@ -433,6 +428,13 @@ impl Lower for WhileStatement {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
         self.condition.lower(ctx)?;
         self.body.lower(ctx)?;
+        Ok(())
+    }
+}
+
+impl Lower for ReturnStatement {
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.expression.lower(ctx)?;
         Ok(())
     }
 }
