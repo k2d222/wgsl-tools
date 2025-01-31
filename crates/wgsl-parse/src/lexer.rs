@@ -390,8 +390,8 @@ pub enum Token {
     #[token("super")]
     KwSuper,
     #[cfg(feature = "imports")]
-    #[token("crate")]
-    KwCrate,
+    #[token("package")]
+    KwPackage,
     #[cfg(feature = "imports")]
     #[token("as")]
     KwAs,
@@ -593,7 +593,7 @@ impl Display for Token {
             #[cfg(feature = "imports")]
             Token::KwSuper => write!(f, "super"),
             #[cfg(feature = "imports")]
-            Token::KwCrate => write!(f, "crate"),
+            Token::KwPackage => write!(f, "package"),
             #[cfg(feature = "imports")]
             Token::KwAs => write!(f, "as"),
             #[cfg(feature = "imports")]

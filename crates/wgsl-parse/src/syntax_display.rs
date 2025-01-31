@@ -73,7 +73,11 @@ impl Display for Import {
                 _ => "?",
             })
             .format("::");
-        let absolute = if self.path.has_root() { "crate::" } else { "" };
+        let absolute = if self.path.has_root() {
+            "package::"
+        } else {
+            ""
+        };
         let content = &self.content;
         write!(f, "{absolute}{path}::{content};")
     }

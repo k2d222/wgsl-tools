@@ -124,7 +124,7 @@ impl Display for Resource {
         } else if self.path.starts_with(".") || self.path.starts_with("..") {
             write!(f, "{}", fmt_path(self.path.components()))
         } else {
-            write!(f, "crate::{}", fmt_path(self.path.components()))
+            write!(f, "package::{}", fmt_path(self.path.components()))
         }
     }
 }

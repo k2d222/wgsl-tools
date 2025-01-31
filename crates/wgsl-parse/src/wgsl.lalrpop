@@ -112,7 +112,7 @@ extern {
         #[cfg(feature = "imports")]
         "super" => Token::KwSuper,
         #[cfg(feature = "imports")]
-        "crate" => Token::KwCrate,
+        "package" => Token::KwPackage,
         #[cfg(feature = "imports")]
         "as" => Token::KwAs,
         #[cfg(feature = "imports")]
@@ -1018,13 +1018,14 @@ pub Import: Import = {
 
 #[cfg(feature = "imports")]
 ImportRelative: PathBuf = {
-    "self" "::" <parents: ("super" "::")*> => {
-        PathBuf::from_iter(std::iter::once(".").chain(parents.iter().map(|_| "..")))
-    },
+    // "self" is no longer part of the spec.
+    // "self" "::" <parents: ("super" "::")*> => {
+    //     PathBuf::from_iter(std::iter::once(".").chain(parents.iter().map(|_| "..")))
+    // },
     "super" "::" <parents: ("super" "::")*> => {
         PathBuf::from_iter(std::iter::once("..").chain(parents.iter().map(|_| "..")))
     },
-    "crate" "::" => {
+    "package" "::" => {
         PathBuf::from("")
     },
 };
