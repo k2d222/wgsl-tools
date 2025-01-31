@@ -258,16 +258,7 @@ impl Eval for BinaryExpression {
 
 impl Eval for FunctionCall {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
-        let ty = self
-            .ty
-            .template_args
-            .is_none()
-            .then(|| {
-                ctx.source
-                    .resolve_alias(&*self.ty.ident.name())
-                    .unwrap_or(self.ty.clone())
-            })
-            .unwrap_or(self.ty.clone());
+        let ty = ctx.source.resolve_ty(&self.ty);
         let fn_name = ty.ident.to_string();
 
         let args = self

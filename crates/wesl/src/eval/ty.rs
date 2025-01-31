@@ -311,13 +311,7 @@ impl EvalTy for TypeExpression {
                     let tplt = AtomicTemplate::parse(tplt, ctx)?;
                     Ok(tplt.ty())
                 }
-                _ => {
-                    if let Some(ty) = ctx.source.resolve_alias(&*self.ident.name()) {
-                        ty.eval_ty(ctx)
-                    } else {
-                        Err(EvalError::UnexpectedTemplate(self.ident.to_string()))
-                    }
-                }
+                _ => Err(EvalError::UnexpectedTemplate(self.ident.to_string())),
             }
         } else {
             self.ident.name().eval_ty(ctx)

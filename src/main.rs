@@ -124,7 +124,11 @@ impl From<&CompOptsArgs> for CompileOptions {
             use_stripping: !opts.no_strip,
             use_lower: !opts.no_lower,
             use_validate: !opts.no_validate,
-            entry_points: opts.keep.clone(),
+            entry_points: if opts.no_strip {
+                None
+            } else {
+                opts.keep.clone()
+            },
             features,
         }
     }

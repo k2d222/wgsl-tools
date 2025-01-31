@@ -23,7 +23,7 @@
 //! It is made with the ultimate goal to implement spec-compliant language extensions.
 //! This is why this parser doesn't borrow strings.
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use derive_more::{From, IsVariant};
 
@@ -40,19 +40,18 @@ pub struct TranslationUnit {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
-pub struct Ident(Arc<Mutex<String>>);
+pub struct Ident(Arc<RwLock<String>>);
 
 impl Ident {
     pub fn new(name: String) -> Ident {
-        Ident(Arc::new(Mutex::new(name)))
+        Ident(Arc::new(RwLock::new(name)))
     }
-    pub fn name(&self) -> MutexGuard<'_, String> {
-        self.0.lock().unwrap()
+    pub fn name(&self) -> RwLockReadGuard<'_, String> {
+        self.0.read().unwrap()
     }
 
     pub fn rename(&mut self, name: String) {
-        let mut old = self.name();
-        *old = name;
+        *self.0.write().unwrap() = name;
     }
     pub fn use_count(&self) -> usize {
         Arc::<_>::strong_count(&self.0)

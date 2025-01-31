@@ -1,7 +1,7 @@
-use crate::eval::{exec::with_stage, Context, Eval, EvalError, Exec};
+use crate::eval::{Context, Eval, EvalError, Exec};
 use wgsl_parse::{span::Spanned, syntax::*};
 
-use super::{to_expr::ToExpr, EvalStage, EXPR_TRUE};
+use super::{to_expr::ToExpr, SyntaxUtil, EXPR_FALSE, EXPR_TRUE};
 
 type E = EvalError;
 
@@ -9,9 +9,20 @@ pub trait Lower {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E>;
 }
 
-impl Lower for Spanned<Expression> {
+impl<T: Lower> Lower for Option<T> {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        self.node_mut().lower(ctx)?;
+        if let Some(x) = self {
+            x.lower(ctx)?;
+        }
+        Ok(())
+    }
+}
+
+impl<T: Lower> Lower for Spanned<T> {
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.node_mut()
+            .lower(ctx)
+            .inspect_err(|_| ctx.set_err_expr_ctx(self.span()))?;
         Ok(())
     }
 }
@@ -20,8 +31,8 @@ impl Lower for Expression {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
         match self.eval_value(ctx) {
             Ok(inst) => *self = inst.to_expr(ctx)?,
-            Err(_) => match self {
-                Expression::Literal(_) => *self = self.eval_value(ctx)?.to_expr(ctx)?,
+            Err(e) => match self {
+                Expression::Literal(_) => (),
                 Expression::Parenthesized(expr) => expr.expression.lower(ctx)?,
                 Expression::NamedComponent(expr) => expr.base.lower(ctx)?,
                 Expression::Indexing(expr) => {
@@ -33,8 +44,20 @@ impl Lower for Expression {
                     expr.left.lower(ctx)?;
                     expr.right.lower(ctx)?;
                 }
-                Expression::FunctionCall(expr) => expr.lower(ctx)?,
-                Expression::TypeOrIdentifier(_) => *self = self.eval_value(ctx)?.to_expr(ctx)?,
+                Expression::FunctionCall(expr) => {
+                    let decl = ctx.source.decl_function(&*expr.ty.ident.name());
+                    if let Some(decl) = decl {
+                        if decl.attributes.contains(&Attribute::Const) {
+                            return Err(e);
+                        }
+                    }
+                    expr.lower(ctx)?
+                }
+                Expression::TypeOrIdentifier(_) => {
+                    if let Ok(expr) = self.eval_value(ctx).and_then(|inst| inst.to_expr(ctx)) {
+                        *self = expr;
+                    }
+                }
             },
         }
         Ok(())
@@ -42,22 +65,22 @@ impl Lower for Expression {
 }
 
 impl Lower for FunctionCall {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
-        // todo!()
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        for arg in &mut self.arguments {
+            arg.lower(ctx)?;
+        }
         Ok(())
     }
 }
 
 impl Lower for TemplateArgs {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        with_stage!(ctx, EvalStage::Const, {
-            if let Some(tplts) = self {
-                for tplt in tplts {
-                    tplt.expression.lower(ctx)?;
-                }
+        if let Some(tplts) = self {
+            for tplt in tplts {
+                tplt.expression.lower(ctx)?;
             }
-            Ok(())
-        })
+        }
+        Ok(())
     }
 }
 
@@ -87,12 +110,8 @@ impl Lower for Attributes {
                 }
                 Attribute::WorkgroupSize(attr) => {
                     attr.x.lower(ctx)?;
-                    if let Some(y) = &mut attr.y {
-                        y.lower(ctx)?
-                    }
-                    if let Some(z) = &mut attr.z {
-                        z.lower(ctx)?
-                    }
+                    attr.y.lower(ctx)?;
+                    attr.z.lower(ctx)?;
                 }
                 Attribute::Custom(_) => {
                     // we ignore unknown attributes for now. We don't know how they are implemented.
@@ -107,12 +126,8 @@ impl Lower for Attributes {
 impl Lower for Declaration {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
         self.attributes.lower(ctx)?;
-        if let Some(ty) = &mut self.ty {
-            ty.lower(ctx)?;
-        }
-        if let Some(init) = &mut self.initializer {
-            init.lower(ctx)?;
-        }
+        self.ty.lower(ctx)?;
+        self.initializer.lower(ctx)?;
         Ok(())
     }
 }
@@ -136,18 +151,13 @@ impl Lower for Struct {
 
 impl Lower for Function {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        if self.attributes.contains(&Attribute::Const) {
-            return Ok(());
-        }
         self.attributes.lower(ctx)?;
         for p in &mut self.parameters {
             p.attributes.lower(ctx)?;
             p.ty.lower(ctx)?;
         }
         self.return_attributes.lower(ctx)?;
-        if let Some(ret) = &mut self.return_type {
-            ret.lower(ctx)?;
-        }
+        self.return_type.lower(ctx)?;
         self.body.lower(ctx)?;
         Ok(())
     }
@@ -161,7 +171,6 @@ impl Lower for ConstAssert {
 
 impl Lower for Statement {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        self.exec(ctx)?;
         match self {
             Statement::Void => (),
             Statement::Compound(stat) => {
@@ -177,25 +186,80 @@ impl Lower for Statement {
             Statement::Decrement(stat) => stat.lower(ctx)?,
             Statement::If(stat) => {
                 stat.lower(ctx)?;
-                if stat.if_clause.expression.node() == &EXPR_TRUE {
-                    if stat.if_clause.body.statements.is_empty() {
-                        *self = Statement::Void;
-                    } else if let [stat] = stat.if_clause.body.statements.as_slice() {
-                        *self = stat.node().clone();
-                    } else {
-                        *self = Statement::Compound(stat.if_clause.body.clone())
+
+                // remove clauses evaluating to false
+                stat.else_if_clauses
+                    .retain(|clause| *clause.expression != EXPR_FALSE);
+
+                // remove subsequent clauses after a true
+                if let Some(i) = stat
+                    .else_if_clauses
+                    .iter()
+                    .position(|clause| *clause.expression == EXPR_TRUE)
+                {
+                    stat.else_if_clauses.resize_with(i + 1, || unreachable!());
+                    stat.else_clause = None;
+                }
+
+                macro_rules! assign_clause {
+                    ($stat:ident, $body:expr) => {
+                        if $body.statements.is_empty() {
+                            *$stat = Statement::Void;
+                        } else if let [s1] = $body.statements.as_slice() {
+                            *$stat = s1.node().clone();
+                        } else {
+                            *$stat = Statement::Compound($body.clone())
+                        }
+                    };
+                }
+
+                // remove the whole statement if the first clause is true
+                if *stat.if_clause.expression == EXPR_TRUE {
+                    assign_clause!(self, stat.if_clause.body);
+                } else if *stat.if_clause.expression == EXPR_FALSE {
+                    if let Some(clause) = stat.else_if_clauses.first() {
+                        if *clause.expression == EXPR_TRUE {
+                            assign_clause!(self, clause.body);
+                        }
+                    } else if let Some(clause) = &stat.else_clause {
+                        assign_clause!(self, clause.body);
                     }
                 }
             }
             Statement::Switch(stat) => stat.lower(ctx)?,
             Statement::Loop(stat) => stat.lower(ctx)?,
-            Statement::For(stat) => stat.lower(ctx)?,
-            Statement::While(stat) => stat.lower(ctx)?,
-            Statement::Break(stat) => stat.lower(ctx)?,
-            Statement::Continue(stat) => stat.lower(ctx)?,
-            Statement::Return(stat) => stat.lower(ctx)?,
-            Statement::Discard(stat) => stat.lower(ctx)?,
-            Statement::FunctionCall(stat) => stat.lower(ctx)?,
+            Statement::For(stat) => {
+                stat.lower(ctx)?;
+                if stat
+                    .condition
+                    .as_ref()
+                    .is_some_and(|cond| **cond == EXPR_FALSE)
+                {
+                    *self = Statement::Void;
+                }
+            }
+            Statement::While(stat) => {
+                stat.lower(ctx)?;
+                if *stat.condition == EXPR_FALSE {
+                    *self = Statement::Void;
+                }
+            }
+            Statement::Break(_)
+            | Statement::Continue(_)
+            | Statement::Return(_)
+            | Statement::Discard(_) => (),
+            Statement::FunctionCall(stat) => {
+                let decl = ctx.source.decl_function(&*stat.call.ty.ident.name());
+                if let Some(decl) = decl {
+                    if decl.attributes.contains(&Attribute::Const) {
+                        *self = Statement::Void; // a void const function does nothing
+                    } else {
+                        stat.lower(ctx)?
+                    }
+                } else {
+                    stat.lower(ctx)?
+                }
+            }
             Statement::ConstAssert(stat) => stat.exec(ctx).map(|_| ())?,
             Statement::Declaration(stat) => stat.lower(ctx)?,
         }
@@ -288,50 +352,38 @@ impl Lower for SwitchStatement {
 }
 
 impl Lower for LoopStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.body.lower(ctx)?;
+        if let Some(cont) = &mut self.continuing {
+            cont.body.lower(ctx)?;
+            if let Some(break_if) = &mut cont.break_if {
+                break_if.expression.lower(ctx)?;
+            }
+        }
         Ok(())
     }
 }
 
 impl Lower for ForStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.initializer.lower(ctx)?;
+        self.condition.lower(ctx)?;
+        self.body.lower(ctx)?;
         Ok(())
     }
 }
 
 impl Lower for WhileStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
-        Ok(())
-    }
-}
-
-impl Lower for BreakStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
-        Ok(())
-    }
-}
-
-impl Lower for ContinueStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
-        Ok(())
-    }
-}
-
-impl Lower for ReturnStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
-        Ok(())
-    }
-}
-
-impl Lower for DiscardStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.condition.lower(ctx)?;
+        self.body.lower(ctx)?;
         Ok(())
     }
 }
 
 impl Lower for FunctionCallStatement {
-    fn lower(&mut self, _ctx: &mut Context) -> Result<(), E> {
-        Ok(())
+    fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.call.lower(ctx)
     }
 }
 

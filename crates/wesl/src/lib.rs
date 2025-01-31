@@ -896,6 +896,7 @@ fn compile_pre_assembly(
 fn compile_post_assembly(
     wesl: &mut TranslationUnit,
     options: &CompileOptions,
+    keep: &[String],
 ) -> Result<(), Error> {
     #[cfg(feature = "generics")]
     if options.use_generics {
@@ -906,13 +907,8 @@ fn compile_post_assembly(
         validate(&wesl)?;
     }
     if options.use_lower {
-        lower(wesl)?;
+        lower(wesl, keep)?;
     }
-    // TODO: this is no longer relevant with the new import stripping
-    // if options.use_stripping {
-    //     let entry_names = options.entry_points.as_ref().unwrap_or(root_decls);
-    //     strip_except(&mut wesl, entry_names);
-    // }
     Ok(())
 }
 
@@ -923,9 +919,10 @@ pub fn compile(
     mangler: &impl Mangler,
     options: &CompileOptions,
 ) -> Result<TranslationUnit, Diagnostic<Error>> {
-    let mut entry_names = Vec::new();
-    let mut wesl = compile_pre_assembly(root_module, resolver, mangler, options, &mut entry_names)?;
-    compile_post_assembly(&mut wesl, options)?;
+    let mut root_names = Vec::new();
+    let mut wesl = compile_pre_assembly(root_module, resolver, mangler, options, &mut root_names)?;
+    let keep = options.entry_points.as_deref().unwrap_or(&root_names);
+    compile_post_assembly(&mut wesl, options, keep)?;
     Ok(wesl)
 }
 
@@ -937,21 +934,22 @@ pub fn compile_sourcemap(
     options: &CompileOptions,
 ) -> (Result<TranslationUnit, Error>, BasicSourceMap) {
     let sourcemapper = SourceMapper::new(&resolver, &mangler);
-    let mut main_names = Vec::new();
+    let mut root_names = Vec::new();
     let comp = compile_pre_assembly(
         root_module,
         &sourcemapper,
         &sourcemapper,
         options,
-        &mut main_names,
+        &mut root_names,
     );
     let mut sourcemap = sourcemapper.finish();
-    for entry in &main_names {
-        sourcemap.add_decl(entry.clone(), root_module.clone(), entry.clone());
+    for name in &root_names {
+        sourcemap.add_decl(name.clone(), root_module.clone(), name.clone());
     }
+    let keep = options.entry_points.as_deref().unwrap_or(&root_names);
 
     let comp = match comp {
-        Ok(mut wesl) => compile_post_assembly(&mut wesl, options)
+        Ok(mut wesl) => compile_post_assembly(&mut wesl, options, keep)
             .map_err(|e| {
                 Diagnostic::from(e)
                     .with_output(wesl.to_string())

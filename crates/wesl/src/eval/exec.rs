@@ -367,6 +367,8 @@ impl Exec for ContinuingStatement {
 impl Exec for ForStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         if let Some(init) = &self.initializer {
+            // TODO: is this correct?
+            // https://github.com/gpuweb/gpuweb/issues/5024
             ctx.scope.push();
             let flow = init.exec(ctx)?;
             if flow != Flow::Next {
@@ -503,7 +505,7 @@ impl Exec for ConstAssertStatement {
 // TODO: implement address space
 impl Exec for Declaration {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        if ctx.scope.has(&*self.ident.name()) {
+        if ctx.scope.contains(&*self.ident.name()) {
             return Err(E::DuplicateDecl(self.ident.to_string()));
         }
 

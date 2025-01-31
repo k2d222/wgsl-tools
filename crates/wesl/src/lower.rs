@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::{Diagnostic, Error};
 
 #[cfg(feature = "attributes")]
 use crate::attributes::query_attrs;
@@ -7,7 +7,7 @@ use wgsl_parse::syntax::*;
 
 /// Performs conversions on the final syntax tree to make it more compatible with naga,
 /// catch errors early and perform optimizations.
-pub fn lower(wesl: &mut TranslationUnit) -> Result<(), Error> {
+pub fn lower(wesl: &mut TranslationUnit, _keep: &[String]) -> Result<(), Error> {
     #[cfg(feature = "imports")]
     wesl.imports.clear();
 
@@ -21,16 +21,32 @@ pub fn lower(wesl: &mut TranslationUnit) -> Result<(), Error> {
 
     remove_type_aliases(wesl);
     remove_global_consts(wesl);
+    // remove_abstract_types(wesl);
 
     #[cfg(feature = "eval")]
     {
-        // TODO
-        // let mut ctx = Context::new(wesl);
-        // let mut new_wesl = wesl.clone();
-        // new_wesl
-        //     .lower(&mut ctx)
-        //     .map_err(|e| Error::from(e).to_diagnostic(&ctx, sourcemap))?;
-        // *wesl = new_wesl;
+        use crate::eval::{mark_functions_const, Context, Lower};
+        mark_functions_const(wesl);
+        let wesl2 = wesl.clone();
+        let mut ctx = Context::new(&wesl2);
+        wesl.lower(&mut ctx)
+            .map_err(|e| Diagnostic::from(e).with_ctx(&ctx))?;
+
+        // lowering makes const function unused, so we remove them if not in keep list.
+        wesl.global_declarations.retain_mut(|decl| {
+            if let GlobalDeclaration::Function(decl) = decl {
+                if decl.attributes.contains(&Attribute::Const)
+                    && !_keep.contains(&*decl.ident.name())
+                {
+                    false
+                } else {
+                    decl.attributes.retain(|attr| *attr != Attribute::Const);
+                    true
+                }
+            } else {
+                true
+            }
+        });
     }
     Ok(())
 }
@@ -92,3 +108,59 @@ pub fn remove_global_consts(wesl: &mut TranslationUnit) {
             .rename(format!("({})", decl.initializer.unwrap()));
     }
 }
+
+// /// Eliminate most uses of AbstractInt and AbstractFloat.
+// /// Naga doesn't like automatic type conversions in several places:
+// /// * return statements
+// /// * function calls
+// /// * shift when lhs is abstract
+// /// * ...probably more?
+// trait MakeExplicit {
+//     fn make_explicit(&mut self, scope: &mut Scope);
+// }
+
+// struct Scope {
+//     // TODO: copy on write
+//     stack: Vec<HashMap<String, TypeExpression>>,
+// }
+
+// impl Scope {
+//     fn new() -> Self {
+//         Self {
+//             stack: vec![Default::default()],
+//         }
+//     }
+//     pub fn push(&mut self) {
+//         self.stack.push(Default::default())
+//     }
+//     pub fn pop(&mut self) {
+//         self.stack.pop().expect("failed to pop scope");
+//     }
+//     pub fn insert(&mut self, name: String, ty: TypeExpression) {
+//         self.stack.last_mut().unwrap().insert(name, ty);
+//     }
+//     pub fn contains(&self, name: &str) -> bool {
+//         self.stack
+//             .iter()
+//             .rev()
+//             .any(|scope| scope.contains_key(name))
+//     }
+//     pub fn get(&self, name: &str) -> Option<&TypeExpression> {
+//         self.stack.iter().rev().find_map(|scope| scope.get(name))
+//     }
+// }
+
+// impl MakeExplicit for TranslationUnit {
+//     fn make_explicit(&mut self, scope: &mut Scope) {
+//         for decl in &mut self.global_declarations {
+//             match decl {
+//                 GlobalDeclaration::Void => todo!(),
+//                 GlobalDeclaration::Declaration(decl) => decl.make_explicit(),
+//                 GlobalDeclaration::TypeAlias(decl) => decl.make_explicit(),
+//                 GlobalDeclaration::Struct(decl) => decl.make_explicit(),
+//                 GlobalDeclaration::Function(decl) => decl.make_explicit(),
+//                 GlobalDeclaration::ConstAssert(decl) => decl.make_explicit(),
+//             }
+//         }
+//     }
+// }

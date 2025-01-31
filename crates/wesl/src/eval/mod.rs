@@ -1,5 +1,6 @@
 mod attrs;
 mod builtin;
+mod constant;
 mod conv;
 mod display;
 mod error;
@@ -14,6 +15,7 @@ mod ty;
 
 pub use attrs::*;
 pub use builtin::*;
+pub(crate) use constant::*;
 pub use conv::*;
 pub use error::*;
 pub use eval::*;
@@ -30,6 +32,7 @@ use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
 pub struct Scope {
+    // TODO: copy on write
     stack: Vec<HashMap<String, Instance>>,
 }
 
@@ -68,7 +71,7 @@ impl Scope {
             .find_map(|scope| scope.get(name).cloned())
     }
 
-    pub fn has(&self, name: &str) -> bool {
+    pub fn contains(&self, name: &str) -> bool {
         self.stack.last().unwrap().contains_key(name)
     }
 }
@@ -115,6 +118,7 @@ pub enum ResourceKind {
     Sampler,
 }
 
+// TODO: should we remove the source from the Context struct?
 pub struct Context<'s> {
     pub(crate) source: &'s TranslationUnit,
     pub(crate) scope: Scope,
@@ -195,6 +199,12 @@ pub trait SyntaxUtil {
     /// find a global declaration by name.
     fn decl(&self, name: &str) -> Option<&GlobalDeclaration>;
 
+    /// find a variable/value declaration by name.
+    fn decl_decl(&self, name: &str) -> Option<&Declaration>;
+
+    /// find a type alias declaration by name.
+    fn decl_alias(&self, name: &str) -> Option<&TypeAlias>;
+
     /// find a struct declaration by name.
     ///
     /// see also: [`Self::resolve_alias`] to resolve the name before calling this function.
@@ -205,6 +215,9 @@ pub trait SyntaxUtil {
 
     /// resolve an alias name.
     fn resolve_alias(&self, name: &str) -> Option<TypeExpression>;
+
+    /// resolve an aliases in a type expression.
+    fn resolve_ty(&self, ty: &TypeExpression) -> TypeExpression;
 }
 
 impl SyntaxUtil for TranslationUnit {
@@ -220,13 +233,24 @@ impl SyntaxUtil for TranslationUnit {
                 _ => false,
             })
     }
+    fn decl_decl(&self, name: &str) -> Option<&Declaration> {
+        match self.decl(name) {
+            Some(GlobalDeclaration::Declaration(s)) => Some(s),
+            _ => None,
+        }
+    }
+    fn decl_alias(&self, name: &str) -> Option<&TypeAlias> {
+        match self.decl(name) {
+            Some(GlobalDeclaration::TypeAlias(s)) => Some(s),
+            _ => None,
+        }
+    }
     fn decl_struct(&self, name: &str) -> Option<&Struct> {
         match self.decl(name) {
             Some(GlobalDeclaration::Struct(s)) => Some(s),
             _ => None,
         }
     }
-
     fn decl_function(&self, name: &str) -> Option<&Function> {
         match self.decl(name) {
             Some(GlobalDeclaration::Function(f)) => Some(f),
@@ -247,5 +271,12 @@ impl SyntaxUtil for TranslationUnit {
             }
             _ => None,
         }
+    }
+
+    fn resolve_ty(&self, ty: &TypeExpression) -> TypeExpression {
+        ty.template_args
+            .is_none()
+            .then(|| self.resolve_alias(&*ty.ident.name()).unwrap_or(ty.clone()))
+            .unwrap_or(ty.clone())
     }
 }
