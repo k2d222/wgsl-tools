@@ -25,7 +25,7 @@
 
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
-use derive_more::{From, IsVariant};
+use derive_more::{From, IsVariant, Unwrap};
 
 use crate::span::Spanned;
 
@@ -111,7 +111,7 @@ pub struct ImportItem {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, From, IsVariant)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant, Unwrap)]
 pub enum GlobalDirective {
     Diagnostic(DiagnosticDirective),
     Enable(EnableDirective),
@@ -153,7 +153,7 @@ pub struct RequiresDirective {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, From, IsVariant)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant, Unwrap)]
 pub enum GlobalDeclaration {
     Void,
     Declaration(Declaration),
@@ -320,7 +320,7 @@ pub struct CustomAttribute {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, IsVariant)]
+#[derive(Clone, Debug, PartialEq, IsVariant, Unwrap)]
 pub enum Attribute {
     Align(ExpressionNode),
     Binding(ExpressionNode),
@@ -360,7 +360,7 @@ pub struct TypeConstraint {
 pub type Attributes = Vec<Attribute>;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, From, IsVariant)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant, Unwrap)]
 pub enum Expression {
     Literal(LiteralExpression),
     Parenthesized(ParenthesizedExpression),
@@ -375,7 +375,7 @@ pub enum Expression {
 pub type ExpressionNode = Spanned<Expression>;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, From, IsVariant)]
+#[derive(Clone, Copy, Debug, PartialEq, From, IsVariant, Unwrap)]
 pub enum LiteralExpression {
     Bool(bool),
     AbstractInt(i64),
@@ -481,7 +481,7 @@ pub struct TemplateArg {
 pub type TemplateArgs = Option<Vec<TemplateArg>>;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, From, IsVariant)]
+#[derive(Clone, Debug, PartialEq, From, IsVariant, Unwrap)]
 pub enum Statement {
     Void,
     Compound(CompoundStatement),

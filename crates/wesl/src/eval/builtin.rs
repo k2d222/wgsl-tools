@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 
 use half::prelude::*;
 use num_traits::{real::Real, FromPrimitive, One, ToBytes, ToPrimitive, Zero};
@@ -16,7 +16,8 @@ use super::{
     convert, convert_all_inner_to, convert_all_ty,
     ops::Compwise,
     ArrayInstance, EvalError, EvalStage, EvalTy, Instance, LiteralInstance, MatInstance,
-    RefInstance, StructInstance, SyntaxUtil, Ty, Type, VecInstance,
+    RefInstance, SampledType, StructInstance, SyntaxUtil, TexelFormat, TextureType, Ty, Type,
+    VecInstance,
 };
 
 type E = EvalError;
@@ -26,50 +27,79 @@ type E = EvalError;
 pub static EXPR_TRUE: Expression = Expression::Literal(LiteralExpression::Bool(true));
 pub static EXPR_FALSE: Expression = Expression::Literal(LiteralExpression::Bool(false));
 
-pub static IDENT_BOOL: LazyLock<Ident> = LazyLock::new(|| Ident::new("bool".to_string()));
-pub static IDENT_I32: LazyLock<Ident> = LazyLock::new(|| Ident::new("i32".to_string()));
-pub static IDENT_U32: LazyLock<Ident> = LazyLock::new(|| Ident::new("u32".to_string()));
-pub static IDENT_F32: LazyLock<Ident> = LazyLock::new(|| Ident::new("f32".to_string()));
-pub static IDENT_F16: LazyLock<Ident> = LazyLock::new(|| Ident::new("f32".to_string()));
-pub static IDENT_ARRAY: LazyLock<Ident> = LazyLock::new(|| Ident::new("array".to_string()));
-pub static IDENT_ATOMIC: LazyLock<Ident> = LazyLock::new(|| Ident::new("atomic".to_string()));
-pub static IDENT_PTR: LazyLock<Ident> = LazyLock::new(|| Ident::new("ptr".to_string()));
-pub static IDENT_VEC2: LazyLock<Ident> = LazyLock::new(|| Ident::new("vec2".to_string()));
-pub static IDENT_VEC3: LazyLock<Ident> = LazyLock::new(|| Ident::new("vec3".to_string()));
-pub static IDENT_VEC4: LazyLock<Ident> = LazyLock::new(|| Ident::new("vec4".to_string()));
-pub static IDENT_MAT2X2: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat2x2".to_string()));
-pub static IDENT_MAT3X2: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat3x2".to_string()));
-pub static IDENT_MAT4X2: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat4x2".to_string()));
-pub static IDENT_MAT2X3: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat2x3".to_string()));
-pub static IDENT_MAT3X3: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat3x3".to_string()));
-pub static IDENT_MAT4X3: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat4x3".to_string()));
-pub static IDENT_MAT2X4: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat2x4".to_string()));
-pub static IDENT_MAT3X4: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat3x4".to_string()));
-pub static IDENT_MAT4X4: LazyLock<Ident> = LazyLock::new(|| Ident::new("mat4x4".to_string()));
-
-pub fn name_to_builtin_ident(name: &str) -> Option<Ident> {
-    match name {
-        "bool" => Some(IDENT_BOOL.clone()),
-        "i32" => Some(IDENT_BOOL.clone()),
-        "u32" => Some(IDENT_BOOL.clone()),
-        "f32" => Some(IDENT_BOOL.clone()),
-        "array" => Some(IDENT_BOOL.clone()),
-        "atomic" => Some(IDENT_BOOL.clone()),
-        "ptr" => Some(IDENT_BOOL.clone()),
-        "vec2" => Some(IDENT_BOOL.clone()),
-        "vec3" => Some(IDENT_BOOL.clone()),
-        "vec4" => Some(IDENT_BOOL.clone()),
-        "mat2x2" => Some(IDENT_MAT2X2.clone()),
-        "mat3x2" => Some(IDENT_MAT3X2.clone()),
-        "mat4x2" => Some(IDENT_MAT4X2.clone()),
-        "mat2x3" => Some(IDENT_MAT2X3.clone()),
-        "mat3x3" => Some(IDENT_MAT3X3.clone()),
-        "mat4x3" => Some(IDENT_MAT4X3.clone()),
-        "mat2x4" => Some(IDENT_MAT2X4.clone()),
-        "mat3x4" => Some(IDENT_MAT3X4.clone()),
-        "mat4x4" => Some(IDENT_MAT4X4.clone()),
-        _ => None,
+pub fn builtin_ident(name: &str) -> Option<&Ident> {
+    macro_rules! ident {
+        ($name:literal) => {
+            ($name, Ident::new($name.to_string()))
+        };
     }
+    // TODO: it's missing many idents
+    static IDENTS: LazyLock<HashMap<&str, Ident>> = LazyLock::new(|| {
+        HashMap::from_iter([
+            // plain types
+            ident!("bool"),
+            ident!("i32"),
+            ident!("u32"),
+            ident!("f32"),
+            ident!("f32"),
+            ident!("array"),
+            ident!("atomic"),
+            ident!("ptr"),
+            ident!("vec2"),
+            ident!("vec3"),
+            ident!("vec4"),
+            ident!("mat2x2"),
+            ident!("mat3x2"),
+            ident!("mat4x2"),
+            ident!("mat2x3"),
+            ident!("mat3x3"),
+            ident!("mat4x3"),
+            ident!("mat2x4"),
+            ident!("mat3x4"),
+            ident!("mat4x4"),
+            // texel format
+            ident!("rgba8unorm"),
+            ident!("rgba8snorm"),
+            ident!("rgba8uint"),
+            ident!("rgba8sint"),
+            ident!("rgba16uint"),
+            ident!("rgba16sint"),
+            ident!("rgba16float"),
+            ident!("r32uint"),
+            ident!("r32sint"),
+            ident!("r32float"),
+            ident!("rg32uint"),
+            ident!("rg32sint"),
+            ident!("rg32float"),
+            ident!("rgba32uint"),
+            ident!("rgba32sint"),
+            ident!("rgba32float"),
+            ident!("bgra8unorm"),
+            // texture types
+            ident!("texture_1d"),
+            ident!("texture_2d"),
+            ident!("texture_2d_array"),
+            ident!("texture_3d"),
+            ident!("texture_cube"),
+            ident!("texture_cube_array"),
+            ident!("texture_multisampled_2d"),
+            ident!("texture_depth_multisampled_2d"),
+            ident!("texture_external"),
+            ident!("texture_storage_1d"),
+            ident!("texture_storage_2d"),
+            ident!("texture_storage_2d_array"),
+            ident!("texture_storage_3d"),
+            ident!("texture_depth_2d"),
+            ident!("texture_depth_2d_array"),
+            ident!("texture_depth_cube"),
+            ident!("texture_depth_cube_array"),
+            // access mode
+            ident!("read"),
+            ident!("write"),
+            ident!("read_write"),
+        ])
+    });
+    IDENTS.get(name)
 }
 
 pub static ATTR_INTRINSIC: LazyLock<Attribute> = LazyLock::new(|| {
@@ -291,8 +321,10 @@ impl Instance {
             Type::Array(None, _) => Err(E::NotConstructible(ty.clone())),
             Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
             Type::Mat(c, r, m_ty) => MatInstance::zero_value(*c, *r, m_ty).map(Into::into),
-            Type::Atomic(_) => Err(E::NotConstructible(ty.clone())),
-            Type::Ptr(_, _) => Err(E::NotConstructible(ty.clone())),
+            Type::Atomic(_) | Type::Ptr(_, _) | Type::Texture(_) => {
+                Err(E::NotConstructible(ty.clone()))
+            }
+            // XXX: should this be not constructible?
             Type::Void => Ok(Instance::Void),
         }
     }
@@ -586,6 +618,88 @@ impl AtomicTemplate {
         Type::Atomic(self.ty.clone().into())
     }
     pub fn inner_ty(&self) -> Type {
+        self.ty.clone()
+    }
+}
+
+pub struct TextureTemplate {
+    ty: TextureType,
+}
+impl TextureTemplate {
+    pub fn parse(name: &str, tplt: &[TemplateArg]) -> Result<TextureTemplate, E> {
+        let ty = match name {
+            "texture_1d" => TextureType::Sampled1D(Self::sampled_type(tplt)?),
+            "texture_2d" => TextureType::Sampled2D(Self::sampled_type(tplt)?),
+            "texture_2d_array" => TextureType::Sampled2DArray(Self::sampled_type(tplt)?),
+            "texture_3d" => TextureType::Sampled3D(Self::sampled_type(tplt)?),
+            "texture_cube" => TextureType::SampledCube(Self::sampled_type(tplt)?),
+            "texture_cube_array" => TextureType::SampledCubeArray(Self::sampled_type(tplt)?),
+            "texture_multisampled_2d" => TextureType::Multisampled2D(Self::sampled_type(tplt)?),
+            "texture_depth_multisampled_2d" => TextureType::DepthMultisampled2D,
+            "texture_storage_1d" => {
+                let (tex, acc) = Self::texel_access(tplt)?;
+                TextureType::Storage1D(tex, acc)
+            }
+            "texture_storage_2d" => {
+                let (tex, acc) = Self::texel_access(tplt)?;
+                TextureType::Storage2D(tex, acc)
+            }
+            "texture_storage_2d_array" => {
+                let (tex, acc) = Self::texel_access(tplt)?;
+                TextureType::Storage2DArray(tex, acc)
+            }
+            "texture_storage_3d" => {
+                let (tex, acc) = Self::texel_access(tplt)?;
+                TextureType::Storage3D(tex, acc)
+            }
+            _ => return Err(E::Builtin("not a templated texture type")),
+        };
+        Ok(Self { ty })
+    }
+    fn sampled_type(tplt: &[TemplateArg]) -> Result<SampledType, E> {
+        match tplt {
+            [t1] => match t1.expression.node() {
+                Expression::TypeOrIdentifier(ty) if ty.template_args.is_none() => {
+                    ty.ident.name().parse().map_err(|()| {
+                        EvalError::Builtin("invalid sampled type, expected `i32`, `u32` of `f32`")
+                    })
+                }
+                _ => Err(EvalError::Builtin(
+                    "invalid sampled type, expected `i32`, `u32` of `f32`",
+                )),
+            },
+            _ => Err(EvalError::Builtin(
+                "sampled texture types take a single template parameter",
+            )),
+        }
+    }
+    fn texel_access(tplt: &[TemplateArg]) -> Result<(TexelFormat, AccessMode), E> {
+        match tplt {
+            [t1, t2] => {
+                let texel = match t1.expression.node() {
+                    Expression::TypeOrIdentifier(ty) if ty.template_args.is_none() => ty
+                        .ident
+                        .name()
+                        .parse()
+                        .map_err(|()| EvalError::Builtin("invalid texel format")),
+                    _ => Err(EvalError::Builtin("invalid texel format")),
+                }?;
+                let access = match t2.expression.node() {
+                    Expression::TypeOrIdentifier(ty) if ty.template_args.is_none() => ty
+                        .ident
+                        .name()
+                        .parse()
+                        .map_err(|()| EvalError::Builtin("invalid access mode")),
+                    _ => Err(EvalError::Builtin("invalid access mode")),
+                }?;
+                Ok((texel, access))
+            }
+            _ => Err(EvalError::Builtin(
+                "storage texture types take two template parameters",
+            )),
+        }
+    }
+    pub fn ty(&self) -> TextureType {
         self.ty.clone()
     }
 }

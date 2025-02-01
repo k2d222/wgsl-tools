@@ -20,6 +20,7 @@ pub enum Flow {
     Return(Instance),
 }
 
+/// careful: do not return in with_stage body!
 macro_rules! with_stage {
     ($ctx:expr, $stage:expr, $body:tt) => {{
         let stage = $ctx.stage;
@@ -29,6 +30,16 @@ macro_rules! with_stage {
         body
     }};
 }
+
+macro_rules! with_scope {
+    ($ctx:expr, $body:tt) => {{
+        $ctx.scope.push();
+        let body = (|| $body)();
+        $ctx.scope.pop();
+        body
+    }};
+}
+pub(super) use with_scope;
 pub(super) use with_stage;
 
 impl Display for Flow {
@@ -121,21 +132,38 @@ impl Exec for Statement {
 
 impl Exec for CompoundStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        ctx.scope.push();
-        for stat in &self.statements {
-            let flow = stat.exec(ctx)?;
-            match flow {
-                Flow::Next => (),
-                Flow::Break | Flow::Continue | Flow::Return(_) => {
-                    ctx.scope.pop();
-                    return Ok(flow);
+        with_scope!(ctx, {
+            for stat in &self.statements {
+                let flow = stat.exec(ctx)?;
+                match flow {
+                    Flow::Next => (),
+                    Flow::Break | Flow::Continue | Flow::Return(_) => {
+                        return Ok(flow);
+                    }
                 }
             }
-        }
 
-        ctx.scope.pop();
-        Ok(Flow::Next)
+            Ok(Flow::Next)
+        })
     }
+}
+
+// because some places in the grammar requires that no scope is created when executing the
+// CompoundStatement, such as for loops with initializer or function invocations.
+pub(crate) fn compound_exec_no_scope(
+    stat: &CompoundStatement,
+    ctx: &mut Context,
+) -> Result<Flow, E> {
+    for stat in &stat.statements {
+        let flow = stat.exec(ctx)?;
+        match flow {
+            Flow::Next => (),
+            Flow::Break | Flow::Continue | Flow::Return(_) => {
+                return Ok(flow);
+            }
+        }
+    }
+    Ok(Flow::Next)
 }
 
 impl Exec for AssignmentStatement {
@@ -366,62 +394,53 @@ impl Exec for ContinuingStatement {
 
 impl Exec for ForStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        if let Some(init) = &self.initializer {
-            // TODO: is this correct?
-            // https://github.com/gpuweb/gpuweb/issues/5024
-            ctx.scope.push();
-            let flow = init.exec(ctx)?;
-            if flow != Flow::Next {
-                ctx.scope.pop();
-                return Ok(flow);
-            }
-        }
-
-        loop {
-            let cond = self
-                .condition
-                .as_ref()
-                .map(|expr| {
-                    let expr = expr.eval_value(ctx)?;
-                    match expr {
-                        Instance::Literal(LiteralInstance::Bool(b)) => Ok(b),
-                        _ => Err(E::Type(Type::Bool, expr.ty())),
-                    }
-                })
-                .unwrap_or(Ok(false))?;
-
-            if !cond {
-                break;
-            }
-
-            let flow = self.body.exec(ctx)?;
-
-            match flow {
-                Flow::Next | Flow::Continue => {
-                    if let Some(updt) = &self.update {
-                        updt.exec(ctx)?;
-                    }
-                }
-                Flow::Break => {
-                    if self.initializer.is_some() {
-                        ctx.scope.pop();
-                    }
-                    return Ok(Flow::Next);
-                }
-                Flow::Return(_) => {
-                    if self.initializer.is_some() {
-                        ctx.scope.pop();
-                    }
+        // the initializer is in the same scope as the body.
+        // https://github.com/gpuweb/gpuweb/issues/5024
+        with_scope!(ctx, {
+            if let Some(init) = &self.initializer {
+                let flow = init.exec(ctx)?;
+                if flow != Flow::Next {
                     return Ok(flow);
                 }
             }
-        }
 
-        if self.initializer.is_some() {
-            ctx.scope.pop();
-        }
+            loop {
+                let cond = self
+                    .condition
+                    .as_ref()
+                    .map(|expr| {
+                        let expr = expr.eval_value(ctx)?;
+                        match expr {
+                            Instance::Literal(LiteralInstance::Bool(b)) => Ok(b),
+                            _ => Err(E::Type(Type::Bool, expr.ty())),
+                        }
+                    })
+                    .unwrap_or(Ok(false))?;
 
-        Ok(Flow::Next)
+                if !cond {
+                    break;
+                }
+
+                // the body has to run in the same scope as the initializer.
+                let flow = compound_exec_no_scope(&self.body, ctx)?;
+
+                match flow {
+                    Flow::Next | Flow::Continue => {
+                        if let Some(updt) = &self.update {
+                            updt.exec(ctx)?;
+                        }
+                    }
+                    Flow::Break => {
+                        break;
+                    }
+                    Flow::Return(_) => {
+                        return Ok(flow);
+                    }
+                }
+            }
+
+            Ok(Flow::Next)
+        })
     }
 }
 
@@ -505,7 +524,7 @@ impl Exec for ConstAssertStatement {
 // TODO: implement address space
 impl Exec for Declaration {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        if ctx.scope.contains(&*self.ident.name()) {
+        if ctx.scope.contains_current(&*self.ident.name()) {
             return Err(E::DuplicateDecl(self.ident.to_string()));
         }
 

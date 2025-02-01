@@ -19,25 +19,34 @@ pub fn lower(wesl: &mut TranslationUnit, _keep: &[String]) -> Result<(), Error> 
         })
     }
 
-    remove_type_aliases(wesl);
-    remove_global_consts(wesl);
-    // remove_abstract_types(wesl);
-
+    #[cfg(not(feature = "eval"))]
+    {
+        // these are redundant with eval::lower.
+        remove_type_aliases(wesl);
+        remove_global_consts(wesl);
+    }
     #[cfg(feature = "eval")]
     {
         use crate::eval::{make_explicit_conversions, mark_functions_const, Context, Lower};
         mark_functions_const(wesl);
-        let wesl2 = wesl.clone();
-        let mut ctx = Context::new(&wesl2);
-        make_explicit_conversions(wesl, &ctx);
-        wesl.lower(&mut ctx)
-            .map_err(|e| Diagnostic::from(e).with_ctx(&ctx))?;
 
-        // lowering makes const function unused, so we remove them if not in keep list.
+        // we want to drop wesl2 at the end of the block for idents use_count
+        {
+            let wesl2 = wesl.clone();
+            let mut ctx = Context::new(&wesl2);
+            make_explicit_conversions(wesl, &mut ctx)
+                .map_err(|e| Diagnostic::from(e).with_ctx(&ctx))?;
+            wesl.lower(&mut ctx)
+                .map_err(|e| Diagnostic::from(e).with_ctx(&ctx))?;
+        }
+
+        // lowering sometimes makes const function unused, so we remove them if not in keep list.
         wesl.global_declarations.retain_mut(|decl| {
             if let GlobalDeclaration::Function(decl) = decl {
                 if decl.attributes.contains(&Attribute::Const)
                     && !_keep.contains(&*decl.ident.name())
+                    // TODO: there may be a race cond here
+                    && decl.ident.use_count() == 1
                 {
                     false
                 } else {
@@ -54,7 +63,8 @@ pub fn lower(wesl: &mut TranslationUnit, _keep: &[String]) -> Result<(), Error> 
 
 /// Eliminate all type aliases.
 /// Naga doesn't like this: `alias T = u32; vec<T>`
-pub fn remove_type_aliases(wesl: &mut TranslationUnit) {
+#[allow(unused)]
+fn remove_type_aliases(wesl: &mut TranslationUnit) {
     let take_next_alias = |wesl: &mut TranslationUnit| {
         let index = wesl
             .global_declarations
@@ -82,7 +92,8 @@ pub fn remove_type_aliases(wesl: &mut TranslationUnit) {
 ///
 /// # Panics
 /// panics if the const-declaration is ill-formed, i.e. has no initializer.
-pub fn remove_global_consts(wesl: &mut TranslationUnit) {
+#[allow(unused)]
+fn remove_global_consts(wesl: &mut TranslationUnit) {
     let take_next_const = |wesl: &mut TranslationUnit| {
         let index = wesl.global_declarations.iter().position(|decl| {
             matches!(

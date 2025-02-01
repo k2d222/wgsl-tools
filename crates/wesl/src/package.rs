@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use wgsl_parse::syntax::TranslationUnit;
 
-use crate::{validate, Diagnostic, Error, Resource, SyntaxUtil};
+use crate::{validate::validate_wesl, Diagnostic, Error, Resource, SyntaxUtil};
 
 /// A builder that generates code for WESL packages.
 ///
@@ -197,7 +197,7 @@ impl Module {
                     .with_source(module.source.clone())
             })?;
             wesl.retarget_idents();
-            validate(&wesl)?;
+            validate_wesl(&wesl)?;
             for module in &module.submodules {
                 validate_module(module)?;
             }

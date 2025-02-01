@@ -1,11 +1,107 @@
+use std::str::FromStr;
+
 use super::{
     ArrayInstance, ArrayTemplate, AtomicInstance, AtomicTemplate, Context, Eval, EvalError,
     Instance, LiteralInstance, MatInstance, MatTemplate, PtrInstance, PtrTemplate, RefInstance,
-    StructInstance, SyntaxUtil, VecInstance, VecTemplate,
+    StructInstance, SyntaxUtil, TextureTemplate, VecInstance, VecTemplate,
 };
 
 use derive_more::derive::{IsVariant, Unwrap};
 use wgsl_parse::syntax::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IsVariant, Unwrap)]
+pub enum SampledType {
+    I32,
+    U32,
+    F32,
+}
+
+impl FromStr for SampledType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "i32" => Ok(Self::I32),
+            "u32" => Ok(Self::U32),
+            "f32" => Ok(Self::F32),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IsVariant, Unwrap)]
+pub enum TexelFormat {
+    Rgba8Unorm,
+    Rgba8Snorm,
+    Rgba8Uint,
+    Rgba8Sint,
+    Rgba16Uint,
+    Rgba16Sint,
+    Rgba16Float,
+    R32Uint,
+    R32Sint,
+    R32Float,
+    Rg32Uint,
+    Rg32Sint,
+    Rg32Float,
+    Rgba32Uint,
+    Rgba32Sint,
+    Rgba32Float,
+    Bgra8Unorm,
+}
+
+impl FromStr for TexelFormat {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "rgba8unorm" => Ok(Self::Rgba8Unorm),
+            "rgba8snorm" => Ok(Self::Rgba8Snorm),
+            "rgba8uint" => Ok(Self::Rgba8Uint),
+            "rgba8sint" => Ok(Self::Rgba8Sint),
+            "rgba16uint" => Ok(Self::Rgba16Uint),
+            "rgba16sint" => Ok(Self::Rgba16Sint),
+            "rgba16float" => Ok(Self::Rgba16Float),
+            "r32uint" => Ok(Self::R32Uint),
+            "r32sint" => Ok(Self::R32Sint),
+            "r32float" => Ok(Self::R32Float),
+            "rg32uint" => Ok(Self::Rg32Uint),
+            "rg32sint" => Ok(Self::Rg32Sint),
+            "rg32float" => Ok(Self::Rg32Float),
+            "rgba32uint" => Ok(Self::Rgba32Uint),
+            "rgba32sint" => Ok(Self::Rgba32Sint),
+            "rgba32float" => Ok(Self::Rgba32Float),
+            "bgra8unorm" => Ok(Self::Bgra8Unorm),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, IsVariant, Unwrap)]
+pub enum TextureType {
+    // sampled
+    Sampled1D(SampledType),
+    Sampled2D(SampledType),
+    Sampled2DArray(SampledType),
+    Sampled3D(SampledType),
+    SampledCube(SampledType),
+    SampledCubeArray(SampledType),
+    // multisampled
+    Multisampled2D(SampledType),
+    DepthMultisampled2D,
+    // external
+    External,
+    // storage
+    Storage1D(TexelFormat, AccessMode),
+    Storage2D(TexelFormat, AccessMode),
+    Storage2DArray(TexelFormat, AccessMode),
+    Storage3D(TexelFormat, AccessMode),
+    // depth
+    Depth2D,
+    Depth2DArray,
+    DepthCube,
+    DepthCubeArray,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, IsVariant, Unwrap)]
 pub enum Type {
@@ -23,6 +119,7 @@ pub enum Type {
     Mat(u8, u8, Box<Type>),
     Atomic(Box<Type>),
     Ptr(AddressSpace, Box<Type>),
+    Texture(TextureType),
     Void,
 }
 
@@ -124,6 +221,7 @@ impl Ty for Type {
             Type::Mat(_, _, ty) => ty.inner_ty(),
             Type::Atomic(ty) => ty.ty(),
             Type::Ptr(_, ty) => ty.ty(),
+            Type::Texture(_) => self.clone(),
             Type::Void => self.clone(),
         }
     }
@@ -240,6 +338,7 @@ impl<T: Ty> EvalTy for T {
     }
 }
 
+/// EvalTy only for names with no template args.
 impl EvalTy for str {
     fn eval_ty(&self, ctx: &mut Context) -> Result<Type, EvalError> {
         match self {
@@ -248,6 +347,10 @@ impl EvalTy for str {
             "u32" => Ok(Type::U32),
             "f32" => Ok(Type::F32),
             "f16" => Ok(Type::F16),
+            "texture_depth_2d" => Ok(Type::Texture(TextureType::Depth2D)),
+            "texture_depth_2d_array" => Ok(Type::Texture(TextureType::Depth2DArray)),
+            "texture_depth_cube" => Ok(Type::Texture(TextureType::DepthCube)),
+            "texture_depth_cube_array" => Ok(Type::Texture(TextureType::DepthCubeArray)),
             _ => {
                 if let Some(ty) = ctx.source.resolve_alias(self) {
                     ty.eval_ty(ctx)
@@ -310,6 +413,21 @@ impl EvalTy for TypeExpression {
                 "atomic" => {
                     let tplt = AtomicTemplate::parse(tplt, ctx)?;
                     Ok(tplt.ty())
+                }
+                name @ ("texture_1d"
+                | "texture_2d"
+                | "texture_2d_array"
+                | "texture_3d"
+                | "texture_cube"
+                | "texture_cube_array"
+                | "texture_multisampled_2d"
+                | "texture_depth_multisampled_2d"
+                | "texture_storage_1d"
+                | "texture_storage_2d"
+                | "texture_storage_2d_array"
+                | "texture_storage_3d") => {
+                    let tplt = TextureTemplate::parse(name, tplt)?;
+                    Ok(Type::Texture(tplt.ty()))
                 }
                 _ => Err(EvalError::UnexpectedTemplate(self.ident.to_string())),
             }

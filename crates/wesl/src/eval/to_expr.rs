@@ -1,7 +1,6 @@
 use super::{
-    name_to_builtin_ident, ArrayInstance, LiteralInstance, MatInstance, StructInstance, SyntaxUtil,
-    Ty, Type, VecInstance, IDENT_ARRAY, IDENT_ATOMIC, IDENT_BOOL, IDENT_F16, IDENT_F32, IDENT_I32,
-    IDENT_PTR, IDENT_U32,
+    builtin_ident, ArrayInstance, LiteralInstance, MatInstance, StructInstance, SyntaxUtil,
+    TextureType, Ty, Type, VecInstance,
 };
 use crate::eval::{Context, EvalError, Instance};
 use wgsl_parse::{span::Spanned, syntax::*};
@@ -105,29 +104,29 @@ impl ToExpr for MatInstance {
 impl ToExpr for Type {
     fn to_expr(&self, ctx: &Context) -> Result<Expression, E> {
         match self {
-            Type::Bool => Ok(TypeExpression::new(IDENT_BOOL.clone())),
+            Type::Bool => Ok(TypeExpression::new(builtin_ident("bool").unwrap().clone())),
             Type::AbstractInt => Err(E::NotConstructible(Type::AbstractInt)),
             Type::AbstractFloat => Err(E::NotConstructible(Type::AbstractFloat)),
-            Type::I32 => Ok(TypeExpression::new(IDENT_I32.clone())),
-            Type::U32 => Ok(TypeExpression::new(IDENT_U32.clone())),
-            Type::F32 => Ok(TypeExpression::new(IDENT_F32.clone())),
-            Type::F16 => Ok(TypeExpression::new(IDENT_F16.clone())),
+            Type::I32 => Ok(TypeExpression::new(builtin_ident("i32").unwrap().clone())),
+            Type::U32 => Ok(TypeExpression::new(builtin_ident("u32").unwrap().clone())),
+            Type::F32 => Ok(TypeExpression::new(builtin_ident("f32").unwrap().clone())),
+            Type::F16 => Ok(TypeExpression::new(builtin_ident("f16").unwrap().clone())),
             Type::Struct(s) => Ok(TypeExpression::new(Ident::new(s.clone()))),
             Type::Array(Some(n), inner_ty) => {
-                let mut ty = TypeExpression::new(IDENT_ARRAY.clone());
+                let mut ty = TypeExpression::new(builtin_ident("array").unwrap().clone());
                 ty.template_args = Some(vec![
                     TemplateArg {
                         expression: inner_ty.to_expr(ctx)?.into(),
                     },
                     TemplateArg {
-                        expression: Expression::TypeOrIdentifier(Ident::new(n.to_string()).into())
+                        expression: Expression::Literal(LiteralExpression::AbstractInt(*n as i64))
                             .into(),
                     },
                 ]);
                 Ok(ty)
             }
             Type::Array(None, inner_ty) => {
-                let mut ty = TypeExpression::new(IDENT_ARRAY.clone());
+                let mut ty = TypeExpression::new(builtin_ident("f16").unwrap().clone());
                 ty.template_args = Some(vec![TemplateArg {
                     expression: inner_ty.to_expr(ctx)?.into(),
                 }]);
@@ -135,7 +134,7 @@ impl ToExpr for Type {
             }
             Type::Vec(n, inner_ty) => {
                 let mut ty =
-                    TypeExpression::new(name_to_builtin_ident(&format!("vec{n}")).unwrap());
+                    TypeExpression::new(builtin_ident(&format!("vec{n}")).unwrap().clone());
                 ty.template_args = Some(vec![TemplateArg {
                     expression: inner_ty.to_expr(ctx)?.into(),
                 }]);
@@ -143,21 +142,21 @@ impl ToExpr for Type {
             }
             Type::Mat(c, r, inner_ty) => {
                 let mut ty =
-                    TypeExpression::new(name_to_builtin_ident(&format!("mat{c}x{r}")).unwrap());
+                    TypeExpression::new(builtin_ident(&format!("mat{c}x{r}")).unwrap().clone());
                 ty.template_args = Some(vec![TemplateArg {
                     expression: inner_ty.to_expr(ctx)?.into(),
                 }]);
                 Ok(ty)
             }
             Type::Atomic(inner_ty) => {
-                let mut ty = TypeExpression::new(IDENT_ATOMIC.clone());
+                let mut ty = TypeExpression::new(builtin_ident("atomic").unwrap().clone());
                 ty.template_args = Some(vec![TemplateArg {
                     expression: inner_ty.to_expr(ctx)?.into(),
                 }]);
                 Ok(ty)
             }
             Type::Ptr(space, inner_ty) => {
-                let mut ty = TypeExpression::new(IDENT_PTR.clone());
+                let mut ty = TypeExpression::new(builtin_ident("ptr").unwrap().clone());
                 ty.template_args = Some(vec![
                     TemplateArg {
                         expression: space.to_expr(ctx)?.into(),
@@ -166,6 +165,66 @@ impl ToExpr for Type {
                         expression: inner_ty.to_expr(ctx)?.into(),
                     },
                 ]);
+                Ok(ty)
+            }
+            Type::Texture(tex) => {
+                let name = match tex {
+                    TextureType::Sampled1D(_) => "texture_1d",
+                    TextureType::Sampled2D(_) => "texture_2d",
+                    TextureType::Sampled2DArray(_) => "texture_2d_array",
+                    TextureType::Sampled3D(_) => "texture_3d",
+                    TextureType::SampledCube(_) => "texture_cube",
+                    TextureType::SampledCubeArray(_) => "texture_cube_array",
+                    TextureType::Multisampled2D(_) => "texture_multisampled_2d",
+                    TextureType::DepthMultisampled2D => "texture_depth_multisampled_2d",
+                    TextureType::External => "texture_external",
+                    TextureType::Storage1D(_, _) => "texture_storage_1d",
+                    TextureType::Storage2D(_, _) => "texture_storage_2d",
+                    TextureType::Storage2DArray(_, _) => "texture_storage_2d_array",
+                    TextureType::Storage3D(_, _) => "texture_storage_3d",
+                    TextureType::Depth2D => "texture_depth_2d",
+                    TextureType::Depth2DArray => "texture_depth_2d_array",
+                    TextureType::DepthCube => "texture_depth_cube",
+                    TextureType::DepthCubeArray => "texture_depth_cube_array",
+                };
+                let mut ty = TypeExpression::new(builtin_ident(name).unwrap().clone());
+                ty.template_args = match tex {
+                    TextureType::Sampled1D(sampled)
+                    | TextureType::Sampled2D(sampled)
+                    | TextureType::Sampled2DArray(sampled)
+                    | TextureType::Sampled3D(sampled)
+                    | TextureType::SampledCube(sampled)
+                    | TextureType::SampledCubeArray(sampled)
+                    | TextureType::Multisampled2D(sampled) => Some(vec![TemplateArg {
+                        expression: Expression::TypeOrIdentifier(TypeExpression::new(
+                            builtin_ident(&sampled.to_string()).unwrap().clone(),
+                        ))
+                        .into(),
+                    }]),
+                    TextureType::DepthMultisampled2D => None,
+                    TextureType::External => None,
+                    TextureType::Storage1D(texel, access)
+                    | TextureType::Storage2D(texel, access)
+                    | TextureType::Storage2DArray(texel, access)
+                    | TextureType::Storage3D(texel, access) => Some(vec![
+                        TemplateArg {
+                            expression: Expression::TypeOrIdentifier(TypeExpression::new(
+                                builtin_ident(&texel.to_string()).unwrap().clone(),
+                            ))
+                            .into(),
+                        },
+                        TemplateArg {
+                            expression: Expression::TypeOrIdentifier(TypeExpression::new(
+                                builtin_ident(&access.to_string()).unwrap().clone(),
+                            ))
+                            .into(),
+                        },
+                    ]),
+                    TextureType::Depth2D => None,
+                    TextureType::Depth2DArray => None,
+                    TextureType::DepthCube => None,
+                    TextureType::DepthCubeArray => None,
+                };
                 Ok(ty)
             }
             Type::Void => Err(E::NotConstructible(Type::Void)),

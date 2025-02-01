@@ -484,7 +484,10 @@ const BUILTIN_FUNCTIONS: &[&str] = &[
     "quadSwapY",
 ];
 
-// note that this function could be simplified if we didn't care about the diagnostics metadata (declaration and expression)
+/// An identifier is linked to a declaration if:
+/// * its use-count is greater than 1
+/// * OR it is a built-in name
+/// note that this function could be simplified if we didn't care about the diagnostics metadata (declaration and expression)
 fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
     fn check_ty(ty: &TypeExpression) -> Result<(), Diagnostic<Error>> {
         if ty.ident.use_count() == 1 && !BUILTIN_NAMES.contains(&ty.ident.name().as_str()) {
@@ -500,7 +503,11 @@ fn check_defined_symbols(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>
         if let Expression::TypeOrIdentifier(ty) = expr.node() {
             check_ty(ty).map_err(|d| d.with_span(expr.span().clone()))
         } else if let Expression::FunctionCall(call) = expr.node() {
-            check_ty(&call.ty).map_err(|d| d.with_span(expr.span().clone()))
+            check_ty(&call.ty).map_err(|d| d.with_span(expr.span().clone()))?;
+            for expr in &call.arguments {
+                check_expr(expr)?;
+            }
+            Ok(())
         } else {
             for expr in Visit::<ExpressionNode>::visit(expr.node()) {
                 check_expr(expr)?;
@@ -598,8 +605,17 @@ fn check_function_calls(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>>
     Ok(())
 }
 
-pub fn validate(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
+/// Validate a *resolved* WESL module. Must be called on module resolutions.
+/// Resolved: has no imports, no qualified idents and no conditional translation.
+/// Used idents must have use_count > 1.
+pub(crate) fn validate_wesl(wesl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
     check_defined_symbols(wesl)?;
-    check_function_calls(wesl)?;
+    Ok(())
+}
+
+/// Validate the final output (valid WGSL).
+pub fn validate_wgsl(wgsl: &TranslationUnit) -> Result<(), Diagnostic<Error>> {
+    check_defined_symbols(wgsl)?;
+    check_function_calls(wgsl)?;
     Ok(())
 }

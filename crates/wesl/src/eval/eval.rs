@@ -1,9 +1,9 @@
 use std::iter::zip;
 
 use super::{
-    call_builtin, Context, Convert, EvalError, EvalStage, EvalTy, Exec, Flow, Instance,
-    LiteralInstance, PtrInstance, RefInstance, StructInstance, SyntaxUtil, Ty, Type, VecInstance,
-    ATTR_INTRINSIC,
+    call_builtin, compound_exec_no_scope, with_scope, Context, Convert, EvalError, EvalStage,
+    EvalTy, Flow, Instance, LiteralInstance, PtrInstance, RefInstance, StructInstance, SyntaxUtil,
+    Ty, Type, VecInstance, ATTR_INTRINSIC,
 };
 
 use half::f16;
@@ -318,8 +318,7 @@ impl Eval for FunctionCall {
                 .unwrap_or(Ok(Type::Void))
                 .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.to_string()))?;
 
-            ctx.scope.push();
-            let flow = {
+            let flow = with_scope!(ctx, {
                 let args = args
                     .iter()
                     .zip(&decl.parameters)
@@ -335,13 +334,12 @@ impl Eval for FunctionCall {
                     ctx.scope.add_val(p.ident.to_string(), a);
                 }
 
-                let flow = decl
-                    .body
-                    .exec(ctx)
+                // the arguments must be in the same scope as the function body.
+                let flow = compound_exec_no_scope(&decl.body, ctx)
                     .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.to_string()))?;
-                flow
-            };
-            ctx.scope.pop();
+
+                Ok(flow)
+            })?;
 
             let inst = match flow {
                 Flow::Next => {

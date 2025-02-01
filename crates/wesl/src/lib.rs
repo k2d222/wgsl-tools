@@ -126,7 +126,8 @@ pub use resolve::{
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 pub use strip::strip_except;
 pub use syntax_util::SyntaxUtil;
-pub use validate::{validate, ValidateError};
+use validate::validate_wesl;
+pub use validate::{validate_wgsl, ValidateError};
 
 pub use wgsl_parse::syntax;
 
@@ -874,18 +875,16 @@ fn compile_pre_assembly(
         let keep = keep_idents(&wesl, &options.entry_points, options.use_stripping);
         let mut resolution = import::resolve(wesl, root_resource, keep, &resolver)?;
         resolution.mangle(mangler)?;
-        // TODO: unfortunately validate() does not work with resolution because the imported identifiers
-        // do not point to a declaration in the TranslationUnit and the use_count is broken.
-        // if options.use_validate {
-        //     for module in resolution.modules() {
-        //         validate(&module.source).map_err(|d| {
-        //             d.with_resource(
-        //                 module.resource.clone(),
-        //                 resolver.display_name(&module.resource),
-        //             )
-        //         })?;
-        //     }
-        // }
+        if options.use_validate {
+            for module in resolution.modules() {
+                validate_wesl(&module.source).map_err(|d| {
+                    d.with_resource(
+                        module.resource.clone(),
+                        resolver.display_name(&module.resource),
+                    )
+                })?;
+            }
+        }
         resolution.assemble(options.use_stripping)
     } else {
         wesl
@@ -904,7 +903,7 @@ fn compile_post_assembly(
         generics::replace_calls(wesl)?;
     };
     if options.use_validate {
-        validate(&wesl)?;
+        validate_wgsl(&wesl)?;
     }
     if options.use_lower {
         lower(wesl, keep)?;

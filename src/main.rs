@@ -505,13 +505,14 @@ fn run(cli: Cli) -> Result<(), CliError> {
                     let mut wesl = WgslParser::parse_str(&source)
                         .map_err(|e| Diagnostic::from(e).with_source(source))?;
                     wesl.retarget_idents();
-                    wesl::validate(&wesl)?;
-                    let wgsl_source = wesl.to_string();
-                    #[cfg(feature = "naga")]
-                    if args.naga {
-                        naga::front::wgsl::parse_str(&wgsl_source)
-                            .map_err(|e| CliError::Naga(e, wgsl_source))?;
-                    }
+                    todo!("validating WESL needs more work")
+                    // wesl::validate_wesl(&wesl)?;
+                    // let wgsl_source = wesl.to_string();
+                    // #[cfg(feature = "naga")]
+                    // if args.naga {
+                    //     naga::front::wgsl::parse_str(&wgsl_source)
+                    //         .map_err(|e| CliError::Naga(e, wgsl_source))?;
+                    // }
                 }
             }
             println!("OK");

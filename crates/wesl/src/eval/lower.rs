@@ -1,64 +1,76 @@
 use std::iter::zip;
 
 use crate::{
-    eval::{Context, Eval, EvalError, Exec},
+    eval::{Context, Eval, EvalError, Exec, Ty, Type},
     visit::Visit,
 };
 use wesl_macros::query_mut;
 use wgsl_parse::{span::Spanned, syntax::*};
 
-use super::{to_expr::ToExpr, SyntaxUtil, EXPR_FALSE, EXPR_TRUE};
+use super::{to_expr::ToExpr, EvalTy, SyntaxUtil, EXPR_FALSE, EXPR_TRUE};
 
 type E = EvalError;
 
 // TODO: I am aware that it is not correct to make all implicit conversions explicit.
 // I should fix that at some point, but meanwhile it fixes Naga not supporting automatic conversions.
-pub fn make_explicit_conversions(wesl: &mut TranslationUnit, ctx: &Context) {
-    fn explicit_call(call: &mut FunctionCall, ctx: &Context) {
+pub fn make_explicit_conversions(wesl: &mut TranslationUnit, ctx: &mut Context) -> Result<(), E> {
+    fn explicit_call(call: &mut FunctionCall, ctx: &mut Context) -> Result<(), E> {
         let decl = ctx.source.decl_function(&*call.ty.ident.name());
         if let Some(decl) = decl {
             for (arg, param) in zip(&mut call.arguments, &decl.parameters) {
-                *arg.node_mut() = Expression::FunctionCall(FunctionCall {
-                    ty: param.ty.clone(),
-                    arguments: vec![arg.clone()],
-                })
+                let ty = param.ty.eval_ty(ctx)?;
+                if ty.inner_ty().is_scalar() {
+                    let ty = ty.to_expr(ctx)?.unwrap_type_or_identifier();
+                    *arg.node_mut() = Expression::FunctionCall(FunctionCall {
+                        ty,
+                        arguments: vec![arg.clone()],
+                    })
+                }
             }
         }
+        Ok(())
     }
-    fn explicit_expr(expr: &mut Expression, ctx: &Context) {
+    fn explicit_expr(expr: &mut Expression, ctx: &mut Context) -> Result<(), E> {
         if let Expression::FunctionCall(call) = expr {
-            explicit_call(call, ctx);
+            explicit_call(call, ctx)?;
         }
         for expr in Visit::<ExpressionNode>::visit_mut(expr) {
-            explicit_expr(expr, ctx);
+            explicit_expr(expr, ctx)?;
         }
+        Ok(())
     }
     for expr in Visit::<ExpressionNode>::visit_mut(wesl) {
-        explicit_expr(expr, ctx);
+        explicit_expr(expr, ctx)?;
     }
 
-    fn explicit_stat(stat: &mut Statement, ret: &TypeExpression, ctx: &Context) {
+    fn explicit_stat(stat: &mut Statement, ret: &Type, ctx: &mut Context) -> Result<(), E> {
         if let Statement::Return(stat) = stat {
             if let Some(expr) = &mut stat.expression {
+                let ty = ret.to_expr(ctx)?.unwrap_type_or_identifier();
                 *expr.node_mut() = Expression::FunctionCall(FunctionCall {
-                    ty: ret.clone(),
+                    ty,
                     arguments: vec![expr.clone()],
                 })
             }
         } else if let Statement::FunctionCall(stat) = stat {
-            explicit_call(&mut stat.call, ctx);
+            explicit_call(&mut stat.call, ctx)?;
         }
         for stat in Visit::<StatementNode>::visit_mut(stat) {
-            explicit_stat(stat, ret, ctx);
+            explicit_stat(stat, ret, ctx)?;
         }
+        Ok(())
     }
     for decl in query_mut!(wesl.global_declarations.[].GlobalDeclaration::Function) {
         if let Some(ret) = &decl.return_type {
-            for stat in &mut decl.body.statements {
-                explicit_stat(stat, ret, ctx);
+            let ty = ret.eval_ty(ctx)?;
+            if ty.inner_ty().is_scalar() {
+                for stat in &mut decl.body.statements {
+                    explicit_stat(stat, &ty, ctx)?;
+                }
             }
         }
     }
+    Ok(())
 }
 
 pub trait Lower {
@@ -114,6 +126,7 @@ impl Lower for Expression {
 
 impl Lower for FunctionCall {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
+        self.ty = ctx.source.resolve_ty(&self.ty).clone();
         for arg in &mut self.arguments {
             arg.lower(ctx)?;
         }
@@ -134,7 +147,12 @@ impl Lower for TemplateArgs {
 
 impl Lower for TypeExpression {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        self.template_args.lower(ctx)?;
+        // types must be const-expressions
+        let expr = self.eval_ty(ctx)?.to_expr(ctx)?;
+        *self = match expr {
+            Expression::TypeOrIdentifier(ty) => ty,
+            _ => unreachable!("eval_ty must return Literal"),
+        };
         Ok(())
     }
 }
@@ -312,7 +330,15 @@ impl Lower for Statement {
                 }
             }
             Statement::ConstAssert(stat) => stat.exec(ctx).map(|_| ())?,
-            Statement::Declaration(stat) => stat.lower(ctx)?,
+            Statement::Declaration(stat) => {
+                if stat.kind == DeclarationKind::Const {
+                    // eval and add it to the scope
+                    stat.exec(ctx)?;
+                    *self = Statement::Void;
+                } else {
+                    stat.lower(ctx)?;
+                }
+            }
         }
         Ok(())
     }
@@ -447,7 +473,7 @@ impl Lower for FunctionCallStatement {
 
 impl Lower for TranslationUnit {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
-        self.exec(ctx)?;
+        self.exec(ctx)?; // add const-decls to the scope and eval const_asserts
         for decl in &mut self.global_declarations {
             match decl {
                 GlobalDeclaration::Void => Ok(()),
@@ -464,7 +490,7 @@ impl Lower for TranslationUnit {
         }
         self.global_declarations.retain(|decl| match decl {
             GlobalDeclaration::Void => false,
-            GlobalDeclaration::Declaration(_) => true,
+            GlobalDeclaration::Declaration(decl) => decl.kind != DeclarationKind::Const,
             GlobalDeclaration::TypeAlias(_) => false,
             GlobalDeclaration::Struct(_) => true,
             GlobalDeclaration::Function(_) => true,

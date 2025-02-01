@@ -71,7 +71,7 @@ impl Scope {
             .find_map(|scope| scope.get(name).cloned())
     }
 
-    pub fn contains(&self, name: &str) -> bool {
+    pub fn contains_current(&self, name: &str) -> bool {
         self.stack.last().unwrap().contains_key(name)
     }
 }
@@ -214,10 +214,10 @@ pub trait SyntaxUtil {
     fn decl_function(&self, name: &str) -> Option<&Function>;
 
     /// resolve an alias name.
-    fn resolve_alias(&self, name: &str) -> Option<TypeExpression>;
+    fn resolve_alias(&self, name: &str) -> Option<&TypeExpression>;
 
     /// resolve an aliases in a type expression.
-    fn resolve_ty(&self, ty: &TypeExpression) -> TypeExpression;
+    fn resolve_ty<'a>(&'a self, ty: &'a TypeExpression) -> &'a TypeExpression;
 }
 
 impl SyntaxUtil for TranslationUnit {
@@ -259,24 +259,24 @@ impl SyntaxUtil for TranslationUnit {
     }
 
     // TODO return borrowed
-    fn resolve_alias(&self, name: &str) -> Option<TypeExpression> {
+    fn resolve_alias(&self, name: &str) -> Option<&TypeExpression> {
         match self.decl(name) {
             Some(GlobalDeclaration::TypeAlias(t)) => {
                 if t.ty.template_args.is_none() {
-                    self.resolve_alias(&t.ty.ident.name())
-                        .or(Some(t.ty.clone()))
+                    self.resolve_alias(&t.ty.ident.name()).or(Some(&t.ty))
                 } else {
-                    Some(t.ty.clone())
+                    Some(&t.ty)
                 }
             }
             _ => None,
         }
     }
 
-    fn resolve_ty(&self, ty: &TypeExpression) -> TypeExpression {
-        ty.template_args
-            .is_none()
-            .then(|| self.resolve_alias(&*ty.ident.name()).unwrap_or(ty.clone()))
-            .unwrap_or(ty.clone())
+    fn resolve_ty<'a>(&'a self, ty: &'a TypeExpression) -> &'a TypeExpression {
+        if ty.template_args.is_none() {
+            self.resolve_alias(&*ty.ident.name()).unwrap_or(ty)
+        } else {
+            ty
+        }
     }
 }
