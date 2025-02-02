@@ -950,7 +950,41 @@ DiagnosticControl: (DiagnosticSeverity, String) = {
 // date: 2025-01-18, hash: 2db8e7f681087db6bdcd4a254963deb5c0159775
 
 #[cfg(feature = "imports")]
-TemplateElaboratedIdent: TypeExpression = <relative: ImportRelative?> <path: (<IdentPatternToken> "::")*> <ident: Ident> <template_args: TemplateList?> => {
+PathIdent: String = {
+    IdentPatternToken => <>,
+    "alias" => <>.to_string(),
+    "break" => <>.to_string(),
+    "case" => <>.to_string(),
+    "const" => <>.to_string(),
+    "const_assert" => <>.to_string(),
+    "continue" => <>.to_string(),
+    "continuing" => <>.to_string(),
+    "default" => <>.to_string(),
+    "diagnostic" => <>.to_string(),
+    "discard" => <>.to_string(),
+    // the "else" keyword is LR(1) conflict: if () {} else::call_fn();
+    // "else" => <>.to_string(),
+    "enable" => <>.to_string(),
+    "false" => <>.to_string(),
+    "fn" => <>.to_string(),
+    "for" => <>.to_string(),
+    "if" => <>.to_string(),
+    "let" => <>.to_string(),
+    "loop" => <>.to_string(),
+    "override" => <>.to_string(),
+    "requires" => <>.to_string(),
+    "return" => <>.to_string(),
+    "struct" => <>.to_string(),
+    "switch" => <>.to_string(),
+    "true" => <>.to_string(),
+    "var" => <>.to_string(),
+    "while" => <>.to_string(),
+    "as" => <>.to_string(),
+    "import" => <>.to_string(),
+};
+
+#[cfg(feature = "imports")]
+TemplateElaboratedIdent: TypeExpression = <relative: ImportRelative?> <path: (<PathIdent> "::")*> <ident: Ident> <template_args: TemplateList?> => {
     let path = match relative {
         Some(mut relative) => {
             relative.extend(path);
@@ -1032,7 +1066,7 @@ ImportRelative: PathBuf = {
 
 #[cfg(feature = "imports")]
 ImportPath: Import = {
-    <path: (<IdentPatternToken> "::")+> <content: ImportContent> => Import {
+    <path: (<PathIdent> "::")+> <content: ImportContent> => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: PathBuf::from_iter(path), content
     },
@@ -1050,8 +1084,8 @@ ImportContent: ImportContent = {
 
 #[cfg(feature = "imports")]
 ImportItem: ImportItem = {
-    <ident: Ident> <rename: ("as" <Ident>)?> => ImportItem {
-        ident, rename
+    <ident: PathIdent> <rename: ("as" <PathIdent>)?> => ImportItem {
+        ident: Ident::new(ident), rename: rename.map(Ident::new)
     }
 };
 
