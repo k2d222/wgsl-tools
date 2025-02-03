@@ -29,6 +29,24 @@ impl FromStr for SampledType {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, IsVariant, Unwrap)]
+pub enum SamplerType {
+    Sampler,
+    SamplerComparison,
+}
+
+impl FromStr for SamplerType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "sampler" => Ok(Self::Sampler),
+            "sampler_comparison" => Ok(Self::SamplerComparison),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, IsVariant, Unwrap)]
 pub enum TexelFormat {
     Rgba8Unorm,
@@ -120,6 +138,7 @@ pub enum Type {
     Atomic(Box<Type>),
     Ptr(AddressSpace, Box<Type>),
     Texture(TextureType),
+    Sampler(SamplerType),
     Void,
 }
 
@@ -222,6 +241,7 @@ impl Ty for Type {
             Type::Atomic(ty) => ty.ty(),
             Type::Ptr(_, ty) => ty.ty(),
             Type::Texture(_) => self.clone(),
+            Type::Sampler(_) => self.clone(),
             Type::Void => self.clone(),
         }
     }
@@ -351,6 +371,8 @@ impl EvalTy for str {
             "texture_depth_2d_array" => Ok(Type::Texture(TextureType::Depth2DArray)),
             "texture_depth_cube" => Ok(Type::Texture(TextureType::DepthCube)),
             "texture_depth_cube_array" => Ok(Type::Texture(TextureType::DepthCubeArray)),
+            "sampler" => Ok(Type::Sampler(SamplerType::Sampler)),
+            "sampler_comparison" => Ok(Type::Sampler(SamplerType::SamplerComparison)),
             _ => {
                 if let Some(ty) = ctx.source.resolve_alias(self) {
                     ty.eval_ty(ctx)

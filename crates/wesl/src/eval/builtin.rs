@@ -93,6 +93,9 @@ pub fn builtin_ident(name: &str) -> Option<&Ident> {
             ident!("texture_depth_2d_array"),
             ident!("texture_depth_cube"),
             ident!("texture_depth_cube_array"),
+            // sampler types
+            ident!("sampler"),
+            ident!("sampler_comparison"),
             // access mode
             ident!("read"),
             ident!("write"),
@@ -321,7 +324,7 @@ impl Instance {
             Type::Array(None, _) => Err(E::NotConstructible(ty.clone())),
             Type::Vec(n, v_ty) => VecInstance::zero_value(*n, v_ty).map(Into::into),
             Type::Mat(c, r, m_ty) => MatInstance::zero_value(*c, *r, m_ty).map(Into::into),
-            Type::Atomic(_) | Type::Ptr(_, _) | Type::Texture(_) => {
+            Type::Atomic(_) | Type::Ptr(_, _) | Type::Texture(_) | Type::Sampler(_) => {
                 Err(E::NotConstructible(ty.clone()))
             }
             // XXX: should this be not constructible?

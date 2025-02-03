@@ -1,6 +1,6 @@
 use super::{
-    builtin_ident, ArrayInstance, LiteralInstance, MatInstance, StructInstance, SyntaxUtil,
-    TextureType, Ty, Type, VecInstance,
+    builtin_ident, ArrayInstance, LiteralInstance, MatInstance, SamplerType, StructInstance,
+    SyntaxUtil, TextureType, Ty, Type, VecInstance,
 };
 use crate::eval::{Context, EvalError, Instance};
 use wgsl_parse::{span::Spanned, syntax::*};
@@ -227,6 +227,14 @@ impl ToExpr for Type {
                 };
                 Ok(ty)
             }
+            Type::Sampler(sampler) => match sampler {
+                SamplerType::Sampler => Ok(TypeExpression::new(
+                    builtin_ident("sampler").unwrap().clone(),
+                )),
+                SamplerType::SamplerComparison => Ok(TypeExpression::new(
+                    builtin_ident("sampler_comparison").unwrap().clone(),
+                )),
+            },
             Type::Void => Err(E::NotConstructible(Type::Void)),
         }
         .map(Into::into)

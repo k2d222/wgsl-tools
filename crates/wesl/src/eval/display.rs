@@ -6,7 +6,8 @@ use crate::eval::Ty;
 
 use super::{
     ArrayInstance, AtomicInstance, Instance, LiteralInstance, MatInstance, MemView, PtrInstance,
-    RefInstance, SampledType, StructInstance, TexelFormat, TextureType, Type, VecInstance,
+    RefInstance, SampledType, SamplerType, StructInstance, TexelFormat, TextureType, Type,
+    VecInstance,
 };
 
 impl Display for Instance {
@@ -141,6 +142,7 @@ impl Display for Type {
             Type::Atomic(ty) => write!(f, "atomic<{ty}>"),
             Type::Ptr(a_s, ty) => write!(f, "ptr<{a_s}, {ty}>"),
             Type::Texture(texture_type) => texture_type.fmt(f),
+            Type::Sampler(sampler_type) => sampler_type.fmt(f),
             Type::Void => write!(f, ""),
         }
     }
@@ -174,6 +176,15 @@ impl Display for TextureType {
             TextureType::Depth2DArray => write!(f, "texture_depth_2d_array"),
             TextureType::DepthCube => write!(f, "texture_depth_cube"),
             TextureType::DepthCubeArray => write!(f, "texture_depth_cube_array"),
+        }
+    }
+}
+
+impl Display for SamplerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SamplerType::Sampler => write!(f, "sampler"),
+            SamplerType::SamplerComparison => write!(f, "sampler_comparison"),
         }
     }
 }
