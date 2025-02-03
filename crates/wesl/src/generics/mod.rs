@@ -4,7 +4,6 @@ use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{syntax::*, Decorated};
 
-use crate::attributes::stat_query_attrs;
 use crate::visit::Visit;
 
 #[derive(Clone, Debug, Error)]
@@ -64,7 +63,7 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), E> {
 
                 // remove evaluated type attributes
                 for stat in &mut decl.body.statements {
-                    for attrs in stat_query_attrs(stat) {
+                    for attrs in Visit::<Attributes>::visit_mut(stat.node_mut()) {
                         attrs.retain(|attr| match attr {
                             Attribute::Type(c) => !c.variants.is_empty(),
                             _ => true,

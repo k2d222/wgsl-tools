@@ -77,8 +77,6 @@
 //! [imports]: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md
 //! [generics]: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Generics.md
 
-#[cfg(feature = "attributes")]
-mod attributes;
 #[cfg(feature = "condcomp")]
 mod condcomp;
 #[cfg(feature = "eval")]
@@ -142,26 +140,28 @@ use wgsl_parse::syntax::{Ident, TranslationUnit};
 
 #[derive(Debug)]
 pub struct CompileOptions {
-    pub use_imports: bool,
-    pub use_condcomp: bool,
-    pub use_generics: bool,
-    pub use_stripping: bool,
-    pub use_lower: bool,
-    pub use_validate: bool,
-    pub entry_points: Option<Vec<String>>,
+    pub imports: bool,
+    pub condcomp: bool,
+    pub generics: bool,
+    pub strip: bool,
+    pub lower: bool,
+    pub validate: bool,
+    pub lazy: bool,
+    pub keep: Option<Vec<String>>,
     pub features: HashMap<String, bool>,
 }
 
 impl Default for CompileOptions {
     fn default() -> Self {
         Self {
-            use_imports: true,
-            use_condcomp: true,
-            use_generics: false,
-            use_stripping: true,
-            use_lower: false,
-            use_validate: true,
-            entry_points: Default::default(),
+            imports: true,
+            condcomp: true,
+            generics: false,
+            strip: true,
+            lower: false,
+            validate: true,
+            lazy: true,
+            keep: Default::default(),
             features: Default::default(),
         }
     }
@@ -251,13 +251,14 @@ impl Wesl<StandardResolver> {
     pub fn new_spec_compliant(base: impl AsRef<Path>) -> Self {
         Self {
             options: CompileOptions {
-                use_imports: true,
-                use_condcomp: true,
-                use_generics: false,
-                use_stripping: true,
-                use_lower: false,
-                use_validate: true,
-                entry_points: None,
+                imports: true,
+                condcomp: true,
+                generics: false,
+                strip: true,
+                lower: false,
+                validate: true,
+                lazy: true,
+                keep: None,
                 features: Default::default(),
             },
             use_sourcemap: true,
@@ -280,13 +281,14 @@ impl Wesl<StandardResolver> {
     pub fn new_experimental(base: impl AsRef<Path>) -> Self {
         Self {
             options: CompileOptions {
-                use_imports: true,
-                use_condcomp: true,
-                use_generics: true,
-                use_stripping: true,
-                use_lower: true,
-                use_validate: true,
-                entry_points: None,
+                imports: true,
+                condcomp: true,
+                generics: true,
+                strip: true,
+                lower: true,
+                validate: true,
+                lazy: true,
+                keep: None,
                 features: Default::default(),
             },
             use_sourcemap: true,
@@ -344,13 +346,14 @@ impl Wesl<NoResolver> {
     pub fn new_barebones() -> Self {
         Self {
             options: CompileOptions {
-                use_imports: false,
-                use_condcomp: false,
-                use_generics: false,
-                use_stripping: false,
-                use_lower: false,
-                use_validate: false,
-                entry_points: None,
+                imports: false,
+                condcomp: false,
+                generics: false,
+                strip: false,
+                lower: false,
+                validate: false,
+                lazy: false,
+                keep: None,
                 features: Default::default(),
             },
             use_sourcemap: false,
@@ -437,7 +440,7 @@ impl<R: Resolver> Wesl<R> {
     /// Spec: not yet available.
     #[cfg(feature = "imports")]
     pub fn use_imports(mut self, val: bool) -> Self {
-        self.options.use_imports = val;
+        self.options.imports = val;
         self
     }
 
@@ -448,7 +451,7 @@ impl<R: Resolver> Wesl<R> {
     /// Spec: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
     #[cfg(feature = "condcomp")]
     pub fn use_condcomp(mut self, val: bool) -> Self {
-        self.options.use_condcomp = val;
+        self.options.condcomp = val;
         self
     }
 
@@ -459,7 +462,7 @@ impl<R: Resolver> Wesl<R> {
     /// Spec: not yet available.
     #[cfg(feature = "generics")]
     pub fn use_generics(mut self, val: bool) -> Self {
-        self.options.use_generics = val;
+        self.options.generics = val;
         self
     }
     /// Set a conditional compilation feature flag.
@@ -507,7 +510,7 @@ impl<R: Resolver> Wesl<R> {
     /// Customizing entrypoints returned by the compiler is explicitly allowed by the spec.
     /// Spec: not yet available.
     pub fn use_stripping(mut self, val: bool) -> Self {
-        self.options.use_stripping = val;
+        self.options.strip = val;
         self
     }
     /// Transform an output into a simplified WGSL that is better supported by implementors.
@@ -530,7 +533,7 @@ impl<R: Resolver> Wesl<R> {
     /// Lowering is an *experimental* WESL extension.
     /// Spec: not yet available.
     pub fn use_lower(mut self, val: bool) -> Self {
-        self.options.use_lower = val;
+        self.options.lower = val;
         self
     }
     /// If stripping is enabled, specifies which entrypoints to keep in the final WGSL.
@@ -541,7 +544,7 @@ impl<R: Resolver> Wesl<R> {
     /// Customizing entrypoints returned by the compiler is explicitly allowed by the spec.
     /// Spec: not yet available.
     pub fn keep_entrypoints(mut self, entries: Vec<String>) -> Self {
-        self.options.entry_points = Some(entries);
+        self.options.keep = Some(entries);
         self
     }
     /// If stripping is enabled, keep all entrypoints in the root WESL module.
@@ -552,7 +555,7 @@ impl<R: Resolver> Wesl<R> {
     /// Customizing entrypoints returned by the compiler is explicitly allowed by the spec.
     /// Spec: not yet available.
     pub fn keep_all_entrypoints(mut self) -> Self {
-        self.options.entry_points = None;
+        self.options.keep = None;
         self
     }
 }
@@ -851,7 +854,7 @@ fn compile_pre_assembly(
     let resolver = Box::new(resolver);
 
     #[cfg(feature = "condcomp")]
-    let resolver: Box<dyn Resolver> = if options.use_condcomp {
+    let resolver: Box<dyn Resolver> = if options.condcomp {
         Box::new(Preprocessor::new(resolver, |wesl| {
             condcomp::run(wesl, &options.features)?;
             Ok(())
@@ -871,11 +874,15 @@ fn compile_pre_assembly(
         .collect_vec();
 
     #[cfg(feature = "imports")]
-    let wesl = if options.use_imports {
-        let keep = keep_idents(&wesl, &options.entry_points, options.use_stripping);
-        let mut resolution = import::resolve(wesl, root_resource, keep, &resolver)?;
+    let wesl = if options.imports {
+        let mut resolution = if options.lazy {
+            let keep = keep_idents(&wesl, &options.keep, options.strip);
+            import::resolve_lazy(wesl, root_resource, keep, &resolver)?
+        } else {
+            import::resolve_eager(wesl, root_resource, &resolver)?
+        };
         resolution.mangle(mangler)?;
-        if options.use_validate {
+        if options.validate {
             for module in resolution.modules() {
                 validate_wesl(&module.source).map_err(|d| {
                     d.with_resource(
@@ -885,7 +892,7 @@ fn compile_pre_assembly(
                 })?;
             }
         }
-        resolution.assemble(options.use_stripping)
+        resolution.assemble(options.strip)
     } else {
         wesl
     };
@@ -898,14 +905,14 @@ fn compile_post_assembly(
     keep: &[String],
 ) -> Result<(), Error> {
     #[cfg(feature = "generics")]
-    if options.use_generics {
+    if options.generics {
         generics::generate_variants(wesl)?;
         generics::replace_calls(wesl)?;
     };
-    if options.use_validate {
+    if options.validate {
         validate_wgsl(&wesl)?;
     }
-    if options.use_lower {
+    if options.lower {
         lower(wesl, keep)?;
     }
     Ok(())
@@ -920,7 +927,7 @@ pub fn compile(
 ) -> Result<TranslationUnit, Diagnostic<Error>> {
     let mut root_names = Vec::new();
     let mut wesl = compile_pre_assembly(root_module, resolver, mangler, options, &mut root_names)?;
-    let keep = options.entry_points.as_deref().unwrap_or(&root_names);
+    let keep = options.keep.as_deref().unwrap_or(&root_names);
     compile_post_assembly(&mut wesl, options, keep)?;
     Ok(wesl)
 }
@@ -945,7 +952,7 @@ pub fn compile_sourcemap(
     for name in &root_names {
         sourcemap.add_decl(name.clone(), root_module.clone(), name.clone());
     }
-    let keep = options.entry_points.as_deref().unwrap_or(&root_names);
+    let keep = options.keep.as_deref().unwrap_or(&root_names);
 
     let comp = match comp {
         Ok(mut wesl) => compile_post_assembly(&mut wesl, options, keep)

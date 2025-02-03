@@ -104,6 +104,7 @@ impl_visit! { Statement => Attributes,
             attributes,
             body.statements.[].(x => recurse(x)),
             continuing.[].{
+                #[cfg(feature = "attributes")]
                 attributes,
                 body.statements.[].(x => recurse(x)),
                 break_if.[].{ attributes }
@@ -117,11 +118,17 @@ impl_visit! { Statement => Attributes,
             attributes,
             body.statements.[].(x => recurse(x)),
         },
+        #[cfg(feature = "attributes")]
         Statement::Break.attributes,
+        #[cfg(feature = "attributes")]
         Statement::Continue.attributes,
+        #[cfg(feature = "attributes")]
         Statement::Return.attributes,
+        #[cfg(feature = "attributes")]
         Statement::Discard.attributes,
+        #[cfg(feature = "attributes")]
         Statement::FunctionCall.attributes,
+        #[cfg(feature = "attributes")]
         Statement::ConstAssert.attributes,
         Statement::Declaration.attributes,
     }
@@ -378,7 +385,9 @@ impl_visit! { TranslationUnit => StatementNode,
 
 impl_visit! { TranslationUnit => Attributes,
     {
+        #[cfg(feature = "attributes")]
         imports.[].attributes,
+        #[cfg(feature = "attributes")]
         global_directives.[].{
             GlobalDirective::Diagnostic.attributes,
             GlobalDirective::Enable.attributes,
@@ -386,8 +395,10 @@ impl_visit! { TranslationUnit => Attributes,
         },
         global_declarations.[].{
             GlobalDeclaration::Declaration.attributes,
+            #[cfg(feature = "attributes")]
             GlobalDeclaration::TypeAlias.attributes,
             GlobalDeclaration::Struct.{
+                #[cfg(feature = "attributes")]
                 attributes,
                 members.[].attributes,
             },
@@ -396,6 +407,7 @@ impl_visit! { TranslationUnit => Attributes,
                 parameters.[].attributes,
                 body.{ attributes, statements.[].(x => visit::<Statement, Attributes>(x)) }
             },
+            #[cfg(feature = "attributes")]
             GlobalDeclaration::ConstAssert.attributes,
         }
     }

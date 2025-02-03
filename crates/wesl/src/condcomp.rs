@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::attributes::query_attrs;
+use crate::{visit::Visit, Diagnostic};
 use itertools::Itertools;
 use thiserror::Error;
 use wgsl_parse::{syntax::*, Decorated};
@@ -14,6 +14,8 @@ pub enum CondCompError {
     #[error("invalid if attribute expression: `{0}`")]
     InvalidExpression(Expression),
 }
+
+type E = crate::Error;
 
 type Features = HashMap<String, bool>;
 
@@ -224,7 +226,7 @@ fn statement_eval_if_attributes(
     rec(statements, features)
 }
 
-pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondCompError> {
+pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), E> {
     // 1. evaluate all if attributes
 
     if cfg!(feature = "imports") {
@@ -241,8 +243,9 @@ pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondCo
             wgsl_parse::syntax::GlobalDeclaration::Struct(decl) => Some(decl),
             _ => None,
         });
-    for strukt in structs {
-        eval_if_attributes(&mut strukt.members, features)?;
+    for decl in structs {
+        eval_if_attributes(&mut decl.members, features)
+            .map_err(|e| Diagnostic::from(e).with_declaration(decl.ident.to_string()))?;
     }
 
     let functions = wesl
@@ -253,13 +256,15 @@ pub fn run(wesl: &mut TranslationUnit, features: &Features) -> Result<(), CondCo
             _ => None,
         });
     for func in functions {
-        eval_if_attributes(&mut func.parameters, features)?;
-        statement_eval_if_attributes(&mut func.body.statements, features)?;
+        eval_if_attributes(&mut func.parameters, features)
+            .map_err(|e| Diagnostic::from(e).with_declaration(func.ident.to_string()))?;
+        statement_eval_if_attributes(&mut func.body.statements, features)
+            .map_err(|e| Diagnostic::from(e).with_declaration(func.ident.to_string()))?;
     }
 
     // 2. remove attributes that evaluate to true
 
-    for attrs in query_attrs(wesl) {
+    for attrs in Visit::<Attributes>::visit_mut(wesl) {
         attrs.retain(|attr| match attr {
             Attribute::If(expr) => **expr != EXPR_TRUE,
             _ => true,

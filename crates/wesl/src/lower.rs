@@ -1,7 +1,4 @@
-use crate::{Diagnostic, Error};
-
-#[cfg(feature = "attributes")]
-use crate::attributes::query_attrs;
+use crate::{visit::Visit, Diagnostic, Error};
 
 use wgsl_parse::syntax::*;
 
@@ -11,8 +8,7 @@ pub fn lower(wesl: &mut TranslationUnit, _keep: &[String]) -> Result<(), Error> 
     #[cfg(feature = "imports")]
     wesl.imports.clear();
 
-    #[cfg(feature = "attributes")]
-    for attrs in query_attrs(wesl) {
+    for attrs in Visit::<Attributes>::visit_mut(wesl) {
         attrs.retain(|attr| {
             !matches!(attr, 
             Attribute::Custom(CustomAttribute { name, .. }) if name == "generic")
