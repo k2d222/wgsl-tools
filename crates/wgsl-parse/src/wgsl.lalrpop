@@ -1066,13 +1066,9 @@ ImportRelative: PathBuf = {
 
 #[cfg(feature = "imports")]
 ImportPath: Import = {
-    <path: (<PathIdent> "::")+> <content: ImportContent> => Import {
+    <path: (<PathIdent> "::")*> <content: ImportContent> => Import {
         #[cfg(feature = "attributes")] attributes: Vec::new(),
         path: PathBuf::from_iter(path), content
-    },
-    ImportItem => Import {
-        #[cfg(feature = "attributes")] attributes: Vec::new(),
-        path: Default::default(), content: ImportContent::Item(<>)
     },
 };
 
