@@ -6,7 +6,7 @@ fn main() {
     };
 
     #[cfg(not(feature = "build-time"))]
-    let source = wesl::Wesl::new_spec_compliant("src/shaders")
+    let source = wesl::Wesl::new("src/shaders")
         .add_package(&wesl_random::random::Mod)
         .compile("main")
         .inspect_err(|e| {

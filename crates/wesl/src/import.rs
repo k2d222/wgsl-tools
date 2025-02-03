@@ -424,11 +424,7 @@ pub(crate) fn imported_resources(imports: &[syntax::Import], parent_res: &Resour
     res
 }
 
-fn mangle_decls<'a>(
-    wgsl: &'a mut TranslationUnit,
-    resource: &'a Resource,
-    mangler: &'a impl Mangler,
-) {
+fn mangle_decls<'a>(wgsl: &'a mut TranslationUnit, resource: &'a Resource, mangler: &impl Mangler) {
     wgsl.global_declarations
         .iter_mut()
         .filter_map(|decl| decl.ident_mut())

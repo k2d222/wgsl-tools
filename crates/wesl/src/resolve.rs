@@ -1,7 +1,7 @@
 use crate::{Diagnostic, Error, SyntaxUtil};
 
 use itertools::Itertools;
-use wgsl_parse::syntax::{Ident, TranslationUnit};
+use wgsl_parse::syntax::TranslationUnit;
 
 use std::{
     borrow::Cow,
@@ -31,16 +31,6 @@ type E = ResolveError;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Resource {
     path: PathBuf,
-}
-
-/// An importable uniquely identify a declaration.
-///
-/// Each declaration must be associated with a unique `Importable`, and an `Importable` must
-/// identify a unique declaration.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Importable {
-    pub resource: Resource,
-    pub ident: Ident,
 }
 
 fn clean_path(path: impl AsRef<Path>) -> PathBuf {
@@ -202,13 +192,13 @@ impl Resolver for NoResolver {
 }
 
 /// A resolver that remembers to avoid multiple fetches.
-pub struct CacheResolver<'a> {
-    resolver: Box<dyn Resolver + 'a>,
+pub struct CacheResolver<R: Resolver> {
+    resolver: R,
     cache: RefCell<HashMap<Resource, String>>,
 }
 
-impl<'a> CacheResolver<'a> {
-    pub fn new(resolver: Box<dyn Resolver + 'a>) -> Self {
+impl<R: Resolver> CacheResolver<R> {
+    pub fn new(resolver: R) -> Self {
         Self {
             resolver,
             cache: Default::default(),
@@ -216,7 +206,7 @@ impl<'a> CacheResolver<'a> {
     }
 }
 
-impl<'a> Resolver for CacheResolver<'a> {
+impl<R: Resolver> Resolver for CacheResolver<R> {
     fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, E> {
         let mut cache = self.cache.borrow_mut();
 
@@ -242,8 +232,6 @@ impl<'a> Resolver for CacheResolver<'a> {
 }
 
 /// A resolver that looks for files in the filesystem.
-///
-/// This is the default resolver.
 #[derive(Default)]
 pub struct FileResolver {
     base: PathBuf,
@@ -307,10 +295,9 @@ impl Resolver for FileResolver {
     }
 }
 
-/// A resolver that resolves WESL modules added with [`VirtualResolver::add_module`].
+/// A resolver that resolves WESL in-memory modules added with [`Self::add_module`].
 ///
-/// This can be used in platforms that lack a filesystem (e.g. WASM) or for
-/// runtime-generated files.
+/// Use-cases are platforms that lack a filesystem (e.g. WASM) or for runtime-generated files.
 #[derive(Default)]
 pub struct VirtualResolver {
     files: HashMap<Resource, String>,
@@ -349,18 +336,15 @@ impl<T: Fn(&mut TranslationUnit) -> Result<(), Error>> ResolveFn for T {}
 
 /// A WESL module preprocessor.
 ///
-/// The preprocess function will be called each time the WESL compiler tries accesses a
-/// module. The preprocessor can modify the module syntax tree at will.
-///
-/// The preprocess function *must* always return the same syntax tree for a given module
-/// path.
-pub struct Preprocessor<'a, F: ResolveFn> {
-    pub resolver: Box<dyn Resolver + 'a>,
+/// The preprocess function will be called each time the WESL compiler tries to load a module.
+/// The preprocess function *must* always return the same syntax tree for a given module path.
+pub struct Preprocessor<R: Resolver, F: ResolveFn> {
+    pub resolver: R,
     pub preprocess: F,
 }
 
-impl<'a, F: ResolveFn> Preprocessor<'a, F> {
-    pub fn new(resolver: Box<dyn Resolver + 'a>, preprocess: F) -> Self {
+impl<R: Resolver, F: ResolveFn> Preprocessor<R, F> {
+    pub fn new(resolver: R, preprocess: F) -> Self {
         Self {
             resolver,
             preprocess,
@@ -368,7 +352,7 @@ impl<'a, F: ResolveFn> Preprocessor<'a, F> {
     }
 }
 
-impl<'a, F: ResolveFn> Resolver for Preprocessor<'a, F> {
+impl<R: Resolver, F: ResolveFn> Resolver for Preprocessor<R, F> {
     fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, E> {
         let res = self.resolver.resolve_source(resource)?;
         Ok(res)
@@ -395,7 +379,9 @@ impl<'a, F: ResolveFn> Resolver for Preprocessor<'a, F> {
 /// A router is a resolver that can dispatch imports to several sub-resolvers based on the
 /// import path prefix.
 ///
-/// Add sub-resolvers with [`Router::mount_resolver`].
+/// Add sub-resolvers with [`Self::mount_resolver`].
+///
+/// This resolver is not thread-safe ([`Sync`]).
 pub struct Router {
     mount_points: Vec<(PathBuf, Box<dyn Resolver>)>,
     fallback: Option<(PathBuf, Box<dyn Resolver>)>,
@@ -427,7 +413,7 @@ impl Router {
         self.mount_resolver("", resolver);
     }
 
-    fn route(&self, resource: &Resource) -> Result<(&Box<dyn Resolver>, Resource), E> {
+    fn route(&self, resource: &Resource) -> Result<(&dyn Resolver, Resource), E> {
         let (mount_path, resolver) = self
             .mount_points
             .iter()
@@ -536,6 +522,7 @@ impl Resolver for PkgResolver {
     }
 }
 
+/// The resolver that implements the WESL standard.
 pub struct StandardResolver {
     pkg: PkgResolver,
     router: Router,

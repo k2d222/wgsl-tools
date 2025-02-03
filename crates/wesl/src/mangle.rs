@@ -54,8 +54,8 @@ impl<T: Mangler> Mangler for &T {
     }
 }
 
-/// A mangler for the filesystem resources hashes the resource identifier.
-/// e.g. `foo/bar/baz.wgsl item => item_32938483840293402930392`
+/// A mangler that hashes the resource identifier.
+/// e.g. `foo::bar::baz item => item_32938483840293402930392`
 #[derive(Default, Clone, Debug)]
 pub struct HashMangler;
 
@@ -69,8 +69,8 @@ impl Mangler for HashMangler {
     }
 }
 
-/// A mangler for the filesystem resources that gives the escaped path to the resource.
-/// e.g. `foo/bar/baz.wgsl item => foo_bar_bazwgsl_item`
+/// A mangler that gives the escaped path to the resource.
+/// e.g. `foo::bar_baz item => foo_bar__baz_item`
 ///
 /// Warning: the file path segments must be valid wgsl identifiers.
 #[derive(Default, Clone, Debug)]
@@ -119,7 +119,7 @@ impl Mangler for EscapeMangler {
 }
 
 /// A mangler that just returns the identifer as-is (no mangling).
-/// e.g. `foo/bar/baz.wgsl item => item`
+/// e.g. `foo::bar::baz item => item`
 ///
 /// Warning: will break the program in case of name conflicts.
 #[derive(Default, Clone, Debug)]
@@ -166,9 +166,9 @@ impl<'a, T: Mangler> Mangler for CacheMangler<'a, T> {
 }
 
 /// A mangler that uses cryptic unicode symbols that look like :, < and >
-/// e.g. `foo/bar/baz.wgsl item => item`
+/// e.g. `foo::bar::baz array<f32,2> => foo::bar::baz::arrayᐸf32ˏ2ᐳ`
 ///
-/// Warning: will break the program in case of name conflicts.
+/// Very unlikely to collide unless using U+02D0 characters
 ///
 /// # Panics
 /// if the TypeExpression is not normalized (i.e. contains only identifiers and literals)

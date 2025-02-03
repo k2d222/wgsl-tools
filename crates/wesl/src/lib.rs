@@ -11,7 +11,7 @@
 //!
 //! See [`Wesl`] for an overview of the high-level API.
 //! ```rust
-//! let compiler = Wesl::new_spec_compliant("src/shaders");
+//! let compiler = Wesl::new("src/shaders");
 //!
 //! // compile a WESL file to a WGSL string
 //! let wgsl_str = compiler
@@ -36,7 +36,7 @@
 //! ```rust
 //! # use wesl::{Wesl, FileResolver};
 //! fn main() {
-//!     Wesl::new_spec_compliant("src/shaders")
+//!     Wesl::new("src/shaders")
 //!         .build_artefact("main.wesl", "my_shader");
 //! }
 //! ```
@@ -56,7 +56,7 @@
 //! Evaluate const-expressions.
 //!```rust
 //! # use wesl::{Wesl};
-//! # let compiler = Wesl::new_spec_compliant("");
+//! # let compiler = Wesl::new("");
 //! // ...standalone expression
 //! let wgsl_expr = compiler.eval("abs(3 - 5)").unwrap().to_string();
 //!
@@ -181,7 +181,7 @@ pub enum ManglerKind {
     None,
 }
 
-fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
+fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler + Sync + 'static> {
     match kind {
         ManglerKind::Escape => Box::new(EscapeMangler),
         ManglerKind::Hash => Box::new(HashMangler),
@@ -225,14 +225,14 @@ macro_rules! wesl_pkg {
 /// # Basic Usage
 ///
 /// ```rust
-/// let compiler = Wesl::new_spec_compliant("path/to/dir/containing/shaders");
+/// let compiler = Wesl::new("path/to/dir/containing/shaders");
 /// let wgsl_string = compiler.compile("main.wesl").unwrap().to_string();
 /// ```
 pub struct Wesl<R: Resolver> {
     options: CompileOptions,
     use_sourcemap: bool,
     resolver: R,
-    mangler: Box<dyn Mangler>,
+    mangler: Box<dyn Mangler + Sync + 'static>,
 }
 
 impl Wesl<StandardResolver> {
@@ -242,13 +242,13 @@ impl Wesl<StandardResolver> {
     /// It's probably what you want to use in most cases. You can customize it with other
     /// functions.
     ///
-    /// See also: [`Wesl::new_barebones`], [`Wesl::new_spec_compliant`].
+    /// See also: [`Wesl::new_barebones`], [`Wesl::new_experimental`].
     ///
     /// # WESL Reference
     /// * (mandatory) Imports: [`Imports.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md) (specification for `imports` is not stabilized yet)
     /// * (mandatory) Conditional translation: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
     /// * (optional)  Stripping: spec not yet available.
-    pub fn new_spec_compliant(base: impl AsRef<Path>) -> Self {
+    pub fn new(base: impl AsRef<Path>) -> Self {
         Self {
             options: CompileOptions {
                 imports: true,
@@ -270,11 +270,11 @@ impl Wesl<StandardResolver> {
     /// Get a WESL compiler with all functionalities enabled, including *experimental*
     /// ones.
     ///
-    /// See also: [`Wesl::new_barebones`] and [`Wesl::new_spec_compliant`].
+    /// See also: [`Wesl::new`] and [`Wesl::new_barebones`].
     ///
     /// # WESL Reference
     /// This Wesl compiler is *not* spec-compliant because it enables all extensions
-    /// including *experimental* and *non-standard* ones. See [`Wesl::new_spec_compliant`].
+    /// including *experimental* and *non-standard* ones. See [`Wesl::new`].
     ///
     /// Experimental extensions: `generics`
     /// Non-standard extensions: `@const`
@@ -342,7 +342,7 @@ impl Wesl<NoResolver> {
     ///
     /// # WESL Reference
     /// This Wesl compiler is *not* spec-compliant because it does not enable *mandatory*
-    /// WESL extensions. See [`Wesl::new_spec_compliant`].
+    /// WESL extensions. See [`Wesl::new`].
     pub fn new_barebones() -> Self {
         Self {
             options: CompileOptions {
@@ -389,7 +389,7 @@ impl<R: Resolver> Wesl<R> {
     /// # WESL Reference
     /// All [builtin manglers](ManglerKind) are spec-compliant, except [`NoMangler`] ([`ManglerKind::None`]).
     /// Spec: not yet available.
-    pub fn set_custom_mangler(mut self, mangler: impl Mangler + 'static) -> Self {
+    pub fn set_custom_mangler(mut self, mangler: impl Mangler + Sync + 'static) -> Self {
         self.mangler = Box::new(mangler);
         self
     }
@@ -404,7 +404,7 @@ impl<R: Resolver> Wesl<R> {
     /// let mut router = Router::new();
     /// router.mount_fallback_resolver(FileResolver::new("src/shaders"));
     /// router.mount_resolver("runtime", resolver);
-    /// let compiler = Wesl::new_spec_compliant("").set_custom_resolver(router);
+    /// let compiler = Wesl::new("").set_custom_resolver(router);
     /// ```
     ///
     /// # WESL Reference

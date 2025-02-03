@@ -83,9 +83,9 @@ struct CompOptsArgs {
     /// Disable conditional compilation
     #[arg(long)]
     no_cond_comp: bool,
-    /// Disable generics
+    /// Enable generics
     #[arg(long)]
-    no_generics: bool,
+    generics: bool,
     /// Disable stripping unused declarations
     #[arg(long)]
     no_strip: bool,
@@ -127,7 +127,7 @@ impl From<&CompOptsArgs> for CompileOptions {
         Self {
             imports: !opts.no_imports,
             condcomp: !opts.no_cond_comp,
-            generics: !opts.no_generics,
+            generics: opts.generics,
             strip: !opts.no_strip,
             lower: !opts.no_lower,
             validate: !opts.no_validate,
