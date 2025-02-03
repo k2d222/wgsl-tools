@@ -313,7 +313,7 @@ fn wesl_testsuite_test(path: &Path) {
 
         let root_module = Resource::new(PathBuf::from("./main"));
         let mut compile_options = CompileOptions::default();
-        compile_options.use_stripping = false;
+        compile_options.strip = false;
 
         wesl::compile(&root_module, &resolver, &HashMangler, &compile_options)
             .inspect_err(|err| eprintln!("{err}"))

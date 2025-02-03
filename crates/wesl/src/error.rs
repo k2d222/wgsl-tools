@@ -364,8 +364,10 @@ impl<E: std::error::Error> Display for Diagnostic<E> {
         let note;
         if let Some(decl) = &self.declaration {
             note = format!("in declaration of `{decl}` in {orig}");
-            msg = msg.footer(Level::Note.title(&note));
+        } else {
+            note = format!("in {orig}");
         }
+        msg = msg.footer(Level::Note.title(&note));
 
         let renderer = Renderer::styled();
         let rendered = renderer.render(msg);

@@ -119,10 +119,7 @@ fn eval_if_attr(
     Ok(())
 }
 
-fn eval_if_attributes(
-    nodes: &mut Vec<impl Decorated>,
-    features: &Features,
-) -> Result<(), CondCompError> {
+fn eval_if_attributes(nodes: &mut Vec<impl Decorated>, features: &Features) -> Result<(), E> {
     let retains = nodes
         .iter()
         .map(|node| {
@@ -133,11 +130,12 @@ fn eval_if_attributes(
 
             if let Some(expr) = if_attr {
                 eval_attr(expr, features)
+                    .map_err(|e| Diagnostic::from(e).with_span(expr.span().clone()))
             } else {
                 Ok(EXPR_TRUE.clone())
             }
         })
-        .collect::<Result<Vec<Expression>, CondCompError>>()?;
+        .collect::<Result<Vec<Expression>, Diagnostic<E>>>()?;
 
     let retains = nodes
         .iter_mut()
@@ -168,11 +166,8 @@ fn eval_if_attributes(
 fn statement_eval_if_attributes(
     statements: &mut Vec<StatementNode>,
     features: &HashMap<String, bool>,
-) -> Result<(), CondCompError> {
-    fn rec_one(
-        stat: &mut StatementNode,
-        feats: &HashMap<String, bool>,
-    ) -> Result<(), CondCompError> {
+) -> Result<(), E> {
+    fn rec_one(stat: &mut StatementNode, feats: &HashMap<String, bool>) -> Result<(), E> {
         match stat.node_mut() {
             Statement::Compound(stat) => rec(&mut stat.statements, feats)?,
             Statement::If(stat) => {
@@ -213,10 +208,7 @@ fn statement_eval_if_attributes(
         };
         Ok(())
     }
-    fn rec(
-        stats: &mut Vec<StatementNode>,
-        feats: &HashMap<String, bool>,
-    ) -> Result<(), CondCompError> {
+    fn rec(stats: &mut Vec<StatementNode>, feats: &HashMap<String, bool>) -> Result<(), E> {
         eval_if_attributes(stats, feats)?;
         for stat in stats {
             rec_one(stat, feats)?;

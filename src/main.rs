@@ -95,6 +95,10 @@ struct CompOptsArgs {
     /// Disable performing validation checks
     #[arg(long)]
     no_validate: bool,
+    /// Eager imports: load all modules referenced by an identifier, regardless of if it is
+    /// used.
+    #[arg(long)]
+    eager: bool,
     /// Disable performing validation checks with naga
     #[cfg(feature = "naga")]
     #[arg(long)]
@@ -109,6 +113,9 @@ struct CompOptsArgs {
     /// Conditional compilation features to disable. Can be repeated
     #[arg(long)]
     disable: Vec<String>,
+    /// Root folder for `package::` imports. Defaults to the parent directory of the root module.
+    #[arg(long)]
+    base: Option<PathBuf>,
 }
 
 impl From<&CompOptsArgs> for CompileOptions {
@@ -118,13 +125,14 @@ impl From<&CompOptsArgs> for CompileOptions {
         features.extend(opts.disable.iter().map(|f| (f.clone(), false)));
 
         Self {
-            use_imports: !opts.no_imports,
-            use_condcomp: !opts.no_cond_comp,
-            use_generics: !opts.no_generics,
-            use_stripping: !opts.no_strip,
-            use_lower: !opts.no_lower,
-            use_validate: !opts.no_validate,
-            entry_points: if opts.no_strip {
+            imports: !opts.no_imports,
+            condcomp: !opts.no_cond_comp,
+            generics: !opts.no_generics,
+            strip: !opts.no_strip,
+            lower: !opts.no_lower,
+            validate: !opts.no_validate,
+            lazy: !opts.eager,
+            keep: if opts.no_strip {
                 None
             } else {
                 opts.keep.clone()
@@ -353,7 +361,11 @@ fn run_compile(
 
     match file_or_source {
         FileOrSource::File(path) => {
-            let base = path.parent().ok_or(CliError::FileNotFound)?;
+            let base = options
+                .base
+                .as_deref()
+                .or(path.parent())
+                .ok_or(CliError::FileNotFound)?;
             let name = path.file_name().ok_or(CliError::FileNotFound)?;
             let resolver = FileResolver::new(base);
 

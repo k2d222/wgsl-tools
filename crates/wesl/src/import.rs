@@ -54,6 +54,10 @@ impl Module {
             imports,
         }
     }
+    #[allow(unused)]
+    fn used_idents(&self) -> impl Iterator<Item = &Ident> {
+        self.treated_idents.iter()
+    }
 }
 
 pub(crate) struct Resolutions {
@@ -95,7 +99,20 @@ fn resolve_inline_resource(path: &Path, parent_resource: &Resource, imports: &Im
 }
 
 // XXX: it's quite messy.
-pub fn resolve(
+/// Load all modules "used" transitively by the root module. Make external idents point at
+/// the right declaration in the external module.
+///
+/// it is "lazy" because external modules are loaded only if used by the `keep` declarations
+/// or module-scope `const_assert`s.
+///
+/// "used": used declarations in the root module are the `keep` parameter. Used declarations
+/// in other modules are those reached by `keep` the declaration, recursively.
+/// Module-scope `const_assert`s are always included.
+///
+/// Returns a list of [`Module`]s with the list of their "used" idents.
+///
+/// See also: [`resolve_eager`]
+pub fn resolve_lazy(
     root: TranslationUnit,
     resource: &Resource,
     keep: HashSet<Ident>,
@@ -151,22 +168,21 @@ pub fn resolve(
                 continue;
             }
 
-            // get the the resource associated with the type, if it points at a decl in another module.
+            // get the the resource associated with the type, if it points to a decl in another module.
             let (ext_res, ext_id) = if let Some(path) = &ty.path {
                 let res = resolve_inline_resource(path, &module.resource, &module.imports);
-                let ident = ty.ident.clone();
-                (res, ident)
+                (res, ty.ident.clone())
             } else if let Some((resource, ident)) = module.imports.get(&ty.ident) {
                 (resource.clone(), ident.clone())
             } else {
-                // points at a local decl, we stop here.
+                // points to a local decl, we stop here.
                 if let Some(decl) = module.idents.get(&ty.ident) {
                     local_decls.insert(*decl);
                 }
                 continue;
             };
 
-            // if the import path points at a local decl, we stop here
+            // if the import path points to a local decl, we stop here
             if ext_res == module.resource {
                 if let Some(decl) = module.idents.get(&ty.ident) {
                     local_decls.insert(*decl);
@@ -277,6 +293,86 @@ pub fn resolve(
         std::mem::swap(&mut decls, &mut next_decls);
         next_decls.clear();
     }
+
+    Ok(resolutions)
+}
+
+pub fn resolve_eager(
+    root: TranslationUnit,
+    resource: &Resource,
+    resolver: &impl Resolver,
+) -> Result<Resolutions, E> {
+    let mut resolutions = Resolutions::new();
+
+    let module = Module::new(root, resource.clone());
+
+    let module = Rc::new(RefCell::new(module));
+    resolutions.push_module(resource.clone(), module.clone());
+
+    fn resolve_module(
+        module: &mut Module,
+        resolutions: &mut Resolutions,
+        resolver: &impl Resolver,
+    ) -> Result<(), E> {
+        for (_, (resource, _)) in &module.imports {
+            if !resolutions.modules.contains_key(resource) {
+                let source = resolver.resolve_module(resource)?;
+                let module = Module::new(source, resource.clone());
+                let module = Rc::new(RefCell::new(module));
+                resolutions.push_module(resource.clone(), module.clone());
+                resolve_module(module.borrow_mut().deref_mut(), resolutions, resolver)?;
+            }
+        }
+
+        for ty in Visit::<TypeExpression>::visit_mut(&mut module.source) {
+            let (ext_res, ext_id) = if let Some(path) = &ty.path {
+                let res = resolve_inline_resource(path, &module.resource, &module.imports);
+                (res, ty.ident.clone())
+            } else if let Some((resource, ident)) = module.imports.get(&ty.ident) {
+                (resource.clone(), ident.clone())
+            } else {
+                // points to a local decl, we stop here.
+                continue;
+            };
+
+            // if the import path points to a local decl, we stop here
+            if ext_res == module.resource {
+                if module.idents.contains_key(&ty.ident) {
+                    continue;
+                } else {
+                    return Err(E::MissingDecl(ext_res, ty.ident.name().to_string()));
+                }
+            }
+
+            // load the external module for this external ident
+            let ext_mod = if let Some(module) = resolutions.modules.get(&ext_res) {
+                module.clone()
+            } else {
+                let source = resolver.resolve_module(&ext_res)?;
+                let module = Module::new(source, ext_res.clone());
+                let module = Rc::new(RefCell::new(module));
+                resolutions.push_module(ext_res.clone(), module.clone());
+                resolve_module(module.borrow_mut().deref_mut(), resolutions, resolver)?;
+                module
+            };
+
+            // get the ident of the external declaration pointed to by the type
+            let ext_id = ext_mod
+                .borrow() // safety: only 1 module is borrowed at a time, the current one.
+                .idents
+                .iter()
+                .find(|(id, _)| *id.name() == *ext_id.name())
+                .map(|(id, _)| id.clone())
+                .ok_or_else(|| E::MissingDecl(ext_res.clone(), ext_id.to_string()))?;
+
+            ty.path = None;
+            ty.ident = ext_id;
+        }
+
+        Ok(())
+    }
+
+    resolve_module(module.borrow_mut().deref_mut(), &mut resolutions, resolver)?;
 
     Ok(resolutions)
 }
