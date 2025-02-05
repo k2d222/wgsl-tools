@@ -10,9 +10,13 @@
 //! ## Basic Usage
 //!
 //! See [`Wesl`] for an overview of the high-level API.
-//! ```ignore
-//! # use wesl::Wesl;
+//! ```rust
+//! # use wesl::{Wesl, VirtualResolver};
 //! let compiler = Wesl::new("src/shaders");
+//! # // just adding a virtual file here so the doctest runs without a filesystem
+//! # let mut resolver = VirtualResolver::new();
+//! # resolver.add_module("main", "fn my_fn() {}".into());
+//! # let compiler = compiler.set_custom_resolver(resolver);
 //!
 //! // compile a WESL file to a WGSL string
 //! let wgsl_str = compiler
@@ -64,22 +68,29 @@
 //! # let mut resolver = VirtualResolver::new();
 //! # resolver.add_module("source", source.into());
 //! # let compiler = Wesl::new_barebones().set_custom_resolver(resolver);
-//! let wgsl_expr = compiler.compile("source").unwrap().eval("my_fn(my_const) + 2").unwrap().to_string();
+//! let wgsl_expr = compiler
+//!     .compile("source").unwrap()
+//!     .eval("my_fn(my_const) + 2").unwrap()
+//!     .to_string();
 //! assert_eq!(wgsl_expr, "42u");
 //! ```
 //!
 //! ## Features
 //!
-//! | name     | description                                           | WESL Specification       |
-//! |----------|-------------------------------------------------------|--------------------------|
-//! | imports  | import statements and qualified identifiers with `::` | [in progress][imports]   |
-//! | condcomp | conditional compilation with `@if` attributes         | [complete][cond-trans]   |
-//! | generics | user-defined type-generators and generic functions    | [experimental][generics] |
-//! | eval     | execute shader code on the CPU and `@const` attribute | not compliant            |
+//! | name     | description                                           | WESL Specification        |
+//! |----------|-------------------------------------------------------|---------------------------|
+//! | imports  | import statements and qualified identifiers with `::` | [in progress][imports]    |
+//! | condcomp | conditional compilation with `@if` attributes         | [complete][cond-trans]    |
+//! | generics | user-defined type-generators and generic functions    | [experimental][generics]  |
+//! | package  | create shader libraries published to `crates.io`      | [experimental][packaging] |
+//! | eval     | execute shader code on the CPU and `@const` attribute | not part of the spec      |
+//!
+//! `imports` and `condcomp` are default features.
 //!
 //! [cond-trans]: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md
 //! [imports]: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md
 //! [generics]: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Generics.md
+//! [packaging]: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Packaging.md
 
 #[cfg(feature = "condcomp")]
 mod condcomp;
@@ -105,7 +116,6 @@ mod visit;
 #[cfg(feature = "condcomp")]
 pub use condcomp::CondCompError;
 
-use eval::HostShareable;
 #[cfg(feature = "imports")]
 pub use import::ImportError;
 
@@ -128,17 +138,18 @@ pub use resolve::{
 pub use sourcemap::{BasicSourceMap, SourceMap, SourceMapper};
 pub use strip::strip_except;
 pub use syntax_util::SyntaxUtil;
-use validate::validate_wesl;
 pub use validate::{validate_wgsl, ValidateError};
 
 pub use wgsl_parse::syntax;
 
-use itertools::Itertools;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     path::Path,
 };
+
+use itertools::Itertools;
+use validate::validate_wesl;
 use wgsl_parse::syntax::{Ident, TranslationUnit};
 
 #[derive(Debug)]
@@ -327,7 +338,7 @@ impl Wesl<NoResolver> {
     /// Get WESL compiler with all extensions disabled.
     ///
     /// You *should* set a [`Mangler`] and a [`Resolver`] manually to use this compiler, see
-    /// [`Wesl::set_mangler`] and [`Wesl::set_resolver`].
+    /// [`Wesl::set_mangler`] and [`Wesl::set_custom_resolver`].
     ///
     /// # WESL Reference
     /// This Wesl compiler is *not* spec-compliant because it does not enable *mandatory*
@@ -583,6 +594,7 @@ pub struct ExecResult<'a> {
     pub ctx: eval::Context<'a>,
 }
 
+#[cfg(feature = "eval")]
 impl<'a> ExecResult<'a> {
     /// Get the function return value.
     ///
@@ -600,6 +612,7 @@ impl<'a> ExecResult<'a> {
     }
 }
 
+#[cfg(feature = "eval")]
 impl<'a> Display for ExecResult<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inst.fmt(f)
@@ -615,14 +628,17 @@ pub struct EvalResult<'a> {
     pub ctx: eval::Context<'a>,
 }
 
+#[cfg(feature = "eval")]
 impl<'a> EvalResult<'a> {
     // TODO: make context non-mut
     /// Get the WGSL string representing the evaluated expression.
     pub fn to_buffer(&mut self) -> Option<Vec<u8>> {
+        use eval::HostShareable;
         self.inst.to_buffer(&mut self.ctx)
     }
 }
 
+#[cfg(feature = "eval")]
 impl<'a> Display for EvalResult<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inst.fmt(f)
@@ -634,7 +650,7 @@ impl CompileResult {
     /// Evaluate a const-expression in the context of this compilation result.
     ///
     /// Highly experimental. Not all builtin `@const` WGSL functions are supported yet.
-    /// Contrary to [`Wesl::eval`], the provided expression can reference declarations
+    /// Contrary to [`eval_str`], the provided expression can reference declarations
     /// in the compiled WGSL: global const-declarations and user-defined functions with
     /// the `@const` attribute.
     ///

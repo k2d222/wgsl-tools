@@ -1,4 +1,4 @@
-use crate::{visit::Visit, Diagnostic, Error};
+use crate::{visit::Visit, Error};
 
 use wgsl_parse::syntax::*;
 
@@ -24,6 +24,7 @@ pub fn lower(wesl: &mut TranslationUnit, _keep: &[String]) -> Result<(), Error> 
     #[cfg(feature = "eval")]
     {
         use crate::eval::{make_explicit_conversions, mark_functions_const, Context, Lower};
+        use crate::Diagnostic;
         mark_functions_const(wesl);
 
         // we want to drop wesl2 at the end of the block for idents use_count

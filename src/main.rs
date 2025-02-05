@@ -378,7 +378,7 @@ fn run_compile(
             let name = "command-line";
             let mut router = Router::new();
             let mut resolver = VirtualResolver::new();
-            resolver.add_module("", source);
+            resolver.add_module("", source.into());
             router.mount_resolver(name, resolver);
             router.mount_fallback_resolver(FileResolver::new(base));
 

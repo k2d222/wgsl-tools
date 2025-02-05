@@ -22,7 +22,7 @@ proc-macro2 = { version = "1.0.93", optional = true }
 quote = { version = "1.0.38", optional = true }
 
 [features]
-default = ["imports", "condcomp", "generics", "eval"]
+default = ["imports", "condcomp"]
 imports = ["wgsl-parse/imports"]
 attributes = ["wgsl-parse/attributes"]
 condcomp = ["attributes", "wgsl-parse/condcomp"]

@@ -14,7 +14,7 @@
 //! ## WESL Extensions
 //!
 //! With the `imports`, `generics`, `attributes` and `condcomp` one can selectively allow
-//! parsing WESL Extensions. Read more at https://github.com/wgsl-tooling-wg/wesl-spec.
+//! parsing WESL Extensions. Read more at <https://github.com/wgsl-tooling-wg/wesl-spec>.
 //!
 //! ## Design considerations
 //!
