@@ -354,7 +354,8 @@ fn run_compile(
 ) -> Result<CompileResult, CliError> {
     let compile_options = CompileOptions::from(options);
 
-    let compiler = Wesl::new_barebones()
+    let mut compiler = Wesl::new_barebones();
+    compiler
         .set_options(compile_options)
         .use_sourcemap(!options.no_sourcemap)
         .set_mangler(options.mangler.into());

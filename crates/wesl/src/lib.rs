@@ -300,7 +300,7 @@ impl Wesl<StandardResolver> {
     /// Add a package dependency.
     ///
     /// Learn more about packages in [`PkgBuilder`].
-    pub fn add_package(mut self, pkg: &'static dyn PkgModule) -> Self {
+    pub fn add_package(&mut self, pkg: &'static dyn PkgModule) -> &mut Self {
         self.resolver.add_package(pkg);
         self
     }
@@ -308,7 +308,10 @@ impl Wesl<StandardResolver> {
     /// Add several package dependencies.
     ///
     /// Learn more about packages in [`PkgBuilder`].
-    pub fn add_packages(mut self, pkgs: impl IntoIterator<Item = &'static dyn PkgModule>) -> Self {
+    pub fn add_packages(
+        &mut self,
+        pkgs: impl IntoIterator<Item = &'static dyn PkgModule>,
+    ) -> &mut Self {
         for pkg in pkgs {
             self.resolver.add_package(pkg);
         }
@@ -316,7 +319,7 @@ impl Wesl<StandardResolver> {
     }
 
     /// Add a custom importable in-memory file.
-    pub fn add_virtual_module(self, path: impl AsRef<Path>, source: String) -> Self {
+    pub fn add_virtual_module(&mut self, path: impl AsRef<Path>, source: String) -> &mut Self {
         let mut resolver = VirtualResolver::new();
         resolver.add_module("", source);
         self.mount_resolver(path, resolver)
@@ -325,10 +328,10 @@ impl Wesl<StandardResolver> {
     /// Mount a custom resolver to customize how to resolve the imports that match the
     /// `path` prefix.
     pub fn mount_resolver(
-        mut self,
+        &mut self,
         path: impl AsRef<Path>,
         resolver: impl Resolver + 'static,
-    ) -> Self {
+    ) -> &mut Self {
         self.resolver.mount_resolver(path, resolver);
         self
     }
@@ -365,7 +368,7 @@ impl Wesl<NoResolver> {
 
 impl<R: Resolver> Wesl<R> {
     /// Set all compilation options.
-    pub fn set_options(mut self, options: CompileOptions) -> Self {
+    pub fn set_options(&mut self, options: CompileOptions) -> &mut Self {
         self.options = options;
         self
     }
@@ -377,7 +380,7 @@ impl<R: Resolver> Wesl<R> {
     /// # WESL Reference
     /// Custom manglers *must* conform to the constraints described in [`Mangler`].
     /// Spec: not yet available.
-    pub fn set_mangler(mut self, kind: ManglerKind) -> Self {
+    pub fn set_mangler(&mut self, kind: ManglerKind) -> &mut Self {
         self.mangler = make_mangler(kind);
         self
     }
@@ -389,7 +392,7 @@ impl<R: Resolver> Wesl<R> {
     /// # WESL Reference
     /// All [builtin manglers](ManglerKind) are spec-compliant, except [`NoMangler`] ([`ManglerKind::None`]).
     /// Spec: not yet available.
-    pub fn set_custom_mangler(mut self, mangler: impl Mangler + Sync + 'static) -> Self {
+    pub fn set_custom_mangler(&mut self, mangler: impl Mangler + Sync + 'static) -> &mut Self {
         self.mangler = Box::new(mangler);
         self
     }
@@ -426,7 +429,7 @@ impl<R: Resolver> Wesl<R> {
     ///
     /// # WESL Reference
     /// Sourcemapping is not part of the WESL Specification and does not impact compliance.
-    pub fn use_sourcemap(mut self, val: bool) -> Self {
+    pub fn use_sourcemap(&mut self, val: bool) -> &mut Self {
         self.use_sourcemap = val;
         self
     }
@@ -439,7 +442,7 @@ impl<R: Resolver> Wesl<R> {
     /// Imports is a *mandatory* WESL extension.
     /// Spec: not yet available.
     #[cfg(feature = "imports")]
-    pub fn use_imports(mut self, val: bool) -> Self {
+    pub fn use_imports(&mut self, val: bool) -> &mut Self {
         self.options.imports = val;
         self
     }
@@ -450,7 +453,7 @@ impl<R: Resolver> Wesl<R> {
     /// Conditional Compilation is a *mandatory* WESL extension.
     /// Spec: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
     #[cfg(feature = "condcomp")]
-    pub fn use_condcomp(mut self, val: bool) -> Self {
+    pub fn use_condcomp(&mut self, val: bool) -> &mut Self {
         self.options.condcomp = val;
         self
     }
@@ -461,7 +464,7 @@ impl<R: Resolver> Wesl<R> {
     /// Generics is an *experimental* WESL extension.
     /// Spec: not yet available.
     #[cfg(feature = "generics")]
-    pub fn use_generics(mut self, val: bool) -> Self {
+    pub fn use_generics(&mut self, val: bool) -> &mut Self {
         self.options.generics = val;
         self
     }
@@ -471,7 +474,7 @@ impl<R: Resolver> Wesl<R> {
     /// Conditional translation is a *mandatory* WESL extension.
     /// Spec: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
     #[cfg(feature = "condcomp")]
-    pub fn set_feature(mut self, feat: &str, val: bool) -> Self {
+    pub fn set_feature(&mut self, feat: &str, val: bool) -> &mut Self {
         self.options.features.insert(feat.to_string(), val);
         self
     }
@@ -481,7 +484,10 @@ impl<R: Resolver> Wesl<R> {
     /// Conditional translation is a *mandatory* WESL extension.
     /// Spec: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
     #[cfg(feature = "condcomp")]
-    pub fn set_features<'a>(mut self, feats: impl IntoIterator<Item = (&'a str, bool)>) -> Self {
+    pub fn set_features<'a>(
+        &mut self,
+        feats: impl IntoIterator<Item = (&'a str, bool)>,
+    ) -> &mut Self {
         self.options
             .features
             .extend(feats.into_iter().map(|(k, v)| (k.to_string(), v)));
@@ -493,7 +499,7 @@ impl<R: Resolver> Wesl<R> {
     /// Conditional translation is a *mandatory* WESL extension.
     /// Spec: [`ConditionalTranslation.md`](https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md)
     #[cfg(feature = "condcomp")]
-    pub fn unset_feature(mut self, feat: &str) -> Self {
+    pub fn unset_feature(&mut self, feat: &str) -> &mut Self {
         self.options.features.remove(feat);
         self
     }
@@ -509,7 +515,7 @@ impl<R: Resolver> Wesl<R> {
     /// Code stripping is an *optional* WESL extension.
     /// Customizing entrypoints returned by the compiler is explicitly allowed by the spec.
     /// Spec: not yet available.
-    pub fn use_stripping(mut self, val: bool) -> Self {
+    pub fn use_stripping(&mut self, val: bool) -> &mut Self {
         self.options.strip = val;
         self
     }
@@ -532,7 +538,7 @@ impl<R: Resolver> Wesl<R> {
     /// # WESL Reference
     /// Lowering is an *experimental* WESL extension.
     /// Spec: not yet available.
-    pub fn use_lower(mut self, val: bool) -> Self {
+    pub fn use_lower(&mut self, val: bool) -> &mut Self {
         self.options.lower = val;
         self
     }
@@ -543,7 +549,7 @@ impl<R: Resolver> Wesl<R> {
     /// Code stripping is an *optional* WESL extension.
     /// Customizing entrypoints returned by the compiler is explicitly allowed by the spec.
     /// Spec: not yet available.
-    pub fn keep_entrypoints(mut self, entries: Vec<String>) -> Self {
+    pub fn keep_entrypoints(&mut self, entries: Vec<String>) -> &mut Self {
         self.options.keep = Some(entries);
         self
     }
@@ -554,7 +560,7 @@ impl<R: Resolver> Wesl<R> {
     /// Code stripping is an *optional* WESL extension.
     /// Customizing entrypoints returned by the compiler is explicitly allowed by the spec.
     /// Spec: not yet available.
-    pub fn keep_all_entrypoints(mut self) -> Self {
+    pub fn keep_all_entrypoints(&mut self) -> &mut Self {
         self.options.keep = None;
         self
     }
