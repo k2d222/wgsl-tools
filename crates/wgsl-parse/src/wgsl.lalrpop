@@ -544,7 +544,7 @@ AdditiveExpression: Expression = {
     }),
     // this handles the special case `x = 5--7` which must be parsed as `x = 5 - (-7)`
     <left: Spanned<AdditiveExpression>> <l: @L> "--" <right: Spanned<MultiplicativeExpression>> => {
-        let outer_span = Span::new((l+1)..right.span.range().end);
+        let outer_span = Span::new((l+1)..right.span().range().end);
         let right = Spanned::new(Expression::Unary(UnaryExpression {
             operator: UnaryOperator::Negation, operand: right,
         }), outer_span);

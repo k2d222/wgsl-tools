@@ -23,13 +23,13 @@ impl Span {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Default, Clone, Debug, Deref, DerefMut, AsRef, AsMut, From)]
 pub struct Spanned<T> {
-    pub span: Span,
+    span: Span,
     #[deref(forward)]
     #[deref_mut(forward)]
     #[as_ref(T)]
     #[as_mut(T)]
     #[from(T)]
-    pub node: Box<T>,
+    node: Box<T>,
 }
 
 // we ignore the spans for equality comparison

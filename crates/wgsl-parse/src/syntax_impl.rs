@@ -3,6 +3,12 @@ use crate::span::Spanned;
 use super::syntax::*;
 
 impl TranslationUnit {
+    /// New empty [`TranslationUnit`]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Remove all [`GlobalDeclaration::Void`] and [`Statement::Void`]
     pub fn remove_voids(&mut self) {
         self.global_declarations.retain_mut(|decl| match decl {
             GlobalDeclaration::Void => false,
@@ -15,6 +21,7 @@ impl TranslationUnit {
 }
 
 impl GlobalDeclaration {
+    /// Remove all [`Statement::Void`]
     pub fn remove_voids(&mut self) {
         if let GlobalDeclaration::Function(decl) = self {
             decl.body.remove_voids();
@@ -23,6 +30,7 @@ impl GlobalDeclaration {
 }
 
 impl TypeExpression {
+    /// New [`TypeExpression`] with no template.
     pub fn new(ident: Ident) -> Self {
         Self {
             #[cfg(feature = "imports")]
@@ -34,6 +42,7 @@ impl TypeExpression {
 }
 
 impl CompoundStatement {
+    /// Remove all [`Statement::Void`]
     pub fn remove_voids(&mut self) {
         self.statements.retain_mut(|stat| match stat.node_mut() {
             Statement::Void => false,
@@ -46,6 +55,7 @@ impl CompoundStatement {
 }
 
 impl Statement {
+    /// Remove all [`Statement::Void`]
     pub fn remove_voids(&mut self) {
         match self {
             Statement::Compound(stat) => {
@@ -73,9 +83,11 @@ impl Statement {
 }
 
 impl AccessMode {
+    /// Is [`Self::Read`] or [`Self::ReadWrite`]
     pub fn is_read(&self) -> bool {
         matches!(self, Self::Read | Self::ReadWrite)
     }
+    /// Is [`Self::Write`] or [`Self::ReadWrite`]
     pub fn is_write(&self) -> bool {
         matches!(self, Self::Write | Self::ReadWrite)
     }
@@ -107,6 +119,7 @@ impl From<Expression> for ReturnStatement {
 }
 
 impl GlobalDeclaration {
+    /// Get the name of the declaration, if it has one.
     pub fn ident(&self) -> Option<&Ident> {
         match self {
             GlobalDeclaration::Void => None,
@@ -117,6 +130,7 @@ impl GlobalDeclaration {
             GlobalDeclaration::ConstAssert(_) => None,
         }
     }
+    /// Get the name of the declaration, if it has one.
     pub fn ident_mut(&mut self) -> Option<&mut Ident> {
         match self {
             GlobalDeclaration::Void => None,
@@ -131,7 +145,9 @@ impl GlobalDeclaration {
 
 /// A trait implemented on all types that can be prefixed by attributes.
 pub trait Decorated {
+    /// List all attributes (`@name`) of a syntax node.
     fn attributes(&self) -> &[Attribute];
+    /// List all attributes (`@name`) of a syntax node.
     fn attributes_mut(&mut self) -> &mut [Attribute];
 }
 
@@ -151,7 +167,6 @@ macro_rules! impl_decorated_struct {
             fn attributes(&self) -> &[Attribute] {
                 &self.attributes
             }
-
             fn attributes_mut(&mut self) -> &mut [Attribute] {
                 &mut self.attributes
             }
