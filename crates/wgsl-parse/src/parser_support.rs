@@ -319,6 +319,7 @@ pub(crate) fn parse_attribute(
 }
 
 // format: @type(T, foo | bar | baz)
+#[cfg(feature = "generics")]
 fn parse_attr_type(arguments: Option<Vec<ExpressionNode>>) -> Result<TypeConstraint, E> {
     fn parse_rec(expr: Expression) -> Result<Vec<TypeExpression>, E> {
         match expr {

@@ -663,15 +663,15 @@ CompoundStatement: CompoundStatement = {
 
 #[cfg(not(feature = "attributes"))]
 AssignmentStatement: AssignmentStatement = {
-    <lhs: LhsExpression> "=" <rhs: ExpressionNode> => AssignmentStatement {
+    <lhs: Spanned<LhsExpression>> "=" <rhs: ExpressionNode> => AssignmentStatement {
         operator: AssignmentOperator::Equal, lhs, rhs
     },
-    <lhs: LhsExpression> <operator: CompoundAssignmentOperator> <rhs: ExpressionNode> => AssignmentStatement {
+    <lhs: Spanned<LhsExpression>> <operator: CompoundAssignmentOperator> <rhs: ExpressionNode> => AssignmentStatement {
         operator, lhs, rhs
     },
-    <lhs: WithSpan<"_">> "=" <rhs: ExpressionNode> => {
-        let (lhs, span) = lhs;
-        let lhs = Expression::TypeOrIdentifier(lhs.to_string().into());
+     <l: @R> "_" <r: @R> "=" <rhs: ExpressionNode> => {
+        let lhs = Expression::TypeOrIdentifier(Ident::new("_".to_string()).into());
+        let span = (l..r).into();
         let lhs = Spanned::new(lhs, span);
         AssignmentStatement { operator: AssignmentOperator::Equal, lhs, rhs }
     },

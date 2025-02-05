@@ -35,7 +35,8 @@ impl<T: Display> Display for Indent<T> {
 
 impl Display for TranslationUnit {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "imports") && !self.imports.is_empty() {
+        #[cfg(feature = "imports")]
+        if !self.imports.is_empty() {
             for import in &self.imports {
                 writeln!(f, "import {import}\n")?;
             }
@@ -62,6 +63,7 @@ impl Display for Ident {
 #[cfg(feature = "imports")]
 impl Display for Import {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        #[cfg(feature = "attributes")]
         write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let path = self
             .path
@@ -114,9 +116,8 @@ impl Display for GlobalDirective {
 
 impl Display for DiagnosticDirective {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let severity = &self.severity;
         let rule = &self.rule_name;
         write!(f, "diagnostic ({severity}, {rule});")
@@ -136,9 +137,8 @@ impl Display for DiagnosticSeverity {
 
 impl Display for EnableDirective {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let exts = self.extensions.iter().format(", ");
         write!(f, "enable {exts};")
     }
@@ -146,9 +146,8 @@ impl Display for EnableDirective {
 
 impl Display for RequiresDirective {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let exts = self.extensions.iter().format(", ");
         write!(f, "requires {exts};")
     }
@@ -226,9 +225,8 @@ impl Display for AccessMode {
 
 impl Display for TypeAlias {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let name = &self.ident;
         let typ = &self.ty;
         write!(f, "alias {name} = {typ};")
@@ -237,9 +235,8 @@ impl Display for TypeAlias {
 
 impl Display for Struct {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let name = &self.ident;
         let members = Indent(self.members.iter().format(",\n"));
         write!(f, "struct {name} {{\n{members}\n}}")
@@ -284,9 +281,8 @@ impl Display for FormalParameter {
 
 impl Display for ConstAssert {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let expr = &self.expression;
         write!(f, "const_assert {expr};",)
     }
@@ -579,9 +575,8 @@ impl Display for CompoundStatement {
 
 impl Display for AssignmentStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let operator = &self.operator;
         let lhs = &self.lhs;
         let rhs = &self.rhs;
@@ -609,9 +604,8 @@ impl Display for AssignmentOperator {
 
 impl Display for IncrementStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let expr = &self.expression;
         write!(f, "{expr}++;")
     }
@@ -619,9 +613,8 @@ impl Display for IncrementStatement {
 
 impl Display for DecrementStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let expr = &self.expression;
         write!(f, "{expr}--;")
     }
@@ -652,9 +645,8 @@ impl Display for IfClause {
 
 impl Display for ElseIfClause {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let expr = &self.expression;
         let stmt = &self.body;
         write!(f, "else if {expr} {stmt}")
@@ -663,9 +655,8 @@ impl Display for ElseIfClause {
 
 impl Display for ElseClause {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let stmt = &self.body;
         write!(f, "else {stmt}")
     }
@@ -683,9 +674,8 @@ impl Display for SwitchStatement {
 
 impl Display for SwitchClause {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let cases = self.case_selectors.iter().format(", ");
         let body = &self.body;
         write!(f, "case {cases} {body}")
@@ -724,9 +714,8 @@ impl Display for LoopStatement {
 
 impl Display for ContinuingStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let body_attrs = fmt_attrs(&self.body.attributes, false);
         let stmts = Indent(
             self.body
@@ -745,9 +734,8 @@ impl Display for ContinuingStatement {
 
 impl Display for BreakIfStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let expr = &self.expression;
         write!(f, "break if {expr};")
     }
@@ -792,27 +780,24 @@ impl Display for WhileStatement {
 
 impl Display for BreakStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         write!(f, "break;")
     }
 }
 
 impl Display for ContinueStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         write!(f, "continue;")
     }
 }
 
 impl Display for ReturnStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let expr = self
             .expression
             .iter()
@@ -823,18 +808,16 @@ impl Display for ReturnStatement {
 
 impl Display for DiscardStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         write!(f, "discard;")
     }
 }
 
 impl Display for FunctionCallStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if cfg!(feature = "attributes") {
-            write!(f, "{}", fmt_attrs(&self.attributes, false))?;
-        }
+        #[cfg(feature = "attributes")]
+        write!(f, "{}", fmt_attrs(&self.attributes, false))?;
         let call = &self.call;
         write!(f, "{call};")
     }

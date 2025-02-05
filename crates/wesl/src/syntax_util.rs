@@ -60,6 +60,7 @@ impl SyntaxUtil for TranslationUnit {
         // keep track of declarations in a scope.
         type Scope<'a> = Cow<'a, HashSet<Ident>>;
 
+        #[cfg(feature = "imports")]
         fn flatten_imports(imports: &[Import]) -> impl Iterator<Item = Ident> + '_ {
             imports.iter().flat_map(|import| match &import.content {
                 ImportContent::Item(item) => {
@@ -70,10 +71,16 @@ impl SyntaxUtil for TranslationUnit {
         }
 
         let scope: Scope = Cow::Owned(
+            #[cfg(feature = "imports")]
             self.global_declarations
                 .iter()
                 .filter_map(|decl| decl.ident().cloned())
                 .chain(flatten_imports(&self.imports))
+                .collect::<HashSet<_>>(),
+            #[cfg(not(feature = "imports"))]
+            self.global_declarations
+                .iter()
+                .filter_map(|decl| decl.ident().cloned())
                 .collect::<HashSet<_>>(),
         );
 
@@ -193,6 +200,7 @@ impl SyntaxUtil for TranslationUnit {
                     if let Some(s) = &mut s.continuing {
                         let s2 = &mut *s; // COMBAK: not sure why this is needed?
                         query_mut!(s2.{
+                            #[cfg(feature = "attributes")]
                             attributes.[].(x => x.visit_mut()),
                             body.attributes.[].(x => x.visit_mut()),
                         })
@@ -203,6 +211,7 @@ impl SyntaxUtil for TranslationUnit {
                         if let Some(s) = &mut s.break_if {
                             let s2 = &mut *s; // COMBAK: not sure why this is needed?
                             query_mut!(s2.{
+                                #[cfg(feature = "attributes")]
                                 attributes.[].(x => x.visit_mut()),
                                 expression.(x => Visit::<TypeExpression>::visit_mut(&mut **x)),
                             })

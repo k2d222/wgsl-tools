@@ -24,7 +24,9 @@ thiserror = "1.0.63"
 lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", branch = "master" }
 
 [features]
-default = ["serde", "imports", "condcomp", "generics"]
+default = []
+
+wesl = ["imports", "condcomp", "generics"]
 
 # allow attributes on most declarations and statements.
 # reference: https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md#appendix-updated-grammar

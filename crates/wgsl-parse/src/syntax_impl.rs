@@ -107,6 +107,7 @@ impl From<Ident> for TypeExpression {
 impl From<ExpressionNode> for ReturnStatement {
     fn from(expression: ExpressionNode) -> Self {
         Self {
+            #[cfg(feature = "attributes")]
             attributes: Default::default(),
             expression: Some(expression),
         }

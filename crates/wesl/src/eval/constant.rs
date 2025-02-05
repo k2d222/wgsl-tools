@@ -91,11 +91,9 @@ impl<T: IsConst> IsConst for Vec<T> {
 
 impl IsConst for Struct {
     fn is_const(&self, wesl: &TranslationUnit, locals: &mut Locals) -> bool {
-        self.attributes.is_const(wesl, locals)
-            && self
-                .members
-                .iter()
-                .all(|m| m.attributes.is_const(wesl, locals) && m.ty.is_const(wesl, locals))
+        self.members
+            .iter()
+            .all(|m| m.attributes.is_const(wesl, locals) && m.ty.is_const(wesl, locals))
     }
 }
 
@@ -120,7 +118,7 @@ impl IsConst for Attribute {
             Attribute::Fragment => false,         // attr on entrypoint function (never const)
             Attribute::Compute => false,          // attr on entrypoint function (never const)
             #[cfg(feature = "condcomp")]
-            Attribute::If(expr) => expr.is_const(wesl, locals),
+            Attribute::If(_) => true, // if attributes are translate-time (always const)
             #[cfg(feature = "generics")]
             Attribute::Type(_) => todo!(),
             Attribute::Custom(attr) => attr.arguments.is_const(wesl, locals),
@@ -170,32 +168,22 @@ impl IsConst for Statement {
             Statement::Void => true,
             Statement::Compound(stat) => stat.is_const(wesl, locals),
             Statement::Assignment(stat) => {
-                stat.attributes.is_const(wesl, locals)
-                    && stat.lhs.is_const(wesl, locals)
-                    && stat.rhs.is_const(wesl, locals)
+                stat.lhs.is_const(wesl, locals) && stat.rhs.is_const(wesl, locals)
             }
-            Statement::Increment(stat) => {
-                stat.attributes.is_const(wesl, locals) && stat.expression.is_const(wesl, locals)
-            }
-            Statement::Decrement(stat) => {
-                stat.attributes.is_const(wesl, locals) && stat.expression.is_const(wesl, locals)
-            }
+            Statement::Increment(stat) => stat.expression.is_const(wesl, locals),
+            Statement::Decrement(stat) => stat.expression.is_const(wesl, locals),
             Statement::If(stat) => {
                 stat.attributes.is_const(wesl, locals)
                     && stat.if_clause.expression.is_const(wesl, locals)
                     && stat.if_clause.body.is_const(wesl, locals)
                     && stat.else_if_clauses.iter().all(|clause| {
-                        clause.attributes.is_const(wesl, locals)
-                            && clause.expression.is_const(wesl, locals)
+                        clause.expression.is_const(wesl, locals)
                             && clause.body.is_const(wesl, locals)
                     })
                     && stat
                         .else_clause
                         .as_ref()
-                        .map(|clause| {
-                            clause.attributes.is_const(wesl, locals)
-                                && clause.body.is_const(wesl, locals)
-                        })
+                        .map(|clause| clause.body.is_const(wesl, locals))
                         .unwrap_or(true)
             }
             Statement::Switch(stat) => {
@@ -203,12 +191,10 @@ impl IsConst for Statement {
                     && stat.expression.is_const(wesl, locals)
                     && stat.body_attributes.is_const(wesl, locals)
                     && stat.clauses.iter().all(|clause| {
-                        clause.attributes.is_const(wesl, locals)
-                            && clause.case_selectors.iter().all(|sel| match sel {
-                                CaseSelector::Default => true,
-                                CaseSelector::Expression(expr) => expr.is_const(wesl, locals),
-                            })
-                            && clause.body.is_const(wesl, locals)
+                        clause.case_selectors.iter().all(|sel| match sel {
+                            CaseSelector::Default => true,
+                            CaseSelector::Expression(expr) => expr.is_const(wesl, locals),
+                        }) && clause.body.is_const(wesl, locals)
                     })
             }
             Statement::Loop(stat) => {
@@ -228,15 +214,11 @@ impl IsConst for Statement {
                     && stat.condition.is_const(wesl, locals)
                     && stat.body.is_const(wesl, locals)
             }
-            Statement::Break(stat) => stat.attributes.is_const(wesl, locals),
-            Statement::Continue(stat) => stat.attributes.is_const(wesl, locals),
-            Statement::Return(stat) => {
-                stat.attributes.is_const(wesl, locals) && stat.expression.is_const(wesl, locals)
-            }
+            Statement::Break(stat) => true,
+            Statement::Continue(stat) => true,
+            Statement::Return(stat) => stat.expression.is_const(wesl, locals),
             Statement::Discard(_) => false, // only in entrypoints, never const
-            Statement::FunctionCall(stat) => {
-                stat.attributes.is_const(wesl, locals) && stat.call.is_const(wesl, locals)
-            }
+            Statement::FunctionCall(stat) => stat.call.is_const(wesl, locals),
             Statement::ConstAssert(_) => true,
             Statement::Declaration(stat) => {
                 stat.attributes.is_const(wesl, locals)
@@ -253,14 +235,11 @@ impl IsConst for Statement {
 
 impl IsConst for ContinuingStatement {
     fn is_const(&self, wesl: &TranslationUnit, locals: &mut Locals) -> bool {
-        self.attributes.is_const(wesl, locals)
-            && self.body.is_const(wesl, locals)
+        self.body.is_const(wesl, locals)
             && self
                 .break_if
                 .as_ref()
-                .map(|stat| {
-                    stat.attributes.is_const(wesl, locals) && stat.expression.is_const(wesl, locals)
-                })
+                .map(|stat| stat.expression.is_const(wesl, locals))
                 .unwrap_or(true)
     }
 }

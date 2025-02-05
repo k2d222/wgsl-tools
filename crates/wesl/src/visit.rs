@@ -98,7 +98,11 @@ impl_visit! { Statement => Attributes,
         },
         Statement::Switch.{
             attributes,
-            clauses.[].{ attributes, body.statements.[].(x => recurse(x)) },
+            clauses.[].{
+                #[cfg(feature = "attributes")]
+                attributes,
+                body.statements.[].(x => recurse(x))
+            },
         },
         Statement::Loop.{
             attributes,
@@ -107,7 +111,8 @@ impl_visit! { Statement => Attributes,
                 #[cfg(feature = "attributes")]
                 attributes,
                 body.statements.[].(x => recurse(x)),
-                break_if.[].{ attributes }
+                #[cfg(feature = "attributes")]
+                break_if.[].attributes
             },
         },
         Statement::For.{
@@ -188,6 +193,7 @@ impl_visit! { Statement => TypeExpression,
             expression.(x => visit::<Expression, TypeExpression>(x)),
             body_attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
             clauses.[].{
+                #[cfg(feature = "attributes")]
                 attributes.[].(x => visit::<Attribute, TypeExpression>(x)),
                 case_selectors.[].CaseSelector::Expression.(x => visit::<Expression, TypeExpression>(x)),
                 body.{
@@ -385,7 +391,7 @@ impl_visit! { TranslationUnit => StatementNode,
 
 impl_visit! { TranslationUnit => Attributes,
     {
-        #[cfg(feature = "attributes")]
+        #[cfg(all(feature = "imports", feature = "attributes"))]
         imports.[].attributes,
         #[cfg(feature = "attributes")]
         global_directives.[].{
