@@ -10,7 +10,8 @@
 //! ## Basic Usage
 //!
 //! See [`Wesl`] for an overview of the high-level API.
-//! ```rust
+//! ```ignore
+//! # use wesl::Wesl;
 //! let compiler = Wesl::new("src/shaders");
 //!
 //! // compile a WESL file to a WGSL string
@@ -33,7 +34,7 @@
 //! ```
 //!
 //! Create the `build.rs` file with the following content:
-//! ```rust
+//! ```ignore
 //! # use wesl::{Wesl, FileResolver};
 //! fn main() {
 //!     Wesl::new("src/shaders")
@@ -42,26 +43,29 @@
 //! ```
 //!
 //! Include the compiled WGSL string in your code:
-//! ```rust
-//! # use wesl::include_wesl;
+//! ```ignore
 //! let module = device.create_shader_module(ShaderModuleDescriptor {
 //!     label: Some("my_shader"),
 //!     source: ShaderSource::Wgsl(include_wesl!("my_shader")),
-//! })
+//! });
 //! ```
-//! NOTE: [`include_wesl`] is a very simple convenience macro.
 //!
 //! ## Advanced Examples
 //!
 //! Evaluate const-expressions.
 //!```rust
-//! # use wesl::{Wesl};
-//! # let compiler = Wesl::new("");
+//! # use wesl::{Wesl, VirtualResolver, eval_str};
 //! // ...standalone expression
-//! let wgsl_expr = compiler.eval("abs(3 - 5)").unwrap().to_string();
+//! let wgsl_expr = eval_str("abs(3 - 5)").unwrap().to_string();
+//! assert_eq!(wgsl_expr, "2");
 //!
 //! // ...expression using declarations in a WESL file
-//! let wgsl_expr = compiler.compile("main.wesl").unwrap().eval("my_fn(my_const) + 5").unwrap().to_string();
+//! let source = "const my_const = 4; @const fn my_fn(v: u32) -> u32 { return v * 10; }";
+//! # let mut resolver = VirtualResolver::new();
+//! # resolver.add_module("source", source.into());
+//! # let compiler = Wesl::new_barebones().set_custom_resolver(resolver);
+//! let wgsl_expr = compiler.compile("source").unwrap().eval("my_fn(my_const) + 2").unwrap().to_string();
+//! assert_eq!(wgsl_expr, "42u");
 //! ```
 //!
 //! ## Features
@@ -134,7 +138,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     path::Path,
-    sync::LazyLock,
 };
 use wgsl_parse::syntax::{Ident, TranslationUnit};
 
@@ -181,7 +184,7 @@ pub enum ManglerKind {
     None,
 }
 
-fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler + Sync + 'static> {
+fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler + Send + Sync + 'static> {
     match kind {
         ManglerKind::Escape => Box::new(EscapeMangler),
         ManglerKind::Hash => Box::new(HashMangler),
@@ -224,7 +227,8 @@ macro_rules! wesl_pkg {
 ///
 /// # Basic Usage
 ///
-/// ```rust
+/// ```ignore
+/// # use wesl::Wesl;
 /// let compiler = Wesl::new("path/to/dir/containing/shaders");
 /// let wgsl_string = compiler.compile("main.wesl").unwrap().to_string();
 /// ```
@@ -232,7 +236,7 @@ pub struct Wesl<R: Resolver> {
     options: CompileOptions,
     use_sourcemap: bool,
     resolver: R,
-    mangler: Box<dyn Mangler + Sync + 'static>,
+    mangler: Box<dyn Mangler + Send + Sync + 'static>,
 }
 
 impl Wesl<StandardResolver> {
@@ -317,30 +321,12 @@ impl Wesl<StandardResolver> {
         }
         self
     }
-
-    /// Add a custom importable in-memory file.
-    pub fn add_virtual_module(&mut self, path: impl AsRef<Path>, source: String) -> &mut Self {
-        let mut resolver = VirtualResolver::new();
-        resolver.add_module("", source);
-        self.mount_resolver(path, resolver)
-    }
-
-    /// Mount a custom resolver to customize how to resolve the imports that match the
-    /// `path` prefix.
-    pub fn mount_resolver(
-        &mut self,
-        path: impl AsRef<Path>,
-        resolver: impl Resolver + 'static,
-    ) -> &mut Self {
-        self.resolver.mount_resolver(path, resolver);
-        self
-    }
 }
 
 impl Wesl<NoResolver> {
     /// Get WESL compiler with all extensions disabled.
     ///
-    /// You *must* set a [`Mangler`] and a [`Resolver`] manually to use this compiler, see
+    /// You *should* set a [`Mangler`] and a [`Resolver`] manually to use this compiler, see
     /// [`Wesl::set_mangler`] and [`Wesl::set_resolver`].
     ///
     /// # WESL Reference
@@ -392,7 +378,10 @@ impl<R: Resolver> Wesl<R> {
     /// # WESL Reference
     /// All [builtin manglers](ManglerKind) are spec-compliant, except [`NoMangler`] ([`ManglerKind::None`]).
     /// Spec: not yet available.
-    pub fn set_custom_mangler(&mut self, mangler: impl Mangler + Sync + 'static) -> &mut Self {
+    pub fn set_custom_mangler(
+        &mut self,
+        mangler: impl Mangler + Send + Sync + 'static,
+    ) -> &mut Self {
         self.mangler = Box::new(mangler);
         self
     }
@@ -403,7 +392,7 @@ impl<R: Resolver> Wesl<R> {
     /// # use wesl::{FileResolver, Router, VirtualResolver, Wesl};
     /// // in this example, `import runtime::constants::PI` is in a custom module mounted at runtime.
     /// let mut resolver = VirtualResolver::new();
-    /// resolver.add_module("constants", "const PI = 3.1415; const TAU = PI * 2.0;");
+    /// resolver.add_module("constants", "const PI = 3.1415; const TAU = PI * 2.0;".into());
     /// let mut router = Router::new();
     /// router.mount_fallback_resolver(FileResolver::new("src/shaders"));
     /// router.mount_resolver("runtime", resolver);
@@ -644,18 +633,19 @@ impl<'a> Display for EvalResult<'a> {
 impl CompileResult {
     /// Evaluate a const-expression in the context of this compilation result.
     ///
+    /// Highly experimental. Not all builtin `@const` WGSL functions are supported yet.
     /// Contrary to [`Wesl::eval`], the provided expression can reference declarations
     /// in the compiled WGSL: global const-declarations and user-defined functions with
     /// the `@const` attribute.
     ///
     /// # WESL Reference
-    /// The `@const` attribute is non-standard.
+    /// The user-defined `@const` attribute is non-standard.
+    /// See issue [#46](https://github.com/wgsl-tooling-wg/wesl-spec/issues/46#issuecomment-2389531479).
     pub fn eval(&self, source: &str) -> Result<EvalResult, Error> {
-        static EMPTY_MODULE: LazyLock<TranslationUnit> = LazyLock::new(TranslationUnit::default);
         let expr = source
             .parse::<syntax::Expression>()
             .map_err(|e| Error::Error(Diagnostic::from(e).with_source(source.to_string())))?;
-        let (inst, ctx) = eval_const(&expr, &EMPTY_MODULE);
+        let (inst, ctx) = eval(&expr, &self.syntax);
         let inst = inst.map_err(|e| {
             Diagnostic::from(e)
                 .with_source(source.to_string())
@@ -692,7 +682,7 @@ impl CompileResult {
             arguments: Vec::new(),
         });
 
-        let (inst, ctx) = eval_runtime(&expr, &self.syntax, bindings, overrides);
+        let (inst, ctx) = exec(&expr, &self.syntax, bindings, overrides);
         let inst = inst.map_err(|e| {
             Diagnostic::from(e)
                 .with_source(expr.to_string())
@@ -736,32 +726,6 @@ impl<R: Resolver> Wesl<R> {
         }
     }
 
-    /// Compile a WESL program from a string.
-    ///
-    /// The result of `compile` is not necessarily a valid WGSL string. See (TODO) to
-    /// validate the output and (TODO) perform convert the output to valid WGSL.
-    ///
-    /// # WESL Reference
-    /// Spec: not available yet.
-    // pub fn compile_str(&self, entrypoint: impl AsRef<Path>) -> Result<CompileResult, Error> {
-    //     let entrypoint = Resource::from(entrypoint.as_ref().to_path_buf());
-
-    //     if self.use_sourcemap {
-    //         let (syntax, sourcemap) =
-    //             compile_sourcemap(&entrypoint, &self.resolver, &self.mangler, &self.options);
-    //         Ok(CompileResult {
-    //             syntax: syntax?,
-    //             sourcemap: Some(sourcemap),
-    //         })
-    //     } else {
-    //         let syntax = compile(&entrypoint, &self.resolver, &self.mangler, &self.options);
-    //         Ok(CompileResult {
-    //             syntax: syntax?,
-    //             sourcemap: None,
-    //         })
-    //     }
-    // }
-
     /// Compile a WESL program from a root file and output the result in rust's OUT_DIR.
     ///
     /// This function is meant to be used in a `build.rs` workflow. The compiled WGSL will
@@ -795,32 +759,6 @@ impl<R: Resolver> Wesl<R> {
             .unwrap()
             .to_file(output)
             .expect("failed to write output shader");
-    }
-
-    /// Evaluate a const-expression.
-    ///
-    /// Only function declarations marked `@const` can be called from const-expressions.
-    /// User-defined expressions with the `@const` attribute is an *non-standard*
-    /// extension.
-    ///
-    /// # WESL Reference
-    /// Highly experimental. Not all builtin `@const` WGSL functions are supported yet.
-    /// Spec: not available yet.
-    /// see issue [#46](https://github.com/wgsl-tooling-wg/wesl-spec/issues/46#issuecomment-2389531479).
-    #[cfg(feature = "eval")]
-    pub fn eval(source: &str) -> Result<eval::Instance, Error> {
-        let expr = source
-            .parse::<syntax::Expression>()
-            .map_err(|e| Error::Error(Diagnostic::from(e).with_source(source.to_string())))?;
-        let wgsl = TranslationUnit::default();
-        let (inst, ctx) = eval_const(&expr, &wgsl);
-        inst.map_err(|e| {
-            Error::Error(
-                Diagnostic::from(e)
-                    .with_source(source.to_string())
-                    .with_ctx(&ctx),
-            )
-        })
     }
 }
 
@@ -979,9 +917,29 @@ pub fn compile_sourcemap(
     (comp, sourcemap)
 }
 
-/// Low-level version of [`Wesl::eval`].
+/// Evaluate a const-expression.
+///
+/// Only builtin function declarations marked `@const` can be called from const-expressions.
+/// Highly experimental. Not all builtin `@const` WGSL functions are supported yet.
 #[cfg(feature = "eval")]
-pub fn eval_const<'s>(
+pub fn eval_str(expr: &str) -> Result<eval::Instance, Error> {
+    let expr = expr
+        .parse::<syntax::Expression>()
+        .map_err(|e| Error::Error(Diagnostic::from(e).with_source(expr.to_string())))?;
+    let wgsl = TranslationUnit::default();
+    let (inst, ctx) = eval(&expr, &wgsl);
+    inst.map_err(|e| {
+        Error::Error(
+            Diagnostic::from(e)
+                .with_source(expr.to_string())
+                .with_ctx(&ctx),
+        )
+    })
+}
+
+/// Low-level version of [`eval_str`].
+#[cfg(feature = "eval")]
+pub fn eval<'s>(
     expr: &syntax::Expression,
     wgsl: &'s TranslationUnit,
 ) -> (Result<eval::Instance, EvalError>, eval::Context<'s>) {
@@ -992,7 +950,7 @@ pub fn eval_const<'s>(
 
 /// Low-level version of [`CompileResult::exec`].
 #[cfg(feature = "eval")]
-pub fn eval_runtime<'s>(
+pub fn exec<'s>(
     expr: &syntax::Expression,
     wgsl: &'s TranslationUnit,
     bindings: HashMap<(u32, u32), eval::RefInstance>,
@@ -1004,4 +962,10 @@ pub fn eval_runtime<'s>(
     ctx.set_stage(eval::EvalStage::Exec);
     let res = wgsl.exec(&mut ctx).and_then(|_| expr.eval(&mut ctx));
     (res, ctx)
+}
+
+#[test]
+fn test_send_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Wesl<StandardResolver>>();
 }

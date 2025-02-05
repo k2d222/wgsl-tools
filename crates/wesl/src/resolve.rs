@@ -207,7 +207,7 @@ impl<R: Resolver> CacheResolver<R> {
 }
 
 impl<R: Resolver> Resolver for CacheResolver<R> {
-    fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, E> {
+    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
         let mut cache = self.cache.borrow_mut();
 
         let source = if let Some(source) = cache.get(resource) {
@@ -299,11 +299,11 @@ impl Resolver for FileResolver {
 ///
 /// Use-cases are platforms that lack a filesystem (e.g. WASM) or for runtime-generated files.
 #[derive(Default)]
-pub struct VirtualResolver {
-    files: HashMap<Resource, String>,
+pub struct VirtualResolver<'a> {
+    files: HashMap<Resource, Cow<'a, str>>,
 }
 
-impl VirtualResolver {
+impl<'a> VirtualResolver<'a> {
     pub fn new() -> Self {
         Self {
             files: HashMap::new(),
@@ -311,7 +311,7 @@ impl VirtualResolver {
     }
 
     /// resolves imports in `path` with the given WESL string.
-    pub fn add_module(&mut self, path: impl AsRef<Path>, file: String) {
+    pub fn add_module(&mut self, path: impl AsRef<Path>, file: Cow<'a, str>) {
         self.files.insert(Resource::new(path), file);
     }
 
@@ -323,8 +323,8 @@ impl VirtualResolver {
     }
 }
 
-impl Resolver for VirtualResolver {
-    fn resolve_source<'a>(&'a self, resource: &Resource) -> Result<Cow<'a, str>, E> {
+impl Resolver for VirtualResolver<'_> {
+    fn resolve_source<'b>(&'b self, resource: &Resource) -> Result<Cow<'b, str>, E> {
         let source = self.get_module(resource)?;
         Ok(source.into())
     }
@@ -381,7 +381,7 @@ impl<R: Resolver, F: ResolveFn> Resolver for Preprocessor<R, F> {
 ///
 /// Add sub-resolvers with [`Self::mount_resolver`].
 ///
-/// This resolver is not thread-safe ([`Sync`]).
+/// This resolver is not thread-safe ([`Send`], [`Sync`]).
 pub struct Router {
     mount_points: Vec<(PathBuf, Box<dyn Resolver>)>,
     fallback: Option<(PathBuf, Box<dyn Resolver>)>,
@@ -457,7 +457,7 @@ impl Resolver for Router {
     }
 }
 
-pub trait PkgModule: Sync {
+pub trait PkgModule: Send + Sync {
     fn name(&self) -> &'static str;
     fn source(&self) -> &'static str;
     fn submodules(&self) -> &[&dyn PkgModule];
@@ -525,25 +525,19 @@ impl Resolver for PkgResolver {
 /// The resolver that implements the WESL standard.
 pub struct StandardResolver {
     pkg: PkgResolver,
-    router: Router,
+    files: FileResolver,
 }
 
 impl StandardResolver {
     pub fn new(base: impl AsRef<Path>) -> Self {
-        let mut router = Router::new();
-        router.mount_fallback_resolver(FileResolver::new(base));
         Self {
             pkg: PkgResolver::new(),
-            router,
+            files: FileResolver::new(base),
         }
     }
 
     pub fn add_package(&mut self, pkg: &'static dyn PkgModule) {
         self.pkg.add_package(pkg)
-    }
-
-    pub fn mount_resolver(&mut self, path: impl AsRef<Path>, resolver: impl Resolver + 'static) {
-        self.router.mount_resolver(path, resolver);
     }
 }
 
@@ -552,21 +546,21 @@ impl Resolver for StandardResolver {
         if let Some(res) = resource.package_local() {
             self.pkg.resolve_source(&res)
         } else {
-            self.router.resolve_source(resource)
+            self.files.resolve_source(resource)
         }
     }
     fn resolve_module(&self, resource: &Resource) -> Result<TranslationUnit, E> {
         if let Some(res) = resource.package_local() {
             self.pkg.resolve_module(&res)
         } else {
-            self.router.resolve_module(resource)
+            self.files.resolve_module(resource)
         }
     }
     fn display_name(&self, resource: &Resource) -> Option<String> {
         if let Some(res) = resource.package_local() {
             self.pkg.display_name(&res)
         } else {
-            self.router.display_name(resource)
+            self.files.display_name(resource)
         }
     }
 }
