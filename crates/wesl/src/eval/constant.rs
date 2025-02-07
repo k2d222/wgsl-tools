@@ -1,6 +1,4 @@
-use std::collections::HashSet;
-
-use super::SyntaxUtil;
+use super::{Scope, SyntaxUtil};
 use itertools::Itertools;
 use wgsl_parse::{span::Spanned, syntax::*};
 
@@ -40,30 +38,7 @@ pub fn is_function_const(decl: &Function, wesl: &TranslationUnit) -> bool {
     }
 }
 
-struct Locals {
-    // TODO: copy on write
-    stack: Vec<HashSet<String>>,
-}
-
-impl Locals {
-    fn new() -> Self {
-        Self {
-            stack: vec![Default::default()],
-        }
-    }
-    pub fn push(&mut self) {
-        self.stack.push(Default::default())
-    }
-    pub fn pop(&mut self) {
-        self.stack.pop().expect("failed to pop scope");
-    }
-    pub fn insert(&mut self, name: String) {
-        self.stack.last_mut().unwrap().insert(name);
-    }
-    pub fn contains(&self, name: &str) -> bool {
-        self.stack.iter().rev().any(|scope| scope.contains(name))
-    }
-}
+type Locals = Scope<()>;
 
 trait IsConst {
     fn is_const(&self, wesl: &TranslationUnit, locals: &mut Locals) -> bool;
@@ -129,7 +104,7 @@ impl IsConst for Attribute {
 impl IsConst for FormalParameter {
     fn is_const(&self, wesl: &TranslationUnit, locals: &mut Locals) -> bool {
         self.attributes.is_const(wesl, locals) && self.ty.is_const(wesl, locals) && {
-            locals.insert(self.ident.to_string());
+            locals.add(self.ident.to_string(), ());
             true
         }
     }
@@ -225,7 +200,7 @@ impl IsConst for Statement {
                     && stmt.ty.is_const(wesl, locals)
                     && stmt.initializer.is_const(wesl, locals)
                     && {
-                        locals.insert(stmt.ident.to_string());
+                        locals.add(stmt.ident.to_string(), ());
                         true
                     }
             }

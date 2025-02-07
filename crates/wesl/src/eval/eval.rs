@@ -331,7 +331,7 @@ impl Eval for FunctionCall {
                     .inspect_err(|_| ctx.set_err_decl_ctx(decl.ident.to_string()))?;
 
                 for (a, p) in zip(args, &decl.parameters) {
-                    ctx.scope.add_val(p.ident.to_string(), a);
+                    ctx.scope.add(p.ident.to_string(), a);
                 }
 
                 // the arguments must be in the same scope as the function body.
@@ -368,7 +368,7 @@ impl Eval for TypeExpression {
     fn eval(&self, ctx: &mut Context) -> Result<Instance, E> {
         if self.template_args.is_none() {
             if let Some(r) = ctx.scope.get(&*self.ident.name()) {
-                Ok(r)
+                Ok(r.clone())
             } else {
                 let ty = self.ident.name().eval_ty(ctx)?;
                 Ok(ty.into())

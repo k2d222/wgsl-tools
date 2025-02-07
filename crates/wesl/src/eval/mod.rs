@@ -27,58 +27,93 @@ pub use to_expr::*;
 pub use ty::*;
 
 use derive_more::Display;
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 use wgsl_parse::{span::Span, syntax::*};
 
 #[derive(Clone, Debug)]
-pub struct Scope {
-    // TODO: copy on write
-    stack: Vec<HashMap<String, Instance>>,
+pub struct ScopeInner<T> {
+    local: HashMap<String, T>,
+    parent: Option<Rc<ScopeInner<T>>>,
 }
 
-impl Scope {
+#[derive(Clone, Debug)]
+pub struct Scope<T> {
+    inner: Rc<ScopeInner<T>>,
+}
+
+impl<T> Default for ScopeInner<T> {
+    fn default() -> Self {
+        Self {
+            local: Default::default(),
+            parent: Default::default(),
+        }
+    }
+}
+
+impl<T> Default for Scope<T> {
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+        }
+    }
+}
+
+impl<T> ScopeInner<T> {
+    pub fn get(&self, name: &str) -> Option<&T> {
+        self.local
+            .get(name)
+            .or_else(|| self.parent.as_ref().and_then(|parent| parent.get(name)))
+    }
+    pub fn contains(&self, name: &str) -> bool {
+        self.local.contains_key(name)
+            || self
+                .parent
+                .as_ref()
+                .is_some_and(|parent| parent.contains(name))
+    }
+}
+
+impl<T> Scope<T> {
     pub fn new() -> Self {
         Self {
-            stack: vec![Default::default()],
+            // stack: vec![Default::default()],
+            inner: Rc::new(ScopeInner {
+                local: Default::default(),
+                parent: None,
+            }),
         }
     }
 
     pub fn push(&mut self) {
-        self.stack.push(Default::default())
+        self.inner = self.inner.clone()
     }
-
     pub fn pop(&mut self) {
-        self.stack.pop().expect("failed to pop scope");
+        self.inner = self
+            .inner
+            .parent
+            .as_ref()
+            .expect("failed to pop scope")
+            .clone();
     }
 
-    pub fn add_val(&mut self, name: String, value: Instance) {
-        if self.stack.last_mut().unwrap().insert(name, value).is_some() {
-            panic!("duplicate variable insertion")
+    pub fn add(&mut self, name: String, value: T) {
+        if Rc::get_mut(&mut self.inner)
+            .expect("cannot edit a parent scope")
+            .local
+            .insert(name, value)
+            .is_some()
+        {
+            panic!("duplicate scope value insertion")
         }
     }
-
-    pub fn add_var(&mut self, name: String, inst: RefInstance) {
-        let value = Instance::from(inst);
-        if self.stack.last_mut().unwrap().insert(name, value).is_some() {
-            panic!("duplicate variable insertion")
-        }
+    pub fn get(&self, name: &str) -> Option<&T> {
+        self.inner.get(name)
     }
-
-    pub fn get(&self, name: &str) -> Option<Instance> {
-        self.stack
-            .iter()
-            .rev()
-            .find_map(|scope| scope.get(name).cloned())
+    pub fn local_contains(&self, name: &str) -> bool {
+        self.inner.local.contains_key(name)
     }
-
-    pub fn contains_current(&self, name: &str) -> bool {
-        self.stack.last().unwrap().contains_key(name)
-    }
-}
-
-impl Default for Scope {
-    fn default() -> Self {
-        Self::new()
+    pub fn contains(&self, name: &str) -> bool {
+        self.inner.contains(name)
     }
 }
 
@@ -88,16 +123,6 @@ pub enum ScopeKind {
     Module,
     #[display("function")]
     Function,
-}
-
-pub struct ScopeGuard<'a> {
-    scope: &'a mut Scope,
-}
-
-impl<'a> Drop for ScopeGuard<'a> {
-    fn drop(&mut self) {
-        self.scope.pop();
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -121,7 +146,7 @@ pub enum ResourceKind {
 // TODO: should we remove the source from the Context struct?
 pub struct Context<'s> {
     pub(crate) source: &'s TranslationUnit,
-    pub(crate) scope: Scope,
+    pub(crate) scope: Scope<Instance>,
     pub(crate) resources: HashMap<(u32, u32), RefInstance>,
     pub(crate) overrides: HashMap<String, Instance>,
     pub(crate) kind: ScopeKind,
@@ -146,12 +171,6 @@ impl<'s> Context<'s> {
 
     pub fn source(&self) -> &TranslationUnit {
         self.source
-    }
-
-    pub fn scope_guard(&mut self) -> ScopeGuard {
-        ScopeGuard {
-            scope: &mut self.scope,
-        }
     }
 
     fn set_err_decl_ctx(&mut self, decl: String) {

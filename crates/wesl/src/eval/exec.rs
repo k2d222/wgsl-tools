@@ -524,7 +524,7 @@ impl Exec for ConstAssertStatement {
 // TODO: implement address space
 impl Exec for Declaration {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
-        if ctx.scope.contains_current(&*self.ident.name()) {
+        if ctx.scope.local_contains(&*self.ident.name()) {
             return Err(E::DuplicateDecl(self.ident.to_string()));
         }
 
@@ -543,7 +543,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::Conversion(inst.ty(), ty))?;
                 }
 
-                ctx.scope.add_val(self.ident.to_string(), inst);
+                ctx.scope.add(self.ident.to_string(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Override, ScopeKind::Function) => Err(E::OverrideInFn),
@@ -563,7 +563,7 @@ impl Exec for Declaration {
                         .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
                 };
 
-                ctx.scope.add_val(self.ident.to_string(), inst);
+                ctx.scope.add(self.ident.to_string(), inst);
                 Ok(Flow::Next)
             }
             (DeclarationKind::Var(space), ScopeKind::Function) => {
@@ -590,9 +590,10 @@ impl Exec for Declaration {
                     }
                 }?;
 
-                ctx.scope.add_var(
+                ctx.scope.add(
                     self.ident.to_string(),
-                    RefInstance::from_instance(inst, AddressSpace::Function, AccessMode::ReadWrite),
+                    RefInstance::from_instance(inst, AddressSpace::Function, AccessMode::ReadWrite)
+                        .into(),
                 );
                 Ok(Flow::Next)
             }
@@ -618,7 +619,7 @@ impl Exec for Declaration {
                             .ok_or_else(|| E::Conversion(inst.ty(), inst.ty().concretize()))?
                     };
 
-                    ctx.scope.add_val(self.ident.to_string(), inst);
+                    ctx.scope.add(self.ident.to_string(), inst);
                     Ok(Flow::Next)
                 }
             }
@@ -660,13 +661,14 @@ impl Exec for Declaration {
                                 }
                             }?;
 
-                            ctx.scope.add_var(
+                            ctx.scope.add(
                                 self.ident.to_string(),
                                 RefInstance::from_instance(
                                     inst,
                                     AddressSpace::Private,
                                     AccessMode::ReadWrite,
-                                ),
+                                )
+                                .into(),
                             );
                         }
                         AddressSpace::Workgroup => {
@@ -693,7 +695,7 @@ impl Exec for Declaration {
                             if inst.access != AccessMode::Read {
                                 return Err(E::AccessMode(AccessMode::Read, inst.access));
                             }
-                            ctx.scope.add_var(self.ident.to_string(), inst.clone())
+                            ctx.scope.add(self.ident.to_string(), inst.clone().into())
                         }
                         AddressSpace::Storage(access_mode) => {
                             let Some(ty) = &self.ty else {
@@ -714,7 +716,7 @@ impl Exec for Declaration {
                             if inst.access != access_mode {
                                 return Err(E::AccessMode(access_mode, inst.access));
                             }
-                            ctx.scope.add_var(self.ident.to_string(), inst.clone())
+                            ctx.scope.add(self.ident.to_string(), inst.clone().into())
                         }
                         AddressSpace::Handle => todo!("handle address space"),
                     }
