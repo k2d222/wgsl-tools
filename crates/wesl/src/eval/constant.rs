@@ -166,66 +166,66 @@ impl IsConst for Statement {
     fn is_const(&self, wesl: &TranslationUnit, locals: &mut Locals) -> bool {
         match self {
             Statement::Void => true,
-            Statement::Compound(stat) => stat.is_const(wesl, locals),
-            Statement::Assignment(stat) => {
-                stat.lhs.is_const(wesl, locals) && stat.rhs.is_const(wesl, locals)
+            Statement::Compound(stmt) => stmt.is_const(wesl, locals),
+            Statement::Assignment(stmt) => {
+                stmt.lhs.is_const(wesl, locals) && stmt.rhs.is_const(wesl, locals)
             }
-            Statement::Increment(stat) => stat.expression.is_const(wesl, locals),
-            Statement::Decrement(stat) => stat.expression.is_const(wesl, locals),
-            Statement::If(stat) => {
-                stat.attributes.is_const(wesl, locals)
-                    && stat.if_clause.expression.is_const(wesl, locals)
-                    && stat.if_clause.body.is_const(wesl, locals)
-                    && stat.else_if_clauses.iter().all(|clause| {
+            Statement::Increment(stmt) => stmt.expression.is_const(wesl, locals),
+            Statement::Decrement(stmt) => stmt.expression.is_const(wesl, locals),
+            Statement::If(stmt) => {
+                stmt.attributes.is_const(wesl, locals)
+                    && stmt.if_clause.expression.is_const(wesl, locals)
+                    && stmt.if_clause.body.is_const(wesl, locals)
+                    && stmt.else_if_clauses.iter().all(|clause| {
                         clause.expression.is_const(wesl, locals)
                             && clause.body.is_const(wesl, locals)
                     })
-                    && stat
+                    && stmt
                         .else_clause
                         .as_ref()
                         .map(|clause| clause.body.is_const(wesl, locals))
                         .unwrap_or(true)
             }
-            Statement::Switch(stat) => {
-                stat.attributes.is_const(wesl, locals)
-                    && stat.expression.is_const(wesl, locals)
-                    && stat.body_attributes.is_const(wesl, locals)
-                    && stat.clauses.iter().all(|clause| {
+            Statement::Switch(stmt) => {
+                stmt.attributes.is_const(wesl, locals)
+                    && stmt.expression.is_const(wesl, locals)
+                    && stmt.body_attributes.is_const(wesl, locals)
+                    && stmt.clauses.iter().all(|clause| {
                         clause.case_selectors.iter().all(|sel| match sel {
                             CaseSelector::Default => true,
                             CaseSelector::Expression(expr) => expr.is_const(wesl, locals),
                         }) && clause.body.is_const(wesl, locals)
                     })
             }
-            Statement::Loop(stat) => {
-                stat.attributes.is_const(wesl, locals)
-                    && stat.body.is_const(wesl, locals)
-                    && stat.continuing.is_const(wesl, locals)
+            Statement::Loop(stmt) => {
+                stmt.attributes.is_const(wesl, locals)
+                    && stmt.body.is_const(wesl, locals)
+                    && stmt.continuing.is_const(wesl, locals)
             }
-            Statement::For(stat) => {
-                stat.attributes.is_const(wesl, locals)
-                    && stat.initializer.is_const(wesl, locals)
-                    && stat.condition.is_const(wesl, locals)
-                    && stat.update.is_const(wesl, locals)
-                    && stat.body.is_const(wesl, locals)
+            Statement::For(stmt) => {
+                stmt.attributes.is_const(wesl, locals)
+                    && stmt.initializer.is_const(wesl, locals)
+                    && stmt.condition.is_const(wesl, locals)
+                    && stmt.update.is_const(wesl, locals)
+                    && stmt.body.is_const(wesl, locals)
             }
-            Statement::While(stat) => {
-                stat.attributes.is_const(wesl, locals)
-                    && stat.condition.is_const(wesl, locals)
-                    && stat.body.is_const(wesl, locals)
+            Statement::While(stmt) => {
+                stmt.attributes.is_const(wesl, locals)
+                    && stmt.condition.is_const(wesl, locals)
+                    && stmt.body.is_const(wesl, locals)
             }
-            Statement::Break(stat) => true,
-            Statement::Continue(stat) => true,
-            Statement::Return(stat) => stat.expression.is_const(wesl, locals),
+            Statement::Break(_) => true,
+            Statement::Continue(_) => true,
+            Statement::Return(stmt) => stmt.expression.is_const(wesl, locals),
             Statement::Discard(_) => false, // only in entrypoints, never const
-            Statement::FunctionCall(stat) => stat.call.is_const(wesl, locals),
+            Statement::FunctionCall(stmt) => stmt.call.is_const(wesl, locals),
             Statement::ConstAssert(_) => true,
-            Statement::Declaration(stat) => {
-                stat.attributes.is_const(wesl, locals)
-                    && stat.ty.is_const(wesl, locals)
-                    && stat.initializer.is_const(wesl, locals)
+            Statement::Declaration(stmt) => {
+                stmt.attributes.is_const(wesl, locals)
+                    && stmt.ty.is_const(wesl, locals)
+                    && stmt.initializer.is_const(wesl, locals)
                     && {
-                        locals.insert(stat.ident.to_string());
+                        locals.insert(stmt.ident.to_string());
                         true
                     }
             }
@@ -239,7 +239,7 @@ impl IsConst for ContinuingStatement {
             && self
                 .break_if
                 .as_ref()
-                .map(|stat| stat.expression.is_const(wesl, locals))
+                .map(|stmt| stmt.expression.is_const(wesl, locals))
                 .unwrap_or(true)
     }
 }

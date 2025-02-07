@@ -167,51 +167,51 @@ fn statement_eval_if_attributes(
     statements: &mut Vec<StatementNode>,
     features: &HashMap<String, bool>,
 ) -> Result<(), E> {
-    fn rec_one(stat: &mut StatementNode, feats: &HashMap<String, bool>) -> Result<(), E> {
-        match stat.node_mut() {
-            Statement::Compound(stat) => rec(&mut stat.statements, feats)?,
-            Statement::If(stat) => {
-                rec(&mut stat.if_clause.body.statements, feats)?;
-                for elif in &mut stat.else_if_clauses {
+    fn rec_one(stmt: &mut StatementNode, feats: &HashMap<String, bool>) -> Result<(), E> {
+        match stmt.node_mut() {
+            Statement::Compound(stmt) => rec(&mut stmt.statements, feats)?,
+            Statement::If(stmt) => {
+                rec(&mut stmt.if_clause.body.statements, feats)?;
+                for elif in &mut stmt.else_if_clauses {
                     rec(&mut elif.body.statements, feats)?;
                 }
-                if let Some(el) = &mut stat.else_clause {
+                if let Some(el) = &mut stmt.else_clause {
                     rec(&mut el.body.statements, feats)?;
                 }
             }
-            Statement::Switch(stat) => {
-                eval_if_attributes(&mut stat.clauses, feats)?;
-                for clause in &mut stat.clauses {
+            Statement::Switch(stmt) => {
+                eval_if_attributes(&mut stmt.clauses, feats)?;
+                for clause in &mut stmt.clauses {
                     rec(&mut clause.body.statements, feats)?;
                 }
             }
-            Statement::Loop(stat) => {
-                rec(&mut stat.body.statements, feats)?;
-                eval_if_attr(&mut stat.continuing, feats)?;
-                if let Some(cont) = &mut stat.continuing {
+            Statement::Loop(stmt) => {
+                rec(&mut stmt.body.statements, feats)?;
+                eval_if_attr(&mut stmt.continuing, feats)?;
+                if let Some(cont) = &mut stmt.continuing {
                     rec(&mut cont.body.statements, feats)?;
                     eval_if_attr(&mut cont.break_if, feats)?;
                 }
-                rec(&mut stat.body.statements, feats)?;
+                rec(&mut stmt.body.statements, feats)?;
             }
-            Statement::For(stat) => {
-                if let Some(init) = &mut stat.initializer {
+            Statement::For(stmt) => {
+                if let Some(init) = &mut stmt.initializer {
                     rec_one(&mut *init, feats)?
                 }
-                if let Some(updt) = &mut stat.update {
+                if let Some(updt) = &mut stmt.update {
                     rec_one(&mut *updt, feats)?
                 }
-                rec(&mut stat.body.statements, feats)?
+                rec(&mut stmt.body.statements, feats)?
             }
-            Statement::While(stat) => rec(&mut stat.body.statements, feats)?,
+            Statement::While(stmt) => rec(&mut stmt.body.statements, feats)?,
             _ => (),
         };
         Ok(())
     }
     fn rec(stats: &mut Vec<StatementNode>, feats: &HashMap<String, bool>) -> Result<(), E> {
         eval_if_attributes(stats, feats)?;
-        for stat in stats {
-            rec_one(stat, feats)?;
+        for stmt in stats {
+            rec_one(stmt, feats)?;
         }
         Ok(())
     }

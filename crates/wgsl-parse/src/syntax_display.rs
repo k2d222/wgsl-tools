@@ -727,7 +727,7 @@ impl Display for ContinuingStatement {
         let break_if = self
             .break_if
             .iter()
-            .format_with("", |stat, f| f(&format_args!("{}\n", Indent(stat))));
+            .format_with("", |stmt, f| f(&format_args!("{}\n", Indent(stmt))));
         write!(f, "continuing {body_attrs}{{\n{stmts}\n{break_if}}}")
     }
 }

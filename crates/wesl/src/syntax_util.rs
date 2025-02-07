@@ -99,7 +99,7 @@ impl SyntaxUtil for TranslationUnit {
             stats: impl IntoIterator<Item = &'a mut StatementNode>,
             mut scope: Scope<'a>,
         ) -> Scope<'a> {
-            stats.into_iter().for_each(|stat| match stat.node_mut() {
+            stats.into_iter().for_each(|stmt| match stmt.node_mut() {
                 Statement::Void => (),
                 Statement::Compound(s) => {
                     query_mut!(s.attributes.[].(x => x.visit_mut()))

@@ -62,8 +62,8 @@ pub fn generate_variants(wesl: &mut TranslationUnit) -> Result<(), E> {
                 }
 
                 // remove evaluated type attributes
-                for stat in &mut decl.body.statements {
-                    for attrs in Visit::<Attributes>::visit_mut(stat.node_mut()) {
+                for stmt in &mut decl.body.statements {
+                    for attrs in Visit::<Attributes>::visit_mut(stmt.node_mut()) {
                         attrs.retain(|attr| match attr {
                             Attribute::Type(c) => !c.variants.is_empty(),
                             _ => true,
@@ -195,51 +195,51 @@ fn eval_ty_attrs(nodes: &mut Vec<impl Decorated>, ty: &TypeConstraint) -> Result
 }
 
 fn stat_eval_ty_attrs(statements: &mut Vec<StatementNode>, ty: &TypeConstraint) -> Result<(), E> {
-    fn rec_one(stat: &mut StatementNode, ty: &TypeConstraint) -> Result<(), GenericsError> {
-        match stat.node_mut() {
-            Statement::Compound(stat) => rec(&mut stat.statements, ty)?,
-            Statement::If(stat) => {
-                rec(&mut stat.if_clause.body.statements, ty)?;
-                for elif in &mut stat.else_if_clauses {
+    fn rec_one(stmt: &mut StatementNode, ty: &TypeConstraint) -> Result<(), GenericsError> {
+        match stmt.node_mut() {
+            Statement::Compound(stmt) => rec(&mut stmt.statements, ty)?,
+            Statement::If(stmt) => {
+                rec(&mut stmt.if_clause.body.statements, ty)?;
+                for elif in &mut stmt.else_if_clauses {
                     rec(&mut elif.body.statements, ty)?;
                 }
-                if let Some(el) = &mut stat.else_clause {
+                if let Some(el) = &mut stmt.else_clause {
                     rec(&mut el.body.statements, ty)?;
                 }
             }
-            Statement::Switch(stat) => {
-                eval_ty_attrs(&mut stat.clauses, ty)?;
-                for clause in &mut stat.clauses {
+            Statement::Switch(stmt) => {
+                eval_ty_attrs(&mut stmt.clauses, ty)?;
+                for clause in &mut stmt.clauses {
                     rec(&mut clause.body.statements, ty)?;
                 }
             }
-            Statement::Loop(stat) => {
-                rec(&mut stat.body.statements, ty)?;
-                eval_ty_attr(&mut stat.continuing, ty)?;
-                if let Some(cont) = &mut stat.continuing {
+            Statement::Loop(stmt) => {
+                rec(&mut stmt.body.statements, ty)?;
+                eval_ty_attr(&mut stmt.continuing, ty)?;
+                if let Some(cont) = &mut stmt.continuing {
                     rec(&mut cont.body.statements, ty)?;
                     eval_ty_attr(&mut cont.break_if, ty)?;
                 }
-                rec(&mut stat.body.statements, ty)?;
+                rec(&mut stmt.body.statements, ty)?;
             }
-            Statement::For(stat) => {
-                if let Some(init) = &mut stat.initializer {
+            Statement::For(stmt) => {
+                if let Some(init) = &mut stmt.initializer {
                     rec_one(&mut *init, ty)?
                 }
-                if let Some(updt) = &mut stat.update {
+                if let Some(updt) = &mut stmt.update {
                     rec_one(&mut *updt, ty)?
                 }
-                rec(&mut stat.body.statements, ty)?
+                rec(&mut stmt.body.statements, ty)?
             }
-            Statement::While(stat) => rec(&mut stat.body.statements, ty)?,
+            Statement::While(stmt) => rec(&mut stmt.body.statements, ty)?,
             _ => (),
         };
         Ok(())
     }
     fn rec(stats: &mut Vec<StatementNode>, ty: &TypeConstraint) -> Result<(), E> {
         eval_ty_attrs(stats, ty)?;
-        for stat in stats {
-            rec_one(stat, ty)?;
+        for stmt in stats {
+            rec_one(stmt, ty)?;
         }
         Ok(())
     }

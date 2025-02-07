@@ -44,10 +44,10 @@ impl TypeExpression {
 impl CompoundStatement {
     /// Remove all [`Statement::Void`]
     pub fn remove_voids(&mut self) {
-        self.statements.retain_mut(|stat| match stat.node_mut() {
+        self.statements.retain_mut(|stmt| match stmt.node_mut() {
             Statement::Void => false,
             _ => {
-                stat.remove_voids();
+                stmt.remove_voids();
                 true
             }
         })
@@ -58,25 +58,25 @@ impl Statement {
     /// Remove all [`Statement::Void`]
     pub fn remove_voids(&mut self) {
         match self {
-            Statement::Compound(stat) => {
-                stat.remove_voids();
+            Statement::Compound(stmt) => {
+                stmt.remove_voids();
             }
-            Statement::If(stat) => {
-                stat.if_clause.body.remove_voids();
-                for clause in &mut stat.else_if_clauses {
+            Statement::If(stmt) => {
+                stmt.if_clause.body.remove_voids();
+                for clause in &mut stmt.else_if_clauses {
                     clause.body.remove_voids();
                 }
-                if let Some(clause) = &mut stat.else_clause {
+                if let Some(clause) = &mut stmt.else_clause {
                     clause.body.remove_voids();
                 }
             }
-            Statement::Switch(stat) => stat
+            Statement::Switch(stmt) => stmt
                 .clauses
                 .iter_mut()
                 .for_each(|clause| clause.body.remove_voids()),
-            Statement::Loop(stat) => stat.body.remove_voids(),
-            Statement::For(stat) => stat.body.remove_voids(),
-            Statement::While(stat) => stat.body.remove_voids(),
+            Statement::Loop(stmt) => stmt.body.remove_voids(),
+            Statement::For(stmt) => stmt.body.remove_voids(),
+            Statement::While(stmt) => stmt.body.remove_voids(),
             _ => (),
         }
     }
@@ -253,44 +253,44 @@ impl Decorated for Statement {
     fn attributes(&self) -> &[Attribute] {
         match self {
             Statement::Void => &[],
-            Statement::Compound(stat) => &stat.attributes,
-            Statement::Assignment(stat) => &stat.attributes,
-            Statement::Increment(stat) => &stat.attributes,
-            Statement::Decrement(stat) => &stat.attributes,
-            Statement::If(stat) => &stat.attributes,
-            Statement::Switch(stat) => &stat.attributes,
-            Statement::Loop(stat) => &stat.attributes,
-            Statement::For(stat) => &stat.attributes,
-            Statement::While(stat) => &stat.attributes,
-            Statement::Break(stat) => &stat.attributes,
-            Statement::Continue(stat) => &stat.attributes,
-            Statement::Return(stat) => &stat.attributes,
-            Statement::Discard(stat) => &stat.attributes,
-            Statement::FunctionCall(stat) => &stat.attributes,
-            Statement::ConstAssert(stat) => &stat.attributes,
-            Statement::Declaration(stat) => &stat.attributes,
+            Statement::Compound(stmt) => &stmt.attributes,
+            Statement::Assignment(stmt) => &stmt.attributes,
+            Statement::Increment(stmt) => &stmt.attributes,
+            Statement::Decrement(stmt) => &stmt.attributes,
+            Statement::If(stmt) => &stmt.attributes,
+            Statement::Switch(stmt) => &stmt.attributes,
+            Statement::Loop(stmt) => &stmt.attributes,
+            Statement::For(stmt) => &stmt.attributes,
+            Statement::While(stmt) => &stmt.attributes,
+            Statement::Break(stmt) => &stmt.attributes,
+            Statement::Continue(stmt) => &stmt.attributes,
+            Statement::Return(stmt) => &stmt.attributes,
+            Statement::Discard(stmt) => &stmt.attributes,
+            Statement::FunctionCall(stmt) => &stmt.attributes,
+            Statement::ConstAssert(stmt) => &stmt.attributes,
+            Statement::Declaration(stmt) => &stmt.attributes,
         }
     }
 
     fn attributes_mut(&mut self) -> &mut [Attribute] {
         match self {
             Statement::Void => &mut [],
-            Statement::Compound(stat) => &mut stat.attributes,
-            Statement::Assignment(stat) => &mut stat.attributes,
-            Statement::Increment(stat) => &mut stat.attributes,
-            Statement::Decrement(stat) => &mut stat.attributes,
-            Statement::If(stat) => &mut stat.attributes,
-            Statement::Switch(stat) => &mut stat.attributes,
-            Statement::Loop(stat) => &mut stat.attributes,
-            Statement::For(stat) => &mut stat.attributes,
-            Statement::While(stat) => &mut stat.attributes,
-            Statement::Break(stat) => &mut stat.attributes,
-            Statement::Continue(stat) => &mut stat.attributes,
-            Statement::Return(stat) => &mut stat.attributes,
-            Statement::Discard(stat) => &mut stat.attributes,
-            Statement::FunctionCall(stat) => &mut stat.attributes,
-            Statement::ConstAssert(stat) => &mut stat.attributes,
-            Statement::Declaration(stat) => &mut stat.attributes,
+            Statement::Compound(stmt) => &mut stmt.attributes,
+            Statement::Assignment(stmt) => &mut stmt.attributes,
+            Statement::Increment(stmt) => &mut stmt.attributes,
+            Statement::Decrement(stmt) => &mut stmt.attributes,
+            Statement::If(stmt) => &mut stmt.attributes,
+            Statement::Switch(stmt) => &mut stmt.attributes,
+            Statement::Loop(stmt) => &mut stmt.attributes,
+            Statement::For(stmt) => &mut stmt.attributes,
+            Statement::While(stmt) => &mut stmt.attributes,
+            Statement::Break(stmt) => &mut stmt.attributes,
+            Statement::Continue(stmt) => &mut stmt.attributes,
+            Statement::Return(stmt) => &mut stmt.attributes,
+            Statement::Discard(stmt) => &mut stmt.attributes,
+            Statement::FunctionCall(stmt) => &mut stmt.attributes,
+            Statement::ConstAssert(stmt) => &mut stmt.attributes,
+            Statement::Declaration(stmt) => &mut stmt.attributes,
         }
     }
 }

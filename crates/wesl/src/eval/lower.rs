@@ -43,20 +43,20 @@ pub fn make_explicit_conversions(wesl: &mut TranslationUnit, ctx: &mut Context) 
         explicit_expr(expr, ctx)?;
     }
 
-    fn explicit_stat(stat: &mut Statement, ret: &Type, ctx: &mut Context) -> Result<(), E> {
-        if let Statement::Return(stat) = stat {
-            if let Some(expr) = &mut stat.expression {
+    fn explicit_stat(stmt: &mut Statement, ret: &Type, ctx: &mut Context) -> Result<(), E> {
+        if let Statement::Return(stmt) = stmt {
+            if let Some(expr) = &mut stmt.expression {
                 let ty = ret.to_expr(ctx)?.unwrap_type_or_identifier();
                 *expr.node_mut() = Expression::FunctionCall(FunctionCall {
                     ty,
                     arguments: vec![expr.clone()],
                 })
             }
-        } else if let Statement::FunctionCall(stat) = stat {
-            explicit_call(&mut stat.call, ctx)?;
+        } else if let Statement::FunctionCall(stmt) = stmt {
+            explicit_call(&mut stmt.call, ctx)?;
         }
-        for stat in Visit::<StatementNode>::visit_mut(stat) {
-            explicit_stat(stat, ret, ctx)?;
+        for stmt in Visit::<StatementNode>::visit_mut(stmt) {
+            explicit_stat(stmt, ret, ctx)?;
         }
         Ok(())
     }
@@ -64,8 +64,8 @@ pub fn make_explicit_conversions(wesl: &mut TranslationUnit, ctx: &mut Context) 
         if let Some(ret) = &decl.return_type {
             let ty = ret.eval_ty(ctx)?;
             if ty.inner_ty().is_scalar() {
-                for stat in &mut decl.body.statements {
-                    explicit_stat(stat, &ty, ctx)?;
+                for stmt in &mut decl.body.statements {
+                    explicit_stat(stmt, &ty, ctx)?;
                 }
             }
         }
@@ -242,64 +242,64 @@ impl Lower for Statement {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
         match self {
             Statement::Void => (),
-            Statement::Compound(stat) => {
-                stat.lower(ctx)?;
-                if stat.statements.is_empty() {
+            Statement::Compound(stmt) => {
+                stmt.lower(ctx)?;
+                if stmt.statements.is_empty() {
                     *self = Statement::Void;
-                } else if let [stat] = stat.statements.as_slice() {
-                    *self = stat.node().clone();
+                } else if let [stmt] = stmt.statements.as_slice() {
+                    *self = stmt.node().clone();
                 }
             }
-            Statement::Assignment(stat) => stat.lower(ctx)?,
-            Statement::Increment(stat) => stat.lower(ctx)?,
-            Statement::Decrement(stat) => stat.lower(ctx)?,
-            Statement::If(stat) => {
-                stat.lower(ctx)?;
+            Statement::Assignment(stmt) => stmt.lower(ctx)?,
+            Statement::Increment(stmt) => stmt.lower(ctx)?,
+            Statement::Decrement(stmt) => stmt.lower(ctx)?,
+            Statement::If(stmt) => {
+                stmt.lower(ctx)?;
 
                 // remove clauses evaluating to false
-                stat.else_if_clauses
+                stmt.else_if_clauses
                     .retain(|clause| *clause.expression != EXPR_FALSE);
 
                 // remove subsequent clauses after a true
-                if let Some(i) = stat
+                if let Some(i) = stmt
                     .else_if_clauses
                     .iter()
                     .position(|clause| *clause.expression == EXPR_TRUE)
                 {
-                    stat.else_if_clauses.resize_with(i + 1, || unreachable!());
-                    stat.else_clause = None;
+                    stmt.else_if_clauses.resize_with(i + 1, || unreachable!());
+                    stmt.else_clause = None;
                 }
 
                 macro_rules! assign_clause {
-                    ($stat:ident, $body:expr) => {
+                    ($stmt:ident, $body:expr) => {
                         if $body.statements.is_empty() {
-                            *$stat = Statement::Void;
+                            *$stmt = Statement::Void;
                         } else if let [s1] = $body.statements.as_slice() {
-                            *$stat = s1.node().clone();
+                            *$stmt = s1.node().clone();
                         } else {
-                            *$stat = Statement::Compound($body.clone())
+                            *$stmt = Statement::Compound($body.clone())
                         }
                     };
                 }
 
                 // remove the whole statement if the first clause is true
-                if *stat.if_clause.expression == EXPR_TRUE {
-                    assign_clause!(self, stat.if_clause.body);
-                } else if *stat.if_clause.expression == EXPR_FALSE {
-                    if let Some(clause) = stat.else_if_clauses.first() {
+                if *stmt.if_clause.expression == EXPR_TRUE {
+                    assign_clause!(self, stmt.if_clause.body);
+                } else if *stmt.if_clause.expression == EXPR_FALSE {
+                    if let Some(clause) = stmt.else_if_clauses.first() {
                         if *clause.expression == EXPR_TRUE {
                             assign_clause!(self, clause.body);
                         }
-                    } else if let Some(clause) = &stat.else_clause {
+                    } else if let Some(clause) = &stmt.else_clause {
                         assign_clause!(self, clause.body);
                     }
                 }
             }
-            Statement::Switch(stat) => stat.lower(ctx)?,
-            Statement::Loop(stat) => stat.lower(ctx)?,
-            Statement::For(stat) => {
-                stat.lower(ctx)?;
-                if stat
+            Statement::Switch(stmt) => stmt.lower(ctx)?,
+            Statement::Loop(stmt) => stmt.lower(ctx)?,
+            Statement::For(stmt) => {
+                stmt.lower(ctx)?;
+                if stmt
                     .condition
                     .as_ref()
                     .is_some_and(|cond| **cond == EXPR_FALSE)
@@ -307,36 +307,36 @@ impl Lower for Statement {
                     *self = Statement::Void;
                 }
             }
-            Statement::While(stat) => {
-                stat.lower(ctx)?;
-                if *stat.condition == EXPR_FALSE {
+            Statement::While(stmt) => {
+                stmt.lower(ctx)?;
+                if *stmt.condition == EXPR_FALSE {
                     *self = Statement::Void;
                 }
             }
             Statement::Break(_) => (),
             Statement::Continue(_) => (),
-            Statement::Return(stat) => stat.lower(ctx)?,
+            Statement::Return(stmt) => stmt.lower(ctx)?,
             Statement::Discard(_) => (),
-            Statement::FunctionCall(stat) => {
-                let decl = ctx.source.decl_function(&*stat.call.ty.ident.name());
+            Statement::FunctionCall(stmt) => {
+                let decl = ctx.source.decl_function(&*stmt.call.ty.ident.name());
                 if let Some(decl) = decl {
                     if decl.attributes.contains(&Attribute::Const) {
                         *self = Statement::Void; // a void const function does nothing
                     } else {
-                        stat.lower(ctx)?
+                        stmt.lower(ctx)?
                     }
                 } else {
-                    stat.lower(ctx)?
+                    stmt.lower(ctx)?
                 }
             }
-            Statement::ConstAssert(stat) => stat.exec(ctx).map(|_| ())?,
-            Statement::Declaration(stat) => {
-                if stat.kind == DeclarationKind::Const {
+            Statement::ConstAssert(stmt) => stmt.exec(ctx).map(|_| ())?,
+            Statement::Declaration(stmt) => {
+                if stmt.kind == DeclarationKind::Const {
                     // eval and add it to the scope
-                    stat.exec(ctx)?;
+                    stmt.exec(ctx)?;
                     *self = Statement::Void;
                 } else {
-                    stat.lower(ctx)?;
+                    stmt.lower(ctx)?;
                 }
             }
         }
@@ -347,10 +347,10 @@ impl Lower for Statement {
 impl Lower for CompoundStatement {
     fn lower(&mut self, ctx: &mut Context) -> Result<(), E> {
         self.attributes.lower(ctx)?;
-        for stat in &mut self.statements {
-            stat.lower(ctx)?;
+        for stmt in &mut self.statements {
+            stmt.lower(ctx)?;
         }
-        self.statements.retain(|stat| match stat.node() {
+        self.statements.retain(|stmt| match stmt.node() {
             Statement::Void => false,
             Statement::Compound(_) => true,
             Statement::Assignment(_) => true,

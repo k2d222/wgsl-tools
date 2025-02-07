@@ -133,8 +133,8 @@ impl Exec for Statement {
 impl Exec for CompoundStatement {
     fn exec(&self, ctx: &mut Context) -> Result<Flow, E> {
         with_scope!(ctx, {
-            for stat in &self.statements {
-                let flow = stat.exec(ctx)?;
+            for stmt in &self.statements {
+                let flow = stmt.exec(ctx)?;
                 match flow {
                     Flow::Next => (),
                     Flow::Break | Flow::Continue | Flow::Return(_) => {
@@ -151,11 +151,11 @@ impl Exec for CompoundStatement {
 // because some places in the grammar requires that no scope is created when executing the
 // CompoundStatement, such as for loops with initializer or function invocations.
 pub(crate) fn compound_exec_no_scope(
-    stat: &CompoundStatement,
+    stmt: &CompoundStatement,
     ctx: &mut Context,
 ) -> Result<Flow, E> {
-    for stat in &stat.statements {
-        let flow = stat.exec(ctx)?;
+    for stmt in &stmt.statements {
+        let flow = stmt.exec(ctx)?;
         match flow {
             Flow::Next => (),
             Flow::Break | Flow::Continue | Flow::Return(_) => {
