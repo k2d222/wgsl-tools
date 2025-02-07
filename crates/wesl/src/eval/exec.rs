@@ -682,7 +682,7 @@ impl Exec for Declaration {
                                 return Err(E::UntypedDecl);
                             };
                             let ty = ty.eval_ty(ctx)?;
-                            let (group, binding) = self.eval_group_binding(ctx)?;
+                            let (group, binding) = self.attr_group_binding(ctx)?;
                             let inst = ctx
                                 .resource(group, binding)
                                 .ok_or_else(|| E::MissingResource(group, binding))?;
@@ -702,7 +702,7 @@ impl Exec for Declaration {
                                 return Err(E::UntypedDecl);
                             };
                             let ty = ty.eval_ty(ctx)?;
-                            let (group, binding) = self.eval_group_binding(ctx)?;
+                            let (group, binding) = self.attr_group_binding(ctx)?;
                             let inst = ctx
                                 .resource(group, binding)
                                 .ok_or_else(|| E::MissingResource(group, binding))?;

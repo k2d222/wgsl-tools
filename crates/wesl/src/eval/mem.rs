@@ -71,12 +71,12 @@ impl Instance {
                         } else {
                             // TODO: handle errors, check valid size...
                             let size = m
-                                .eval_size(ctx)
+                                .attr_size(ctx)
                                 .ok()
                                 .flatten()
                                 .or_else(|| ty.size_of(ctx))?;
                             let align = m
-                                .eval_align(ctx)
+                                .attr_align(ctx)
                                 .ok()
                                 .flatten()
                                 .or_else(|| ty.align_of(ctx))?;
@@ -181,7 +181,7 @@ impl HostShareable for StructInstance {
             let len = buf.len() as u32;
             let m = decl.members.iter().find(|m| &*m.ident.name() == name)?;
             let size = m
-                .eval_size(ctx)
+                .attr_size(ctx)
                 .ok()
                 .flatten()
                 .or_else(|| ty.min_size_of(ctx))?;
@@ -195,7 +195,7 @@ impl HostShareable for StructInstance {
             }?;
 
             let align = m
-                .eval_align(ctx)
+                .attr_align(ctx)
                 .ok()
                 .flatten()
                 .or_else(|| ty.align_of(ctx))?;
@@ -282,12 +282,12 @@ impl Type {
                         let ty = m.ty.eval_ty(ctx).ok()?;
                         // TODO: handle errors, check valid size...
                         let size = m
-                            .eval_size(ctx)
+                            .attr_size(ctx)
                             .ok()
                             .flatten()
                             .or_else(|| ty.size_of(ctx))?;
                         let align = m
-                            .eval_align(ctx)
+                            .attr_align(ctx)
                             .ok()
                             .flatten()
                             .or_else(|| ty.align_of(ctx))?;
@@ -339,7 +339,7 @@ impl Type {
                     .iter()
                     .map(|m| {
                         let ty = m.ty.eval_ty(ctx).ok()?;
-                        m.eval_align(ctx)
+                        m.attr_align(ctx)
                             .ok()
                             .flatten()
                             .or_else(|| ty.align_of(ctx))

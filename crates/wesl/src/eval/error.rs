@@ -131,8 +131,12 @@ pub enum EvalError {
     // attributes
     #[error("missing `@group` or `@binding` attributes")]
     MissingBindAttr,
-    #[error("`@group` and `@binding` attributes must evaluate to positive integers, got `{0}`")]
-    BindNegative(i64),
+    #[error("missing `@workgroup_size` attribute")]
+    MissingWorkgroupSize,
+    #[error("`the attribute must evaluate to a positive integer, got `{0}`")]
+    NegativeAttr(i64),
+    #[error("the `@blend_src` attribute must evaluate to 0 or 1, got `{0}`")]
+    InvalidBlendSrc(u32),
 
     // statements
     #[error("expected a reference, got value `{0}`")]

@@ -399,7 +399,7 @@ fn parse_binding(
         .iter()
         .find_map(|d| match d {
             syntax::GlobalDeclaration::Declaration(d) => {
-                let (group, binding) = d.eval_group_binding(&mut ctx).ok()?;
+                let (group, binding) = d.attr_group_binding(&mut ctx).ok()?;
                 if group == b.group && binding == b.binding {
                     d.ty.clone()
                 } else {

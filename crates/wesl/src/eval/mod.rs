@@ -277,7 +277,6 @@ impl SyntaxUtil for TranslationUnit {
         }
     }
 
-    // TODO return borrowed
     fn resolve_alias(&self, name: &str) -> Option<&TypeExpression> {
         match self.decl(name) {
             Some(GlobalDeclaration::TypeAlias(t)) => {
